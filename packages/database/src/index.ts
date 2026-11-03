@@ -1,4 +1,5 @@
 export { openDatabase, type Database } from './internal/handle';
+export * from './auth-repository';
 export { authorizeWorkspaceMember, type Role, type WorkspaceContext } from './context';
 export {
   claimJob,

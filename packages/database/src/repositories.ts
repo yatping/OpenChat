@@ -206,8 +206,8 @@ export type Repositories = ReturnType<typeof repositories>;
 /** Reads with no tenant, for the discovery document. Deliberately narrow. */
 export async function getInstallation(database: Database) {
   return rawHandle(database)
-    .prepare(`SELECT id, name, signup_policy AS signupPolicy FROM installation LIMIT 1`)
-    .first<{ id: string; name: string; signupPolicy: 'invite_only' | 'open' }>();
+    .prepare(`SELECT id, name, public_base_url AS publicBaseUrl, signup_policy AS signupPolicy FROM installation LIMIT 1`)
+    .first<{ id: string; name: string; publicBaseUrl: string; signupPolicy: 'invite_only' | 'open' }>();
 }
 
 /** Consumer idempotency. True if this caller claimed the key first. */

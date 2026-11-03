@@ -21,12 +21,13 @@
   "durable_objects": {
     "bindings": [
       { "name": "WORKSPACE_HUB", "class_name": "WorkspaceHub" },
-      { "name": "CONVERSATION_ROOM", "class_name": "ConversationRoom" }
+      { "name": "CONVERSATION_ROOM", "class_name": "ConversationRoom" },
+      { "name": "AUTH_GUARD", "class_name": "AuthGuard" }
     ],
     // Objects hibernate quickly, so a long window avoids forcing resets that drop sockets.
     "code_update_strategy": { "mode": "deferred", "max_delay": 3600 }
   },
-  "exports": { "WorkspaceHub": { "type": "durable-object", "storage": "sqlite" }, "ConversationRoom": { "type": "durable-object", "storage": "sqlite" } },
+  "exports": { "WorkspaceHub": { "type": "durable-object", "storage": "sqlite" }, "ConversationRoom": { "type": "durable-object", "storage": "sqlite" }, "AuthGuard": { "type": "durable-object", "storage": "sqlite" } },
   "queues": {
     "producers": [
       { "binding": "NOTIFICATIONS_QUEUE", "queue": "oc-local-notifications" },

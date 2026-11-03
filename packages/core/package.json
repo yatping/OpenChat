@@ -14,12 +14,16 @@
   },
   "dependencies": {
     "@openchat/shared": "workspace:*",
-    "@openchat/api-contracts": "workspace:*"
+    "@openchat/api-contracts": "workspace:*",
+    "@openchat/auth": "workspace:*",
+    "@openchat/database": "workspace:*",
+    "@openchat/email": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261103.1",
     "@openchat/tsconfig": "workspace:*",
     "typescript": "~6.0.3",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.0",
+    "@types/node": "^24.0.0"
   }
 }

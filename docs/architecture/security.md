@@ -26,8 +26,11 @@ Every request verifies, in order: identity, membership, permission, resource own
 | Dashboard transport | Same origin, so the refresh token is an `HttpOnly; Secure; SameSite=Strict` cookie. The access token stays in memory. |
 | Mobile transport | Bearer token. Stored in `expo-secure-store` per connection. |
 | CSRF | `SameSite=Strict`, plus requiring `Authorization` on all data routes. Only the refresh route uses the cookie, and it also checks `Origin`. |
-| Login throttling | A strict per-account limit in a Durable Object (`AuthGuard`, or a class shared with rate limiting), plus an approximate per-IP limit. The relatively costly hash makes unthrottled login a denial-of-service risk. |
-| Enumeration | Login, reset, and signup give identical responses and comparable timing whether or not the account exists. |
+| Login throttling | Strict fixed-window counters in the `AuthGuard` Durable Object, one object per hashed key: 10 attempts per account and 50 per IP address per 15 minutes. A successful login clears the account counter. The account key is derived from the submitted email, so unknown accounts behave identically. Trade-off: anyone can lock an account out of password login for 15 minutes by failing on purpose. Reset still works, and existing sessions are unaffected. |
+| Enumeration | Login, reset, and signup give identical responses and comparable timing whether or not the account exists. Login hashes against a dummy for unknown, disabled, and placeholder accounts. A reset request answers 202 before looking anything up, doing that work in `waitUntil`. |
+| Refresh reuse | Rotation and reuse detection are one `batch()`. Presenting the previous token revokes that session, and only that session. One generation is kept, so an older token simply fails. Two concurrent refreshes count as reuse, so the dashboard must serialise refreshes across tabs (Web Locks), and a client that loses a refresh response signs in again. Both fail safe. |
+| Password reset | Limit 3 per address and 20 per IP address per hour, silently past the limit. The job holds only the user ID, and the consumer creates the token as it sends, so no token reaches a queue or `failed_jobs`. Tokens last 1 hour, are stored as SHA-256, and travel in the URL fragment so they stay out of access logs. Confirming revokes every session and every outstanding reset token for the user. Confirmations are limited to 20 per IP address per 15 minutes. |
+| Signing keys | `AUTH_SIGNING_KEY` is JSON: `{ active: { kid, privateKey, publicKey }, retired?: [{ kid, publicKey }] }`. To rotate, move the old key to `retired` and remove it once its tokens have expired, after 15 minutes. |
 
 ## RBAC
 

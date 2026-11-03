@@ -1,3 +1,4 @@
-# Placeholders only. Copy to .dev.vars, which Git ignores. No secrets are read yet: they arrive with
-# authentication in Milestone 1a, when pnpm dev:setup will generate local values.
+# Placeholders only. Copy to .dev.vars, which Git ignores. pnpm dev:setup generates real local values.
 ENVIRONMENT=development
+AUTH_SIGNING_KEY=generated-by-pnpm-dev-setup
+EMAIL_PROVIDER=console

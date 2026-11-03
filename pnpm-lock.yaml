@@ -325,6 +325,15 @@ importers:
       '@openchat/api-contracts':
         specifier: workspace:*
         version: link:../api-contracts
+      '@openchat/auth':
+        specifier: workspace:*
+        version: link:../auth
+      '@openchat/database':
+        specifier: workspace:*
+        version: link:../database
+      '@openchat/email':
+        specifier: workspace:*
+        version: link:../email
       '@openchat/shared':
         specifier: workspace:*
         version: link:../shared
@@ -335,6 +344,9 @@ importers:
       '@openchat/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.19.2
       typescript:
         specifier: ~6.0.3
         version: 6.0.3
@@ -557,6 +569,9 @@ importers:
 
   tooling/cli:
     dependencies:
+      '@openchat/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       jsonc-parser:
         specifier: ^3.3.1
         version: 3.3.1

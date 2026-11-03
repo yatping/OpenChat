@@ -92,6 +92,8 @@ export const authTokens = sqliteTable(
     purpose: text('purpose', { enum: ['password_reset', 'email_verification'] }).notNull(),
     expiresAt: ts('expires_at'),
     consumedAt: integer('consumed_at'),
+    /** A fresh ID per attempt. Later statements in a batch check this rather than repeating the decision. */
+    consumedBy: text('consumed_by'),
   },
   (t) => [
     index('auth_tokens_expiry_idx').on(t.expiresAt),

@@ -2,10 +2,9 @@ import { OpenAPIHono } from '@hono/zod-openapi';
 import { getDiscoveryRoute, getHealthRoute, API_MINOR_VERSION, REALTIME_PROTOCOL_VERSION } from '@openchat/api-contracts';
 import openapi from '@openchat/api-contracts/openapi.json';
 import { getInstallation, openDatabase } from '@openchat/database';
-import { AppError, createLogger, newId, toProblem, type Logger } from '@openchat/shared';
-import type { Env } from './env';
-
-type AppEnv = { Bindings: Env; Variables: { requestId: string; log: Logger } };
+import { AppError, createLogger, newId, toProblem } from '@openchat/shared';
+import type { AppEnv } from './context';
+import { registerAuthRoutes } from './routes/auth';
 
 export function createApp() {
   const app = new OpenAPIHono<AppEnv>({
@@ -39,9 +38,11 @@ export function createApp() {
     if (!(error instanceof AppError)) {
       createLogger({ requestId }).error('unhandled_error', { errorName: error.name, status: problem.status });
     }
+    const retryAfter = error instanceof AppError ? error.details?.retryAfterSeconds : undefined;
     return c.newResponse(JSON.stringify(problem), problem.status as 500, {
       'content-type': 'application/problem+json',
       'x-request-id': requestId,
+      ...(typeof retryAfter === 'number' ? { 'retry-after': String(retryAfter) } : {}),
     });
   });
 
@@ -67,6 +68,8 @@ export function createApp() {
       200,
     );
   });
+
+  registerAuthRoutes(app);
 
   app.get('/api/v1/openapi.json', (c) => c.json(openapi));
 
