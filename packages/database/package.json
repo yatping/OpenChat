@@ -1,0 +1,30 @@
+{
+  "name": "@openchat/database",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "generate": "drizzle-kit generate",
+    "check:migrations": "node scripts/check-migrations.mjs"
+  },
+  "dependencies": {
+    "@openchat/shared": "workspace:*",
+    "drizzle-orm": "^0.45.4"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.5.1",
+    "@cloudflare/workers-types": "^5.20261103.1",
+    "@openchat/tsconfig": "workspace:*",
+    "drizzle-kit": "^0.31.11",
+    "typescript": "~6.0.3",
+    "vitest": "^5.1.0",
+    "wrangler": "^4.157.0"
+  }
+}

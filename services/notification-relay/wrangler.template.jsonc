@@ -1,0 +1,10 @@
+{
+  // The notification relay. Independent of the installation: see docs/notification-relay/protocol.md.
+  // Phase 0 has only /health. Storage, queues, and Durable Objects arrive in Milestone 3.
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "oc-relay-local",
+  "main": "./src/index.ts",
+  "compatibility_date": "2026-10-30",
+  "observability": { "enabled": true },
+  "vars": { "RELAY_MODE": "private" }
+}

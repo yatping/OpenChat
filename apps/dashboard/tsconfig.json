@@ -1,0 +1,14 @@
+{
+  "extends": "../../tooling/tsconfig/web-standard.json",
+  "include": [
+    "src",
+    "test",
+    "*.ts"
+  ],
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "types": [
+      "vite/client"
+    ]
+  }
+}

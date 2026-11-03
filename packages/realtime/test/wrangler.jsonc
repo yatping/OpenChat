@@ -1,0 +1,12 @@
+{
+  "name": "realtime-test",
+  "main": "./worker.ts",
+  "compatibility_date": "2026-10-30",
+  "durable_objects": {
+    "bindings": [
+      { "name": "WORKSPACE_HUB", "class_name": "WorkspaceHub" },
+      { "name": "CONVERSATION_ROOM", "class_name": "ConversationRoom" }
+    ]
+  },
+  "exports": { "WorkspaceHub": { "type": "durable-object", "storage": "sqlite" }, "ConversationRoom": { "type": "durable-object", "storage": "sqlite" } }
+}

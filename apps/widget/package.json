@@ -1,0 +1,22 @@
+{
+  "name": "@openchat/widget",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && vite build",
+    "test": "echo \"no tests yet\"",
+    "dev": "vite"
+  },
+  "devDependencies": {
+    "@openchat/api-contracts": "workspace:*",
+    "@openchat/tsconfig": "workspace:*",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.5"
+  }
+}

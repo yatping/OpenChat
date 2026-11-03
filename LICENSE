@@ -1,0 +1,16 @@
+OpenChat is distributed under more than one licence. Each package states its
+licence in the "license" field of its package.json.
+
+  AGPL-3.0-or-later   Server components: services/*, apps/dashboard,
+                      packages/core, realtime, email, database, auth, ui,
+                      tooling/*
+                      Full text: LICENSES/AGPL-3.0-or-later.txt
+
+  Apache-2.0          Client components: apps/widget, apps/mobile,
+                      packages/api-client, api-contracts,
+                      notification-protocol, shared
+                      Full text: LICENSES/Apache-2.0.txt
+
+The reasons are recorded in docs/architecture/decisions/0011-license-boundaries.md.
+Contributions are accepted under the same licence as the package they change,
+using the Developer Certificate of Origin. See CONTRIBUTING.md.

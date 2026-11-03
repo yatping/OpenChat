@@ -1,0 +1,1 @@
+{ "name": "protocol-test", "main": "./worker.ts", "compatibility_date": "2026-10-30" }

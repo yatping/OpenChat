@@ -1,0 +1,27 @@
+{
+  "name": "@openchat/realtime",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@openchat/shared": "workspace:*",
+    "@openchat/api-contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.5.1",
+    "@cloudflare/workers-types": "^5.20261103.1",
+    "@openchat/tsconfig": "workspace:*",
+    "typescript": "~6.0.3",
+    "vitest": "^5.1.0",
+    "wrangler": "^4.157.0"
+  }
+}

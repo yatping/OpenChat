@@ -1,0 +1,24 @@
+{
+  "name": "@openchat/api-client",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@openchat/api-contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@openchat/tsconfig": "workspace:*",
+    "typescript": "~6.0.3",
+    "vitest": "^5.1.0",
+    "zod": "^4.6.7"
+  }
+}

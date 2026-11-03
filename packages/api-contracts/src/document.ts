@@ -1,0 +1,29 @@
+import { OpenAPIHono } from '@hono/zod-openapi';
+import { ProblemSchema } from './common';
+import { AgentClientFrameSchema, AgentServerFrameSchema, VisitorClientFrameSchema, VisitorServerFrameSchema } from './realtime';
+import { getDiscoveryRoute, getHealthRoute } from './routes';
+
+/** Every route must be listed here so that it reaches the published document. */
+export const ALL_ROUTES = [getHealthRoute, getDiscoveryRoute] as const;
+
+export function buildOpenApiDocument() {
+  const app = new OpenAPIHono();
+  for (const route of ALL_ROUTES) app.openAPIRegistry.registerPath(route);
+  // OpenAPI has no first-class WebSocket support, so frames are published as schemas from the same source.
+  app.openAPIRegistry.register('Problem', ProblemSchema);
+  app.openAPIRegistry.register('AgentServerFrame', AgentServerFrameSchema);
+  app.openAPIRegistry.register('AgentClientFrame', AgentClientFrameSchema);
+  app.openAPIRegistry.register('VisitorServerFrame', VisitorServerFrameSchema);
+  app.openAPIRegistry.register('VisitorClientFrame', VisitorClientFrameSchema);
+  return app.getOpenAPI31Document({
+    openapi: '3.1.0',
+    info: {
+      title: 'OpenChat Installation API',
+      version: '1.0.0',
+      description: 'REST contract for the dashboard, mobile app, and widget.',
+      license: { name: 'Apache-2.0', url: 'https://www.apache.org/licenses/LICENSE-2.0' },
+    },
+    tags: [{ name: 'discovery', description: 'Installation discovery and health.' }],
+    servers: [{ url: '/' }],
+  });
+}

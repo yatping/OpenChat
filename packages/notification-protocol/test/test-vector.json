@@ -1,0 +1,18 @@
+{
+  "description": "Lets other implementations check compatibility. This key is for testing only and is public.",
+  "publicKey": "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw",
+  "privateKeyPkcs8": "MC4CAQAwBQYDK2VwBCIEIAcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH",
+  "input": {
+    "method": "POST",
+    "path": "/v1/notifications/send",
+    "installationId": "inst_01TESTVECTOR",
+    "workspaceId": "work_01TESTVECTOR",
+    "keyId": "k1",
+    "requestId": "req_01TESTVECTOR",
+    "timestamp": "1793700000",
+    "body": "{\"event\":\"new_message\"}"
+  },
+  "canonical": "OCRELAY-V1\nPOST\n/v1/notifications/send\ninst_01TESTVECTOR\nwork_01TESTVECTOR\nk1\nreq_01TESTVECTOR\n1793700000\n38c81a6ce37758050aea27afe75ff188951f73071c96fe5dfecc8e4c3c15047d",
+  "signature": "v1=G58qrRT16gY0sJkGl1zf3kP-aOlAvTZXJx1M33hOnvU5hekJUumwzmXF3-IEZd3QYjFYfeLWvD1hD-J6i59HAA",
+  "now": 1793700000
+}

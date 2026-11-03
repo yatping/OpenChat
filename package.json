@@ -1,0 +1,39 @@
+{
+  "name": "openchat",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "packageManager": "pnpm@12.8.1",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "dev": "turbo run dev --filter=@openchat/api --filter=@openchat/dashboard --filter=@openchat/widget",
+    "dev:setup": "pnpm --filter @openchat/cli exec tsx src/dev-setup.ts",
+    "dev:reset": "pnpm --filter @openchat/cli exec tsx src/dev-setup.ts --reset",
+    "oc": "pnpm --filter @openchat/cli exec tsx src/index.ts",
+    "db:generate": "pnpm --filter @openchat/database generate",
+    "db:migrate:local": "pnpm --filter @openchat/api migrate:local",
+    "contracts:generate": "pnpm --filter @openchat/api-contracts generate",
+    "check:contracts": "pnpm --filter @openchat/api-contracts check",
+    "check:migrations": "pnpm --filter @openchat/database check:migrations",
+    "check:licenses": "node tooling/scripts/check-licenses.mjs",
+    "check:budget": "node tooling/scripts/check-budget.mjs",
+    "check:secrets": "node tooling/scripts/check-secrets.mjs",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm check:contracts && pnpm check:migrations && pnpm check:licenses && pnpm check:budget && pnpm check:secrets"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "@openchat/eslint-config": "workspace:*",
+    "eslint": "^10.14.0",
+    "prettier": "^3.0.0",
+    "turbo": "^2.11.10",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "wrangler": "^4.157.0"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "database-test",
+  "main": "./worker.ts",
+  "compatibility_date": "2026-10-30",
+  "d1_databases": [{ "binding": "DB", "database_name": "test", "database_id": "local", "migrations_dir": "../migrations" }]
+}

@@ -1,0 +1,15 @@
+{
+  "extends": "../../tooling/tsconfig/web-standard.json",
+  "include": [
+    "src",
+    "test",
+    "scripts",
+    "*.ts",
+    "generated"
+  ],
+  "compilerOptions": {
+    "types": [
+      "node"
+    ]
+  }
+}

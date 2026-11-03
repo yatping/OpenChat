@@ -1,0 +1,1430 @@
+openapi: 3.1.0
+info:
+  title: OpenChat Installation API (design draft)
+  version: 1.0.0-draft
+  summary: MVP REST contract for the dashboard, mobile app, and widget.
+  description: |
+    Design draft. It is replaced by the document generated from packages/api-contracts.
+    See docs/api/conventions.md for errors, pagination, idempotency, and versioning.
+    WebSocket frames are defined in docs/api/realtime-protocol.draft.ts.
+  license:
+    name: AGPL-3.0-or-later
+    identifier: AGPL-3.0-or-later
+servers:
+  - url: https://{installationHost}
+    variables:
+      installationHost:
+        default: support.example.com
+tags:
+  - name: discovery
+    description: Installation discovery and health.
+  - name: auth
+    description: Agent authentication and sessions.
+  - name: workspaces
+    description: Workspaces, members, invitations.
+  - name: websites
+    description: Websites that embed the widget.
+  - name: conversations
+    description: Agent inbox.
+  - name: contacts
+    description: Contact records.
+  - name: attachments
+    description: File upload and download.
+  - name: push
+    description: Device registration and preferences.
+  - name: realtime
+    description: WebSocket connection.
+  - name: widget
+    description: Visitor-facing API.
+security:
+  - bearerAuth: []
+
+paths:
+  /.well-known/openchat.json:
+    get:
+      tags: [discovery]
+      operationId: getDiscovery
+      summary: Describe this installation and its compatibility
+      security: []
+      responses:
+        '200':
+          description: Discovery document
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Discovery' }
+        default: { $ref: '#/components/responses/Problem' }
+  /health:
+    get:
+      tags: [discovery]
+      operationId: getHealth
+      summary: Liveness only. Exposes no configuration.
+      security: []
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, enum: [ok] }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Sign in with email and password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, clientType]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 1, maxLength: 1024 }
+                clientType: { type: string, enum: [dashboard, mobile] }
+                clientLabel: { type: string, maxLength: 100 }
+      responses:
+        '200':
+          description: Session created. Dashboard clients receive the refresh token as a cookie instead of in the body.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPair' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refreshSession
+      summary: Rotate a refresh token. Reuse of an old token revokes the session.
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken: { type: string, description: Required for mobile. Dashboard uses the cookie. }
+      responses:
+        '200':
+          description: New tokens
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPair' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Revoke the current session
+      responses:
+        '204': { description: Revoked }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/auth/password-reset/request:
+    post:
+      tags: [auth]
+      operationId: requestPasswordReset
+      summary: Always returns 202, whether or not the account exists
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '202': { description: Accepted }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/auth/password-reset/confirm:
+    post:
+      tags: [auth]
+      operationId: confirmPasswordReset
+      summary: Set a new password. Revokes all sessions for the user.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token: { type: string }
+                password: { type: string, minLength: 10, maxLength: 1024 }
+      responses:
+        '204': { description: Password changed }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/auth/email-verification/confirm:
+    post:
+      tags: [auth]
+      operationId: confirmEmailVerification
+      summary: Confirm an email address
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+      responses:
+        '204': { description: Verified }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /api/v1/me:
+    get:
+      tags: [auth]
+      operationId: getMe
+      summary: The current user and their workspace memberships
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Me' }
+        default: { $ref: '#/components/responses/Problem' }
+    delete:
+      tags: [auth]
+      operationId: deleteMe
+      summary: Delete the current account on this installation
+      description: Anonymises the user and removes memberships. Rejected if the user is the last owner of a workspace.
+      responses:
+        '204': { description: Deleted }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /api/v1/workspaces:
+    post:
+      tags: [workspaces]
+      operationId: createWorkspace
+      summary: Create a workspace, subject to the installation signup policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 100 }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Workspace' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/workspaces/{workspaceId}:
+    parameters:
+      - $ref: '#/components/parameters/workspaceId'
+    get:
+      tags: [workspaces]
+      operationId: getWorkspace
+      summary: Get a workspace
+      responses:
+        '200':
+          description: Workspace
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Workspace' }
+        default: { $ref: '#/components/responses/Problem' }
+    patch:
+      tags: [workspaces]
+      operationId: updateWorkspace
+      summary: Update workspace settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, minLength: 1, maxLength: 100 }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Workspace' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/workspaces/{workspaceId}/members:
+    parameters:
+      - $ref: '#/components/parameters/workspaceId'
+    get:
+      tags: [workspaces]
+      operationId: listMembers
+      summary: List members
+      parameters:
+        - $ref: '#/components/parameters/cursor'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: Members
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Member' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/workspaces/{workspaceId}/members/{memberId}:
+    parameters:
+      - $ref: '#/components/parameters/workspaceId'
+      - name: memberId
+        in: path
+        required: true
+        schema: { type: string }
+    patch:
+      tags: [workspaces]
+      operationId: updateMember
+      summary: Change a role or status. Closes the member's live sockets so that they reconnect with new permissions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role: { $ref: '#/components/schemas/Role' }
+                status: { type: string, enum: [active, suspended] }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Member' }
+        default: { $ref: '#/components/responses/Problem' }
+    delete:
+      tags: [workspaces]
+      operationId: removeMember
+      summary: Remove a member and their push subscriptions
+      responses:
+        '204': { description: Removed }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/workspaces/{workspaceId}/invitations:
+    parameters:
+      - $ref: '#/components/parameters/workspaceId'
+    post:
+      tags: [workspaces]
+      operationId: createInvitation
+      summary: Invite someone by email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email: { type: string, format: email }
+                role: { type: string, enum: [admin, supervisor, agent] }
+      responses:
+        '201': { description: Invitation sent }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/invitations/accept:
+    post:
+      tags: [workspaces]
+      operationId: acceptInvitation
+      summary: Accept an invitation, creating an account if needed
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+                name: { type: string, maxLength: 100 }
+                password: { type: string, minLength: 10, maxLength: 1024 }
+      responses:
+        '200': { description: Accepted }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /api/v1/workspaces/{workspaceId}/websites:
+    parameters:
+      - $ref: '#/components/parameters/workspaceId'
+    get:
+      tags: [websites]
+      operationId: listWebsites
+      summary: List websites
+      responses:
+        '200':
+          description: Websites
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Website' }
+        default: { $ref: '#/components/responses/Problem' }
+    post:
+      tags: [websites]
+      operationId: createWebsite
+      summary: Register a website and obtain its public key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebsiteInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Website' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/workspaces/{workspaceId}/websites/{websiteId}:
+    parameters:
+      - $ref: '#/components/parameters/workspaceId'
+      - name: websiteId
+        in: path
+        required: true
+        schema: { type: string }
+    patch:
+      tags: [websites]
+      operationId: updateWebsite
+      summary: Update a website
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebsiteInput' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Website' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /api/v1/workspaces/{workspaceId}/conversations:
+    parameters:
+      - $ref: '#/components/parameters/workspaceId'
+    get:
+      tags: [conversations]
+      operationId: listConversations
+      summary: List conversations for an inbox view, or sync changes
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/ConversationStatus' }
+        - name: assignee
+          in: query
+          description: A member ID, `me`, or `none`.
+          schema: { type: string }
+        - name: updatedAfter
+          in: query
+          description: Opaque sync cursor from a previous response. Returns changes in update order.
+          schema: { type: string }
+        - $ref: '#/components/parameters/cursor'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: Conversations
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      syncCursor: { type: string }
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Conversation' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/workspaces/{workspaceId}/conversations/{conversationId}:
+    parameters:
+      - $ref: '#/components/parameters/workspaceId'
+      - $ref: '#/components/parameters/conversationId'
+    get:
+      tags: [conversations]
+      operationId: getConversation
+      summary: Get a conversation
+      responses:
+        '200':
+          description: Conversation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Conversation' }
+        default: { $ref: '#/components/responses/Problem' }
+    patch:
+      tags: [conversations]
+      operationId: updateConversation
+      summary: Assign, transfer, resolve, reopen, archive, or reprioritise
+      description: Compare-and-set on `expectedVersion`. A stale version returns 409 with the current version.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedVersion]
+              properties:
+                expectedVersion: { type: integer, minimum: 1 }
+                assignedMemberId: { type: [string, 'null'] }
+                status: { $ref: '#/components/schemas/ConversationStatus' }
+                priority: { type: string, enum: [low, normal, high, urgent] }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Conversation' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/workspaces/{workspaceId}/conversations/{conversationId}/messages:
+    parameters:
+      - $ref: '#/components/parameters/workspaceId'
+      - $ref: '#/components/parameters/conversationId'
+    get:
+      tags: [conversations]
+      operationId: listMessages
+      summary: Page through messages, including internal notes
+      parameters:
+        - name: afterSeq
+          in: query
+          description: Forward from this sequence number. Used for catch-up.
+          schema: { type: integer, minimum: 0 }
+        - name: beforeSeq
+          in: query
+          description: Backward from this sequence number. Used for history.
+          schema: { type: integer, minimum: 1 }
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: Messages
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Message' }
+        default: { $ref: '#/components/responses/Problem' }
+    post:
+      tags: [conversations]
+      operationId: sendMessage
+      summary: Send a reply or an internal note
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SendMessage' }
+      responses:
+        '201':
+          description: Committed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Message' }
+        '200':
+          description: Replay of an existing clientMessageId. Returns the original.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Message' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/workspaces/{workspaceId}/conversations/{conversationId}/read:
+    parameters:
+      - $ref: '#/components/parameters/workspaceId'
+      - $ref: '#/components/parameters/conversationId'
+    post:
+      tags: [conversations]
+      operationId: markConversationRead
+      summary: Advance the caller's delivered and read cursors. Cursors never move backward.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReadCursor' }
+      responses:
+        '204': { description: Updated }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/workspaces/{workspaceId}/conversations/{conversationId}/tags:
+    parameters:
+      - $ref: '#/components/parameters/workspaceId'
+      - $ref: '#/components/parameters/conversationId'
+    put:
+      tags: [conversations]
+      operationId: setConversationTags
+      summary: Replace the tags on a conversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tagIds]
+              properties:
+                tagIds:
+                  type: array
+                  maxItems: 50
+                  items: { type: string }
+      responses:
+        '204': { description: Updated }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /api/v1/workspaces/{workspaceId}/contacts:
+    parameters:
+      - $ref: '#/components/parameters/workspaceId'
+    get:
+      tags: [contacts]
+      operationId: listContacts
+      summary: List contacts
+      parameters:
+        - name: email
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/cursor'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: Contacts
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Contact' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/workspaces/{workspaceId}/contacts/{contactId}:
+    parameters:
+      - $ref: '#/components/parameters/workspaceId'
+      - $ref: '#/components/parameters/contactId'
+    get:
+      tags: [contacts]
+      operationId: getContact
+      summary: Get a contact
+      responses:
+        '200':
+          description: Contact
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Contact' }
+        default: { $ref: '#/components/responses/Problem' }
+    patch:
+      tags: [contacts]
+      operationId: updateContact
+      summary: Update a contact
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: [string, 'null'], maxLength: 200 }
+                email: { type: [string, 'null'], format: email }
+                phone: { type: [string, 'null'], maxLength: 40 }
+                attributes: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Contact' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/workspaces/{workspaceId}/contacts/{contactId}/merge:
+    parameters:
+      - $ref: '#/components/parameters/workspaceId'
+      - $ref: '#/components/parameters/contactId'
+    post:
+      tags: [contacts]
+      operationId: mergeContact
+      summary: Merge the source contact into this contact. Requires supervisor or higher.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sourceContactId]
+              properties:
+                sourceContactId: { type: string }
+      responses:
+        '202': { description: Merge started. Large contacts complete in a background job. }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /api/v1/workspaces/{workspaceId}/conversations/{conversationId}/attachments:
+    parameters:
+      - $ref: '#/components/parameters/workspaceId'
+      - $ref: '#/components/parameters/conversationId'
+    post:
+      tags: [attachments]
+      operationId: uploadAttachment
+      summary: Upload a file as a stream. Reference its ID in a later message.
+      parameters:
+        - name: filename
+          in: query
+          required: true
+          schema: { type: string, maxLength: 255 }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, contentEncoding: binary }
+      responses:
+        '201':
+          description: Stored
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Attachment' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/workspaces/{workspaceId}/attachments/{attachmentId}:
+    parameters:
+      - $ref: '#/components/parameters/workspaceId'
+      - name: attachmentId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [attachments]
+      operationId: downloadAttachment
+      summary: Download a file with safe response headers
+      responses:
+        '200':
+          description: File
+          content:
+            application/octet-stream:
+              schema: { type: string, contentEncoding: binary }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /api/v1/workspaces/{workspaceId}/push/grants:
+    parameters:
+      - $ref: '#/components/parameters/workspaceId'
+    post:
+      tags: [push]
+      operationId: createPushGrant
+      summary: Issue a short-lived grant for the device to present to the relay
+      responses:
+        '201':
+          description: Grant
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [grant, relayUrl, expiresAt]
+                properties:
+                  grant: { type: string, description: Compact JWS signed by the installation. }
+                  relayUrl: { type: string, format: uri }
+                  expiresAt: { type: string, format: date-time }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/workspaces/{workspaceId}/push/subscriptions:
+    parameters:
+      - $ref: '#/components/parameters/workspaceId'
+    get:
+      tags: [push]
+      operationId: listMyPushSubscriptions
+      summary: The caller's registered devices
+      responses:
+        '200':
+          description: Subscriptions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/PushSubscription' }
+        default: { $ref: '#/components/responses/Problem' }
+    post:
+      tags: [push]
+      operationId: recordPushSubscription
+      summary: Store the opaque handle returned by the relay. No device token is sent here.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [relaySubscriptionId]
+              properties:
+                relaySubscriptionId: { type: string }
+                deviceLabel: { type: string, maxLength: 100 }
+      responses:
+        '201':
+          description: Recorded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PushSubscription' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/workspaces/{workspaceId}/push/subscriptions/{subscriptionId}:
+    parameters:
+      - $ref: '#/components/parameters/workspaceId'
+      - name: subscriptionId
+        in: path
+        required: true
+        schema: { type: string }
+    delete:
+      tags: [push]
+      operationId: removePushSubscription
+      summary: Remove a device, and unregister it at the relay
+      responses:
+        '204': { description: Removed }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/workspaces/{workspaceId}/notification-preferences:
+    parameters:
+      - $ref: '#/components/parameters/workspaceId'
+    get:
+      tags: [push]
+      operationId: getNotificationPreferences
+      summary: The caller's preferences
+      responses:
+        '200':
+          description: Preferences
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationPreferences' }
+        default: { $ref: '#/components/responses/Problem' }
+    put:
+      tags: [push]
+      operationId: setNotificationPreferences
+      summary: Replace the caller's preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NotificationPreferences' }
+      responses:
+        '204': { description: Updated }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /api/v1/realtime/tickets:
+    post:
+      tags: [realtime]
+      operationId: createRealtimeTicket
+      summary: Exchange a token for a 30-second connection ticket
+      description: Accepts a member token with `workspaceId`, or a visitor token with `conversationId`.
+      security:
+        - bearerAuth: []
+        - visitorAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                workspaceId: { type: string }
+                conversationId: { type: string }
+      responses:
+        '201':
+          description: Ticket
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ticket, url, expiresAt]
+                properties:
+                  ticket: { type: string }
+                  url: { type: string, format: uri }
+                  expiresAt: { type: string, format: date-time }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/realtime/connect:
+    get:
+      tags: [realtime]
+      operationId: connectRealtime
+      summary: Upgrade to a WebSocket
+      description: Frames are defined by the `AgentServerFrame`, `AgentClientFrame`, `VisitorServerFrame`, and `VisitorClientFrame` contract types.
+      security: []
+      parameters:
+        - name: ticket
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '101': { description: Switching protocols }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /api/v1/widget/bootstrap:
+    get:
+      tags: [widget]
+      operationId: widgetBootstrap
+      summary: Public configuration and availability. Cached for 30 seconds.
+      security: []
+      parameters:
+        - name: websiteKey
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Widget configuration
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WidgetBootstrap' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/widget/sessions:
+    post:
+      tags: [widget]
+      operationId: createVisitorSession
+      summary: Create or resume an anonymous visitor session. The Origin must be allowed for the website.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [websiteKey]
+              properties:
+                websiteKey: { type: string }
+                refreshToken: { type: string }
+                turnstileToken: { type: string }
+      responses:
+        '200':
+          description: Visitor session
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VisitorSession' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/widget/me:
+    patch:
+      tags: [widget]
+      operationId: updateVisitorProfile
+      summary: Provide a name, email, and follow-up consent
+      description: An email is unverified and never merges with an existing contact automatically.
+      security:
+        - visitorAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 200 }
+                email: { type: string, format: email }
+                followUpConsent: { type: boolean }
+      responses:
+        '204': { description: Updated }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/widget/conversations:
+    get:
+      tags: [widget]
+      operationId: listVisitorConversations
+      summary: The visitor's own conversations
+      security:
+        - visitorAuth: []
+      responses:
+        '200':
+          description: Conversations
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/VisitorConversation' }
+        default: { $ref: '#/components/responses/Problem' }
+    post:
+      tags: [widget]
+      operationId: createVisitorConversation
+      summary: Start a conversation with a first message
+      security:
+        - visitorAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clientMessageId, content]
+              properties:
+                clientMessageId: { type: string, minLength: 8, maxLength: 64 }
+                content: { type: string, minLength: 1, maxLength: 16000 }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VisitorConversation' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/widget/conversations/{conversationId}/messages:
+    parameters:
+      - $ref: '#/components/parameters/conversationId'
+    get:
+      tags: [widget]
+      operationId: listVisitorMessages
+      summary: Public messages only. Internal notes are filtered in SQL.
+      security:
+        - visitorAuth: []
+      parameters:
+        - name: afterSeq
+          in: query
+          schema: { type: integer, minimum: 0 }
+        - name: beforeSeq
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: Messages
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/VisitorMessage' }
+        default: { $ref: '#/components/responses/Problem' }
+    post:
+      tags: [widget]
+      operationId: sendVisitorMessage
+      summary: Send a message. Rate limited per visitor and per website.
+      security:
+        - visitorAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clientMessageId, content]
+              properties:
+                clientMessageId: { type: string, minLength: 8, maxLength: 64 }
+                content: { type: string, maxLength: 16000 }
+                attachmentIds:
+                  type: array
+                  maxItems: 5
+                  items: { type: string }
+      responses:
+        '201':
+          description: Committed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VisitorMessage' }
+        '200':
+          description: Replay of an existing clientMessageId
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VisitorMessage' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/widget/conversations/{conversationId}/read:
+    parameters:
+      - $ref: '#/components/parameters/conversationId'
+    post:
+      tags: [widget]
+      operationId: markVisitorRead
+      summary: Advance the visitor's delivered and read cursors
+      security:
+        - visitorAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReadCursor' }
+      responses:
+        '204': { description: Updated }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/widget/conversations/{conversationId}/attachments:
+    parameters:
+      - $ref: '#/components/parameters/conversationId'
+    post:
+      tags: [widget]
+      operationId: uploadVisitorAttachment
+      summary: Upload a file. Subject to per-visitor quotas.
+      security:
+        - visitorAuth: []
+      parameters:
+        - name: filename
+          in: query
+          required: true
+          schema: { type: string, maxLength: 255 }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, contentEncoding: binary }
+      responses:
+        '201':
+          description: Stored
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Attachment' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/widget/unsubscribe:
+    post:
+      tags: [widget]
+      operationId: unsubscribeEmail
+      summary: Add an address to the suppression list using a signed token from an email
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+      responses:
+        '204': { description: Unsubscribed }
+        default: { $ref: '#/components/responses/Problem' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Agent access token. Dashboard and mobile.
+    visitorAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Visitor access token. Widget only.
+  parameters:
+    workspaceId:
+      name: workspaceId
+      in: path
+      required: true
+      schema: { type: string }
+    conversationId:
+      name: conversationId
+      in: path
+      required: true
+      schema: { type: string }
+    contactId:
+      name: contactId
+      in: path
+      required: true
+      schema: { type: string }
+    cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+    limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+  responses:
+    Problem:
+      description: RFC 9457 problem details
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status, code, requestId]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        code: { type: string }
+        requestId: { type: string }
+        details: { type: object, additionalProperties: true }
+    Page:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: {} }
+        nextCursor: { type: [string, 'null'] }
+    Discovery:
+      type: object
+      required: [installationId, name, api, realtime, auth]
+      properties:
+        installationId: { type: string }
+        name: { type: string }
+        api:
+          type: object
+          required: [versions, minor]
+          properties:
+            versions:
+              type: array
+              items: { type: string }
+            minor: { type: integer }
+        realtime:
+          type: object
+          required: [protocolVersions]
+          properties:
+            protocolVersions:
+              type: array
+              items: { type: integer }
+        relay:
+          type: [object, 'null']
+          description: Advertised for clients, and read by the relay to prove domain control. The app compares it to a build-time allowlist.
+          required: [id, url, bundleIds, publicKeys]
+          properties:
+            id: { type: string }
+            url: { type: string, format: uri }
+            bundleIds:
+              type: array
+              items: { type: string }
+            publicKeys:
+              type: array
+              items:
+                type: object
+                required: [id, alg, key]
+                properties:
+                  id: { type: string }
+                  alg: { type: string, enum: [Ed25519] }
+                  key: { type: string, description: Base64url public key. }
+        auth:
+          type: object
+          required: [signup]
+          properties:
+            signup: { type: string, enum: [invite_only, open] }
+    TokenPair:
+      type: object
+      required: [accessToken, accessTokenExpiresAt]
+      properties:
+        accessToken: { type: string }
+        accessTokenExpiresAt: { type: string, format: date-time }
+        refreshToken: { type: string, description: Mobile only. }
+    Role:
+      type: string
+      enum: [owner, admin, supervisor, agent]
+    Me:
+      type: object
+      required: [id, email, name, memberships]
+      properties:
+        id: { type: string }
+        email: { type: string }
+        name: { type: string }
+        memberships:
+          type: array
+          items:
+            type: object
+            required: [memberId, role, workspace]
+            properties:
+              memberId: { type: string }
+              role: { $ref: '#/components/schemas/Role' }
+              workspace: { $ref: '#/components/schemas/Workspace' }
+    Workspace:
+      type: object
+      required: [id, name, slug, createdAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        createdAt: { type: string, format: date-time }
+    Member:
+      type: object
+      required: [id, name, email, role, status]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        role: { $ref: '#/components/schemas/Role' }
+        status: { type: string, enum: [active, suspended] }
+    WebsiteInput:
+      type: object
+      required: [name, allowedOrigins]
+      properties:
+        name: { type: string, maxLength: 100 }
+        allowedOrigins:
+          type: array
+          maxItems: 50
+          items: { type: string, format: uri }
+        settings: { $ref: '#/components/schemas/WidgetSettings' }
+    Website:
+      allOf:
+        - $ref: '#/components/schemas/WebsiteInput'
+        - type: object
+          required: [id, websiteKey]
+          properties:
+            id: { type: string }
+            websiteKey: { type: string, description: Public identifier embedded in page source. Not a credential. }
+    WidgetSettings:
+      type: object
+      properties:
+        welcomeMessage: { type: string, maxLength: 500 }
+        primaryColor: { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
+        availabilityMode: { type: string, enum: [auto, online, offline] }
+        collectEmail: { type: string, enum: [never, optional, required] }
+        requireTurnstile: { type: boolean }
+        showAgentNames: { type: boolean }
+        locale: { type: string }
+    ConversationStatus:
+      type: string
+      enum: [open, pending, resolved, archived]
+    Conversation:
+      type: object
+      required: [id, websiteId, contactId, status, priority, version, lastMessageSeq, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        websiteId: { type: string }
+        contactId: { type: string }
+        assignedMemberId: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/ConversationStatus' }
+        priority: { type: string, enum: [low, normal, high, urgent] }
+        subject: { type: [string, 'null'] }
+        version: { type: integer }
+        lastMessageSeq: { type: integer }
+        lastMessageAt: { type: [string, 'null'], format: date-time }
+        lastReadSeq: { type: integer, description: "The caller's read cursor, used for unread counts." }
+        tagIds:
+          type: array
+          items: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    MessageType:
+      type: string
+      enum: [text, image, file, system, internal_note]
+    Sender:
+      type: object
+      required: [type]
+      properties:
+        type: { type: string, enum: [visitor, member, system] }
+        id: { type: [string, 'null'] }
+        displayName: { type: [string, 'null'] }
+    Message:
+      type: object
+      required: [id, conversationId, seq, publicSeq, sender, type, visibility, content, attachments, createdAt, metadata]
+      properties:
+        id: { type: string }
+        conversationId: { type: string }
+        seq: { type: integer }
+        publicSeq: { type: [integer, 'null'], description: Null for internal notes. }
+        clientMessageId: { type: [string, 'null'] }
+        sender: { $ref: '#/components/schemas/Sender' }
+        type: { $ref: '#/components/schemas/MessageType' }
+        visibility: { type: string, enum: [public, internal] }
+        content: { type: string }
+        attachments:
+          type: array
+          items: { $ref: '#/components/schemas/Attachment' }
+        createdAt: { type: string, format: date-time }
+        metadata: { type: object, additionalProperties: true }
+    SendMessage:
+      type: object
+      required: [clientMessageId, type]
+      properties:
+        clientMessageId: { type: string, minLength: 8, maxLength: 64 }
+        type: { type: string, enum: [text, image, file, internal_note] }
+        content: { type: string, maxLength: 16000 }
+        attachmentIds:
+          type: array
+          maxItems: 10
+          items: { type: string }
+    ReadCursor:
+      type: object
+      required: [deliveredSeq, readSeq]
+      properties:
+        deliveredSeq: { type: integer, minimum: 0 }
+        readSeq: { type: integer, minimum: 0 }
+    Contact:
+      type: object
+      required: [id, firstSeenAt, lastSeenAt]
+      properties:
+        id: { type: string }
+        name: { type: [string, 'null'] }
+        email: { type: [string, 'null'] }
+        phone: { type: [string, 'null'] }
+        attributes: { type: object, additionalProperties: true }
+        followUpConsentAt: { type: [string, 'null'], format: date-time }
+        tagIds:
+          type: array
+          items: { type: string }
+        firstSeenAt: { type: string, format: date-time }
+        lastSeenAt: { type: string, format: date-time }
+    Attachment:
+      type: object
+      required: [id, filename, contentType, size, status, url]
+      properties:
+        id: { type: string }
+        filename: { type: string }
+        contentType: { type: string }
+        size: { type: integer }
+        status: { type: string, enum: [pending, ready, rejected] }
+        url: { type: string, description: Time-limited or authenticated download path. }
+    PushSubscription:
+      type: object
+      required: [id, relaySubscriptionId, platform]
+      properties:
+        id: { type: string }
+        relaySubscriptionId: { type: string }
+        platform: { type: string, enum: [ios] }
+        deviceLabel: { type: [string, 'null'] }
+    NotificationPreferences:
+      type: object
+      required: [preferences]
+      properties:
+        preferences:
+          type: array
+          items:
+            type: object
+            required: [eventType, channel, enabled]
+            properties:
+              eventType:
+                type: string
+                enum: [new_conversation, new_message, conversation_assigned, conversation_transferred, mention, conversation_updated]
+              channel: { type: string, enum: [push, email] }
+              enabled: { type: boolean }
+    WidgetBootstrap:
+      type: object
+      required: [websiteId, settings, availability]
+      properties:
+        websiteId: { type: string }
+        settings: { $ref: '#/components/schemas/WidgetSettings' }
+        availability: { type: string, enum: [online, offline] }
+    VisitorSession:
+      type: object
+      required: [visitorId, accessToken, accessTokenExpiresAt, refreshToken]
+      properties:
+        visitorId: { type: string }
+        accessToken: { type: string }
+        accessTokenExpiresAt: { type: string, format: date-time }
+        refreshToken: { type: string }
+    VisitorConversation:
+      description: A deliberately reduced view. No assignee, priority, tags, or internal counters.
+      type: object
+      required: [id, status, lastSeq, createdAt]
+      properties:
+        id: { type: string }
+        status: { $ref: '#/components/schemas/ConversationStatus' }
+        lastSeq: { type: integer, description: The latest public sequence number. }
+        unreadCount: { type: integer }
+        createdAt: { type: string, format: date-time }
+    VisitorMessage:
+      description: "A deliberately reduced view, with no visibility field. Here seq is the public sequence, which is gapless and reveals nothing about internal notes."
+      type: object
+      required: [id, conversationId, seq, sender, type, content, attachments, createdAt]
+      properties:
+        id: { type: string }
+        conversationId: { type: string }
+        seq: { type: integer }
+        clientMessageId: { type: [string, 'null'] }
+        sender:
+          type: object
+          required: [type]
+          properties:
+            type: { type: string, enum: [visitor, member, system] }
+            displayName: { type: [string, 'null'] }
+        type: { type: string, enum: [text, image, file, system] }
+        content: { type: string }
+        attachments:
+          type: array
+          items: { $ref: '#/components/schemas/Attachment' }
+        createdAt: { type: string, format: date-time }

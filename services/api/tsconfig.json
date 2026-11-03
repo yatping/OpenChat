@@ -1,0 +1,14 @@
+{
+  "extends": "../../tooling/tsconfig/workers.json",
+  "include": [
+    "src",
+    "test",
+    "*.ts"
+  ],
+  "compilerOptions": {
+    "types": [
+      "@cloudflare/workers-types",
+      "@cloudflare/vitest-plugin/types"
+    ]
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "@openchat/dashboard",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && vite build",
+    "test": "echo \"no tests yet\"",
+    "dev": "vite"
+  },
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "@openchat/api-client": "workspace:*",
+    "@openchat/ui": "workspace:*"
+  },
+  "devDependencies": {
+    "@openchat/tsconfig": "workspace:*",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^6.2.1",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.5"
+  }
+}

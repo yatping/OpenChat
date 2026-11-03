@@ -1,0 +1,1 @@
+{ "name": "openchat-spike-peer", "main": "./src/peer.ts", "compatibility_date": "2026-10-30" }

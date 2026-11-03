@@ -1,0 +1,1547 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "OpenChat Installation API",
+    "version": "1.0.0",
+    "description": "REST contract for the dashboard, mobile app, and widget.",
+    "license": {
+      "name": "Apache-2.0",
+      "url": "https://www.apache.org/licenses/LICENSE-2.0"
+    }
+  },
+  "tags": [
+    {
+      "name": "discovery",
+      "description": "Installation discovery and health."
+    }
+  ],
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "components": {
+    "schemas": {
+      "Problem": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "code": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code",
+          "requestId"
+        ],
+        "description": "RFC 9457 problem details."
+      },
+      "AgentServerFrame": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "hello"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "connectionId": {
+                    "type": "string"
+                  },
+                  "protocolVersion": {
+                    "type": "integer"
+                  },
+                  "serverTime": {
+                    "type": "string"
+                  },
+                  "heartbeatIntervalSeconds": {
+                    "type": "integer"
+                  },
+                  "authExpiresAt": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "connectionId",
+                  "protocolVersion",
+                  "serverTime",
+                  "heartbeatIntervalSeconds",
+                  "authExpiresAt"
+                ]
+              }
+            },
+            "required": [
+              "v",
+              "type",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "sync.required"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "overflow",
+                      "upgrade",
+                      "unknown"
+                    ]
+                  }
+                },
+                "required": [
+                  "reason"
+                ]
+              }
+            },
+            "required": [
+              "v",
+              "type",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "auth.expiring"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "expiresAt": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "expiresAt"
+                ]
+              }
+            },
+            "required": [
+              "v",
+              "type",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "error"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": [
+                      "invalid_frame",
+                      "unsupported",
+                      "rate_limited",
+                      "forbidden"
+                    ]
+                  },
+                  "requestId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code"
+                ]
+              }
+            },
+            "required": [
+              "v",
+              "type",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "message.created"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "workspaceId": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "conversationId": {
+                        "type": "string"
+                      },
+                      "seq": {
+                        "type": "integer"
+                      },
+                      "publicSeq": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "clientMessageId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "sender": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "visitor",
+                              "member",
+                              "system"
+                            ]
+                          },
+                          "id": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "displayName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "id",
+                          "displayName"
+                        ]
+                      },
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "text",
+                          "image",
+                          "file",
+                          "system",
+                          "internal_note"
+                        ]
+                      },
+                      "visibility": {
+                        "type": "string",
+                        "enum": [
+                          "public",
+                          "internal"
+                        ]
+                      },
+                      "content": {
+                        "type": "string"
+                      },
+                      "attachments": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "filename": {
+                              "type": "string"
+                            },
+                            "contentType": {
+                              "type": "string"
+                            },
+                            "size": {
+                              "type": "integer"
+                            },
+                            "url": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "filename",
+                            "contentType",
+                            "size",
+                            "url"
+                          ]
+                        }
+                      },
+                      "createdAt": {
+                        "type": "string"
+                      },
+                      "metadata": {
+                        "type": "object",
+                        "additionalProperties": {}
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "conversationId",
+                      "seq",
+                      "publicSeq",
+                      "clientMessageId",
+                      "sender",
+                      "type",
+                      "visibility",
+                      "content",
+                      "attachments",
+                      "createdAt",
+                      "metadata"
+                    ]
+                  }
+                },
+                "required": [
+                  "workspaceId",
+                  "message"
+                ]
+              }
+            },
+            "required": [
+              "v",
+              "type",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "conversation.created"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "workspaceId": {
+                    "type": "string"
+                  },
+                  "conversation": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "version": {
+                        "type": "integer"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "open",
+                          "pending",
+                          "resolved",
+                          "archived"
+                        ]
+                      },
+                      "priority": {
+                        "type": "string",
+                        "enum": [
+                          "low",
+                          "normal",
+                          "high",
+                          "urgent"
+                        ]
+                      },
+                      "assignedMemberId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "lastMessageSeq": {
+                        "type": "integer"
+                      },
+                      "lastMessageAt": {
+                        "type": "string"
+                      },
+                      "updatedAt": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "version",
+                      "updatedAt"
+                    ]
+                  }
+                },
+                "required": [
+                  "workspaceId",
+                  "conversation"
+                ]
+              }
+            },
+            "required": [
+              "v",
+              "type",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "conversation.updated"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "workspaceId": {
+                    "type": "string"
+                  },
+                  "conversation": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "version": {
+                        "type": "integer"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "open",
+                          "pending",
+                          "resolved",
+                          "archived"
+                        ]
+                      },
+                      "priority": {
+                        "type": "string",
+                        "enum": [
+                          "low",
+                          "normal",
+                          "high",
+                          "urgent"
+                        ]
+                      },
+                      "assignedMemberId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "lastMessageSeq": {
+                        "type": "integer"
+                      },
+                      "lastMessageAt": {
+                        "type": "string"
+                      },
+                      "updatedAt": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "version",
+                      "updatedAt"
+                    ]
+                  }
+                },
+                "required": [
+                  "workspaceId",
+                  "conversation"
+                ]
+              }
+            },
+            "required": [
+              "v",
+              "type",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "conversation.read"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string"
+                  },
+                  "reader": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "visitor",
+                          "member"
+                        ]
+                      },
+                      "id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "id"
+                    ]
+                  },
+                  "deliveredSeq": {
+                    "type": "integer"
+                  },
+                  "readSeq": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "conversationId",
+                  "reader",
+                  "deliveredSeq",
+                  "readSeq"
+                ]
+              }
+            },
+            "required": [
+              "v",
+              "type",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "typing"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string"
+                  },
+                  "actor": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "visitor",
+                          "member"
+                        ]
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "displayName": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "id",
+                      "displayName"
+                    ]
+                  }
+                },
+                "required": [
+                  "conversationId",
+                  "actor"
+                ]
+              }
+            },
+            "required": [
+              "v",
+              "type",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "presence.member"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "memberId": {
+                    "type": "string"
+                  },
+                  "online": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "memberId",
+                  "online"
+                ]
+              }
+            },
+            "required": [
+              "v",
+              "type",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "presence.visitor"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string"
+                  },
+                  "online": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "conversationId",
+                  "online"
+                ]
+              }
+            },
+            "required": [
+              "v",
+              "type",
+              "data"
+            ]
+          }
+        ]
+      },
+      "AgentClientFrame": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "auth.refresh"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "ticket": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "ticket"
+                ]
+              }
+            },
+            "required": [
+              "v",
+              "type",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "typing.set"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string"
+                  },
+                  "isTyping": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "conversationId",
+                  "isTyping"
+                ]
+              }
+            },
+            "required": [
+              "v",
+              "type",
+              "data"
+            ]
+          }
+        ]
+      },
+      "VisitorServerFrame": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "hello"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "connectionId": {
+                    "type": "string"
+                  },
+                  "protocolVersion": {
+                    "type": "integer"
+                  },
+                  "serverTime": {
+                    "type": "string"
+                  },
+                  "heartbeatIntervalSeconds": {
+                    "type": "integer"
+                  },
+                  "authExpiresAt": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "connectionId",
+                  "protocolVersion",
+                  "serverTime",
+                  "heartbeatIntervalSeconds",
+                  "authExpiresAt"
+                ]
+              }
+            },
+            "required": [
+              "v",
+              "type",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "sync.required"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "overflow",
+                      "upgrade",
+                      "unknown"
+                    ]
+                  }
+                },
+                "required": [
+                  "reason"
+                ]
+              }
+            },
+            "required": [
+              "v",
+              "type",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "auth.expiring"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "expiresAt": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "expiresAt"
+                ]
+              }
+            },
+            "required": [
+              "v",
+              "type",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "error"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": [
+                      "invalid_frame",
+                      "unsupported",
+                      "rate_limited",
+                      "forbidden"
+                    ]
+                  },
+                  "requestId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code"
+                ]
+              }
+            },
+            "required": [
+              "v",
+              "type",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "message.created"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "message": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "conversationId": {
+                        "type": "string"
+                      },
+                      "seq": {
+                        "type": "integer"
+                      },
+                      "clientMessageId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "sender": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "visitor",
+                              "member",
+                              "system"
+                            ]
+                          },
+                          "displayName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "displayName"
+                        ]
+                      },
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "text",
+                          "image",
+                          "file",
+                          "system"
+                        ]
+                      },
+                      "content": {
+                        "type": "string"
+                      },
+                      "attachments": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "filename": {
+                              "type": "string"
+                            },
+                            "contentType": {
+                              "type": "string"
+                            },
+                            "size": {
+                              "type": "integer"
+                            },
+                            "url": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "filename",
+                            "contentType",
+                            "size",
+                            "url"
+                          ]
+                        }
+                      },
+                      "createdAt": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "conversationId",
+                      "seq",
+                      "clientMessageId",
+                      "sender",
+                      "type",
+                      "content",
+                      "attachments",
+                      "createdAt"
+                    ]
+                  }
+                },
+                "required": [
+                  "message"
+                ]
+              }
+            },
+            "required": [
+              "v",
+              "type",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "conversation.status"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "open",
+                      "pending",
+                      "resolved",
+                      "archived"
+                    ]
+                  }
+                },
+                "required": [
+                  "conversationId",
+                  "status"
+                ]
+              }
+            },
+            "required": [
+              "v",
+              "type",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "conversation.read"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string"
+                  },
+                  "readSeq": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "conversationId",
+                  "readSeq"
+                ]
+              }
+            },
+            "required": [
+              "v",
+              "type",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "typing"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string"
+                  },
+                  "displayName": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "conversationId",
+                  "displayName"
+                ]
+              }
+            },
+            "required": [
+              "v",
+              "type",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "availability"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "availability": {
+                    "type": "string",
+                    "enum": [
+                      "online",
+                      "offline"
+                    ]
+                  }
+                },
+                "required": [
+                  "availability"
+                ]
+              }
+            },
+            "required": [
+              "v",
+              "type",
+              "data"
+            ]
+          }
+        ]
+      },
+      "VisitorClientFrame": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "auth.refresh"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "ticket": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "ticket"
+                ]
+              }
+            },
+            "required": [
+              "v",
+              "type",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "typing.set"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string"
+                  },
+                  "isTyping": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "conversationId",
+                  "isTyping"
+                ]
+              }
+            },
+            "required": [
+              "v",
+              "type",
+              "data"
+            ]
+          }
+        ]
+      },
+      "Health": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "Discovery": {
+        "type": "object",
+        "properties": {
+          "installationId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "api": {
+            "type": "object",
+            "properties": {
+              "versions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "minor": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "versions",
+              "minor"
+            ]
+          },
+          "realtime": {
+            "type": "object",
+            "properties": {
+              "protocolVersions": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              }
+            },
+            "required": [
+              "protocolVersions"
+            ]
+          },
+          "relay": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              },
+              "bundleIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "publicKeys": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "alg": {
+                      "type": "string",
+                      "enum": [
+                        "Ed25519"
+                      ]
+                    },
+                    "key": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "alg",
+                    "key"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "id",
+              "url",
+              "bundleIds",
+              "publicKeys"
+            ],
+            "description": "Compared by the app with its build-time allowlist, and read by the relay to prove domain control."
+          },
+          "auth": {
+            "type": "object",
+            "properties": {
+              "signup": {
+                "type": "string",
+                "enum": [
+                  "invite_only",
+                  "open"
+                ]
+              }
+            },
+            "required": [
+              "signup"
+            ]
+          }
+        },
+        "required": [
+          "installationId",
+          "name",
+          "api",
+          "realtime",
+          "relay",
+          "auth"
+        ]
+      }
+    },
+    "parameters": {}
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "discovery"
+        ],
+        "security": [],
+        "operationId": "getHealth",
+        "summary": "Liveness only. Exposes no configuration.",
+        "responses": {
+          "200": {
+            "description": "Healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/.well-known/openchat.json": {
+      "get": {
+        "tags": [
+          "discovery"
+        ],
+        "security": [],
+        "operationId": "getDiscovery",
+        "summary": "Describe this installation and its compatibility",
+        "responses": {
+          "200": {
+            "description": "Discovery document",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Discovery"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "webhooks": {}
+}

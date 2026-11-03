@@ -1,0 +1,1 @@
+{ "name": "openchat-spike-flagged", "main": "./src/flagged.ts", "compatibility_date": "2026-10-30", "compatibility_flags": ["global_fetch_strictly_public"] }

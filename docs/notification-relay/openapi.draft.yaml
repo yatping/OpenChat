@@ -1,0 +1,418 @@
+openapi: 3.1.0
+info:
+  title: OpenChat Notification Relay API (design draft)
+  version: 1.0.0-draft
+  summary: Protocol between installations, devices, and a notification relay.
+  description: |
+    Design draft. See protocol.md for authentication, trust model, and delivery rules.
+    Request bodies are closed schemas. Unknown fields are rejected.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+  - url: https://{relayHost}
+    variables:
+      relayHost:
+        default: relay.example.org
+tags:
+  - name: installations
+    description: Installation and workspace registration. Signed by the installation.
+  - name: devices
+    description: Device registration. Called by the app, or signed by the installation for removal.
+  - name: notifications
+    description: Sending and status. Signed by the installation.
+  - name: health
+    description: Liveness.
+paths:
+  /health:
+    get:
+      tags: [health]
+      operationId: getHealth
+      summary: Liveness only
+      security: []
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                additionalProperties: false
+                properties:
+                  status: { type: string, enum: [ok] }
+        default: { $ref: '#/components/responses/Problem' }
+  /v1/installations/register:
+    post:
+      tags: [installations]
+      operationId: registerInstallation
+      summary: Register an installation and its public key
+      description: The relay fetches the installation's well-known document to confirm control of the domain.
+      security:
+        - installationSignature: []
+      parameters:
+        - $ref: '#/components/parameters/installationId'
+        - $ref: '#/components/parameters/keyId'
+        - $ref: '#/components/parameters/requestId'
+        - $ref: '#/components/parameters/timestamp'
+        - $ref: '#/components/parameters/signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [baseUrl, publicKey]
+              properties:
+                baseUrl: { type: string, format: uri, pattern: '^https://' }
+                publicKey:
+                  type: object
+                  additionalProperties: false
+                  required: [id, alg, key]
+                  properties:
+                    id: { type: string, maxLength: 64 }
+                    alg: { type: string, enum: [Ed25519] }
+                    key: { type: string, description: Base64url public key. }
+      responses:
+        '201': { description: Registered }
+        '200': { description: Already registered with the same key }
+        default: { $ref: '#/components/responses/Problem' }
+  /v1/workspaces/register:
+    post:
+      tags: [installations]
+      operationId: registerWorkspace
+      summary: Register a workspace under the signing installation
+      security:
+        - installationSignature: []
+      parameters:
+        - $ref: '#/components/parameters/installationId'
+        - $ref: '#/components/parameters/workspaceId'
+        - $ref: '#/components/parameters/keyId'
+        - $ref: '#/components/parameters/requestId'
+        - $ref: '#/components/parameters/timestamp'
+        - $ref: '#/components/parameters/signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [workspaceId]
+              properties:
+                workspaceId: { type: string, maxLength: 64 }
+                displayName: { type: string, maxLength: 40, description: Shown as the notification title. }
+      responses:
+        '201': { description: Registered }
+        '200': { description: Updated }
+        default: { $ref: '#/components/responses/Problem' }
+  /v1/workspaces/revoke:
+    post:
+      tags: [installations]
+      operationId: revokeWorkspace
+      summary: Stop delivery and delete the workspace's subscriptions
+      security:
+        - installationSignature: []
+      parameters:
+        - $ref: '#/components/parameters/installationId'
+        - $ref: '#/components/parameters/workspaceId'
+        - $ref: '#/components/parameters/keyId'
+        - $ref: '#/components/parameters/requestId'
+        - $ref: '#/components/parameters/timestamp'
+        - $ref: '#/components/parameters/signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [workspaceId]
+              properties:
+                workspaceId: { type: string, maxLength: 64 }
+      responses:
+        '204': { description: Revoked }
+        default: { $ref: '#/components/responses/Problem' }
+  /v1/devices/register:
+    post:
+      tags: [devices]
+      operationId: registerDevice
+      summary: Called by the app, with a grant from the installation and the device's own token
+      description: The grant is the authentication. It is single-use and valid for 5 minutes at most.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [grant, platform, apnsToken, bundleId, environment, locale]
+              properties:
+                grant: { type: string, description: Compact JWS signed by the installation. }
+                platform: { type: string, enum: [ios] }
+                apnsToken: { type: string, pattern: '^[0-9a-fA-F]{32,200}$' }
+                bundleId: { type: string, maxLength: 155 }
+                environment: { type: string, enum: [sandbox, production] }
+                locale: { type: string, maxLength: 35 }
+                device:
+                  type: object
+                  additionalProperties: false
+                  required: [id, secret]
+                  properties:
+                    id: { type: string }
+                    secret: { type: string }
+      responses:
+        '201':
+          description: Subscription created
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [deviceId, subscriptionId]
+                properties:
+                  deviceId: { type: string }
+                  deviceSecret: { type: string, description: Returned only when the device is created. }
+                  subscriptionId: { type: string }
+        default: { $ref: '#/components/responses/Problem' }
+  /v1/devices/token:
+    post:
+      tags: [devices]
+      operationId: updateDeviceToken
+      summary: Replace the APNs token for all of a device's subscriptions
+      security:
+        - deviceSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [deviceId, apnsToken]
+              properties:
+                deviceId: { type: string }
+                apnsToken: { type: string, pattern: '^[0-9a-fA-F]{32,200}$' }
+      responses:
+        '204': { description: Updated }
+        default: { $ref: '#/components/responses/Problem' }
+  /v1/devices/unregister:
+    post:
+      tags: [devices]
+      operationId: unregisterDevice
+      summary: Remove subscriptions. A device removes its own; an installation may remove its own members'.
+      security:
+        - deviceSecret: []
+        - installationSignature: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                subscriptionId: { type: string }
+                recipientId: { type: string, description: Installation-signed requests only. }
+                workspaceId: { type: string, description: Required with recipientId. }
+      responses:
+        '204': { description: Removed. Idempotent. }
+        default: { $ref: '#/components/responses/Problem' }
+  /v1/notifications/send:
+    post:
+      tags: [notifications]
+      operationId: sendNotification
+      summary: Queue one notification
+      security:
+        - installationSignature: []
+      parameters:
+        - $ref: '#/components/parameters/installationId'
+        - $ref: '#/components/parameters/workspaceId'
+        - $ref: '#/components/parameters/keyId'
+        - $ref: '#/components/parameters/requestId'
+        - $ref: '#/components/parameters/timestamp'
+        - $ref: '#/components/parameters/signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NotificationRequest' }
+      responses:
+        '202':
+          description: Accepted, or a duplicate of an earlier request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationAccepted' }
+        default: { $ref: '#/components/responses/Problem' }
+  /v1/notifications/batch:
+    post:
+      tags: [notifications]
+      operationId: sendNotificationBatch
+      summary: Queue up to 100 notifications for one workspace
+      security:
+        - installationSignature: []
+      parameters:
+        - $ref: '#/components/parameters/installationId'
+        - $ref: '#/components/parameters/workspaceId'
+        - $ref: '#/components/parameters/keyId'
+        - $ref: '#/components/parameters/requestId'
+        - $ref: '#/components/parameters/timestamp'
+        - $ref: '#/components/parameters/signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [notifications]
+              properties:
+                notifications:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items: { $ref: '#/components/schemas/NotificationRequest' }
+      responses:
+        '202':
+          description: Per-item results, in request order
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items: { $ref: '#/components/schemas/NotificationAccepted' }
+        default: { $ref: '#/components/responses/Problem' }
+  /v1/notifications/{id}:
+    get:
+      tags: [notifications]
+      operationId: getNotification
+      summary: Outcome counts only. Never includes tokens or device data.
+      security:
+        - installationSignature: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/installationId'
+        - $ref: '#/components/parameters/keyId'
+        - $ref: '#/components/parameters/requestId'
+        - $ref: '#/components/parameters/timestamp'
+        - $ref: '#/components/parameters/signature'
+      responses:
+        '200':
+          description: Status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationStatus' }
+        default: { $ref: '#/components/responses/Problem' }
+components:
+  securitySchemes:
+    installationSignature:
+      type: apiKey
+      in: header
+      name: X-Signature
+      description: Ed25519 signature over the canonical string defined in protocol.md.
+    deviceSecret:
+      type: http
+      scheme: bearer
+      description: The device secret returned on first registration.
+  parameters:
+    installationId:
+      name: X-Installation-ID
+      in: header
+      required: true
+      schema: { type: string }
+    workspaceId:
+      name: X-Workspace-ID
+      in: header
+      required: true
+      schema: { type: string }
+    keyId:
+      name: X-Key-ID
+      in: header
+      required: true
+      schema: { type: string }
+    requestId:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema: { type: string, maxLength: 64 }
+    timestamp:
+      name: X-Timestamp
+      in: header
+      required: true
+      schema: { type: string, description: Unix seconds. Must be within 300 seconds of the relay's clock. }
+    signature:
+      name: X-Signature
+      in: header
+      required: true
+      schema: { type: string, pattern: '^v1=[A-Za-z0-9_-]+$' }
+  responses:
+    Problem:
+      description: RFC 9457 problem details
+      content:
+        application/problem+json:
+          schema:
+            type: object
+            required: [type, title, status, code, requestId]
+            properties:
+              type: { type: string }
+              title: { type: string }
+              status: { type: integer }
+              code:
+                type: string
+                description: For example invalid_signature, stale_timestamp, replayed_request, invalid_grant, rate_limited, or unknown_workspace.
+              requestId: { type: string }
+  schemas:
+    NotificationEvent:
+      type: string
+      enum: [new_conversation, new_message, conversation_assigned, conversation_transferred, mention, conversation_updated]
+    NotificationRequest:
+      type: object
+      additionalProperties: false
+      required: [workspaceId, event, recipientId, conversationId, notificationId]
+      properties:
+        workspaceId: { type: string, maxLength: 64 }
+        event: { $ref: '#/components/schemas/NotificationEvent' }
+        recipientId: { type: string, maxLength: 64 }
+        conversationId: { type: string, maxLength: 64 }
+        notificationId: { type: string, maxLength: 64 }
+        expiresAt: { type: string, format: date-time }
+        metadata:
+          type: object
+          additionalProperties: false
+          properties:
+            websiteId: { type: string, maxLength: 64 }
+    NotificationAccepted:
+      type: object
+      additionalProperties: false
+      required: [id, notificationId, status]
+      properties:
+        id: { type: string }
+        notificationId: { type: string }
+        status: { type: string, enum: [queued, duplicate] }
+    NotificationStatus:
+      type: object
+      additionalProperties: false
+      required: [id, notificationId, status, outcomes, updatedAt]
+      properties:
+        id: { type: string }
+        notificationId: { type: string }
+        status: { type: string, enum: [queued, delivering, completed, expired, no_devices] }
+        outcomes:
+          type: object
+          additionalProperties: false
+          required: [delivered, invalidToken, failed, muted]
+          properties:
+            delivered: { type: integer }
+            invalidToken: { type: integer }
+            failed: { type: integer }
+            muted: { type: integer }
+        updatedAt: { type: string, format: date-time }

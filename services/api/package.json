@@ -1,0 +1,40 @@
+{
+  "name": "@openchat/api",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/collect-assets.mjs && wrangler deploy --dry-run -c wrangler.template.jsonc --outdir dist",
+    "test": "node scripts/collect-assets.mjs && vitest run",
+    "dev": "node scripts/collect-assets.mjs && wrangler dev -c wrangler.template.jsonc --test-scheduled",
+    "migrate:local": "wrangler d1 migrations apply DB --local -c wrangler.template.jsonc"
+  },
+  "dependencies": {
+    "@openchat/shared": "workspace:*",
+    "@openchat/database": "workspace:*",
+    "@openchat/api-contracts": "workspace:*",
+    "@openchat/core": "workspace:*",
+    "@openchat/realtime": "workspace:*",
+    "@openchat/email": "workspace:*",
+    "@openchat/auth": "workspace:*",
+    "@openchat/notification-protocol": "workspace:*",
+    "hono": "^4.13.16",
+    "@hono/zod-openapi": "^1.6.3"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.5.1",
+    "@cloudflare/workers-types": "^5.20261103.1",
+    "@openchat/api-client": "workspace:*",
+    "@openchat/dashboard": "workspace:*",
+    "@openchat/tsconfig": "workspace:*",
+    "@openchat/widget": "workspace:*",
+    "typescript": "~6.0.3",
+    "vitest": "^5.1.0",
+    "wrangler": "^4.157.0"
+  }
+}

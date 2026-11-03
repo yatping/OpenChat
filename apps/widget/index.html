@@ -1,0 +1,15 @@
+<!doctype html>
+<!-- A plain host page on a different origin from the Worker, so that CORS and Origin checks run for real. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Widget test page</title>
+  </head>
+  <body>
+    <h1>Example customer website</h1>
+    <script>
+      window.OpenChatConfig = { websiteKey: 'site_dev', apiUrl: 'http://localhost:8787' };
+    </script>
+    <script type="module" src="/src/loader.ts"></script>
+  </body>
+</html>

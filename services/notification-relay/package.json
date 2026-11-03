@@ -1,0 +1,29 @@
+{
+  "name": "@openchat/notification-relay",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && wrangler deploy --dry-run -c wrangler.template.jsonc --outdir dist",
+    "test": "vitest run --passWithNoTests",
+    "dev": "wrangler dev -c wrangler.template.jsonc --port 8788"
+  },
+  "dependencies": {
+    "@openchat/shared": "workspace:*",
+    "@openchat/notification-protocol": "workspace:*",
+    "hono": "^4.13.16"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.5.1",
+    "@cloudflare/workers-types": "^5.20261103.1",
+    "@openchat/tsconfig": "workspace:*",
+    "typescript": "~6.0.3",
+    "vitest": "^5.1.0",
+    "wrangler": "^4.157.0"
+  }
+}

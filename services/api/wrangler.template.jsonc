@@ -1,0 +1,47 @@
+{
+  // The Installation Worker. Valid as-is for local development and tests, where IDs are placeholders.
+  // Deployments render this through `pnpm oc render`, which fills in real names and IDs.
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "oc-local",
+  "main": "./src/index.ts",
+  "compatibility_date": "2026-10-30",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "assets": {
+    "directory": "./.assets",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    // /__scheduled is the local cron trigger from --test-scheduled. In production the Worker answers it with a 404.
+    "run_worker_first": ["/api/*", "/health", "/health/*", "/.well-known/*", "/__scheduled"]
+  },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "oc-local", "database_id": "local", "migrations_dir": "../../packages/database/migrations" }
+  ],
+  "r2_buckets": [{ "binding": "ATTACHMENTS", "bucket_name": "oc-local-attachments" }],
+  "durable_objects": {
+    "bindings": [
+      { "name": "WORKSPACE_HUB", "class_name": "WorkspaceHub" },
+      { "name": "CONVERSATION_ROOM", "class_name": "ConversationRoom" }
+    ],
+    // Objects hibernate quickly, so a long window avoids forcing resets that drop sockets.
+    "code_update_strategy": { "mode": "deferred", "max_delay": 3600 }
+  },
+  "exports": { "WorkspaceHub": { "type": "durable-object", "storage": "sqlite" }, "ConversationRoom": { "type": "durable-object", "storage": "sqlite" } },
+  "queues": {
+    "producers": [
+      { "binding": "NOTIFICATIONS_QUEUE", "queue": "oc-local-notifications" },
+      { "binding": "EMAIL_QUEUE", "queue": "oc-local-email" },
+      { "binding": "JOBS_QUEUE", "queue": "oc-local-jobs" }
+    ],
+    "consumers": [
+      { "queue": "oc-local-notifications", "max_batch_size": 25, "max_batch_timeout": 1, "max_retries": 8, "max_concurrency": 20, "dead_letter_queue": "oc-local-notifications-dlq" },
+      { "queue": "oc-local-email", "max_batch_size": 10, "max_batch_timeout": 5, "max_retries": 8, "max_concurrency": 5, "dead_letter_queue": "oc-local-email-dlq" },
+      { "queue": "oc-local-jobs", "max_batch_size": 10, "max_batch_timeout": 5, "max_retries": 5, "max_concurrency": 10, "dead_letter_queue": "oc-local-jobs-dlq" },
+      { "queue": "oc-local-notifications-dlq", "max_batch_size": 25, "max_batch_timeout": 30, "max_retries": 3, "max_concurrency": 1 },
+      { "queue": "oc-local-email-dlq", "max_batch_size": 25, "max_batch_timeout": 30, "max_retries": 3, "max_concurrency": 1 },
+      { "queue": "oc-local-jobs-dlq", "max_batch_size": 25, "max_batch_timeout": 30, "max_retries": 3, "max_concurrency": 1 }
+    ]
+  },
+  "analytics_engine_datasets": [{ "binding": "METRICS", "dataset": "oc_local" }],
+  "triggers": { "crons": ["* * * * *"] }
+}

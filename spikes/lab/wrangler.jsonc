@@ -1,0 +1,19 @@
+{
+  "name": "openchat-spike-lab",
+  "main": "./src/index.ts",
+  "compatibility_date": "2026-10-30",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "d1_databases": [{ "binding": "DB", "database_name": "openchat-spike-d1", "database_id": "REPLACED_BY_RUN_SCRIPT", "migrations_dir": "../../packages/database/migrations" }],
+  "durable_objects": {
+    "bindings": [{ "name": "HUB", "class_name": "SpikeHub" }],
+    "code_update_strategy": { "mode": "deferred", "max_delay": 3600 }
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SpikeHub"] }],
+  "services": [{ "binding": "PEER", "service": "openchat-spike-peer" }],
+  "queues": {
+    "producers": [{ "binding": "PROBES", "queue": "openchat-spike-scopecheck" }],
+    "consumers": [{ "queue": "openchat-spike-scopecheck", "max_batch_size": 1, "max_retries": 1 }]
+  },
+  "triggers": { "crons": ["* * * * *"] }
+}

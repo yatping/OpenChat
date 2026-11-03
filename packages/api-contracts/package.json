@@ -1,0 +1,31 @@
+{
+  "name": "@openchat/api-contracts",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./openapi.json": "./generated/openapi.json"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "generate": "tsx scripts/generate.ts",
+    "check": "tsx scripts/generate.ts --check && redocly lint generated/openapi.json --config redocly.yaml"
+  },
+  "dependencies": {
+    "@hono/zod-openapi": "^1.6.3",
+    "hono": "^4.13.16",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@openchat/tsconfig": "workspace:*",
+    "@redocly/cli": "^2.72.1",
+    "tsx": "^4.0.0",
+    "typescript": "~6.0.3",
+    "vitest": "^5.1.0",
+    "@types/node": "^24.0.0"
+  }
+}

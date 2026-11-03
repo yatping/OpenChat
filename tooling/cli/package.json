@@ -1,0 +1,25 @@
+{
+  "name": "@openchat/cli",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "jsonc-parser": "^3.3.1"
+  },
+  "devDependencies": {
+    "@openchat/tsconfig": "workspace:*",
+    "@types/node": "^24.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "~6.0.3",
+    "vitest": "^5.1.0"
+  }
+}
