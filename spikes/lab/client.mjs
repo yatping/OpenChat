@@ -94,6 +94,23 @@ async function s4() {
   }
 }
 
+// Repeats concurrent sends on fresh conversations, counting every outcome, since not_found still has ok: true.
+async function s4b() {
+  for (let round = 1; round <= 10; round++) {
+    const { body: { conversation: c } } = await json('/s4/seed');
+    const sends = await pool(50, 25, (i) => json('/s4/send', { c, ...(i % 5 === 0 ? { note: '1' } : {}) }));
+    const tally = {};
+    for (const r of sends) {
+      const k = r.body?.ok ? r.body.result.outcome : `error ${r.http}: ${String(r.body?.error ?? (String(r.body).match(/<title>([^<]*)/)?.[1] ?? JSON.stringify(r.body))).slice(0, 150)}`;
+      tally[k] = (tally[k] ?? 0) + 1;
+    }
+    const { body } = await json('/s4/check', { c });
+    console.log(`round ${round}`, JSON.stringify(tally), JSON.stringify({ messages: body.rows.messages, maxSeq: body.rows.maxSeq, maxPublic: body.rows.maxPublic, lastSeq: body.convo.lastSeq }));
+  }
+  const { body: { conversation: t } } = await json('/s4/seed');
+  for (let i = 0; i < 3; i++) console.log('timing', JSON.stringify((await json('/s4/timing', { c: t, n: 8 })).body));
+}
+
 async function s5() { console.log((await json('/s5/ed25519')).body); }
 
 async function s6() {
@@ -104,4 +121,4 @@ async function s6() {
   console.log('url, with flag', flagged.status, (await flagged.text()).slice(0, 200));
 }
 
-await { s1, s3, s4, s5, s6 }[process.argv[2]]();
+await { s1, s3, s4, s4b, s5, s6 }[process.argv[2]]();

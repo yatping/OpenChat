@@ -1,6 +1,6 @@
 # ADR-0009: Workers Paid baseline, scrypt for passwords
 
-**Status:** Accepted by the owner, [Q3](../open-questions.md). Single-hash cost passed spike S3, at 284 to 385 ms of CPU. Concurrency still needs testing on Workers Paid ([results](../cloudflare-validation.md#phase-0-spike-results)). **Date:** 2026-11-03.
+**Status:** Accepted by the owner, [Q3](../open-questions.md). Parameters passed spike S3 on Workers Paid, at a median of about 261 ms of CPU per hash ([results](../cloudflare-validation.md#phase-0-spike-results)). **Date:** 2026-11-03.
 
 ## Context
 

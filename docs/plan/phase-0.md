@@ -128,12 +128,12 @@ apps/dashboard/, apps/widget/                 build-only placeholders
 From spec §17, plus spike outcomes:
 
 - [x] All packages build.
-- [ ] Lint and tests pass, locally **and in CI**. Local only: there is no remote yet.
+- [x] Lint and tests pass, locally and in CI.
 - [x] Local Cloudflare development works, including D1, Durable Objects, queues, and cron. Durable Objects are exercised through tests, because Phase 0 has no public route to them.
 - [x] Migrations apply to local and real D1.
 - [x] OpenAPI generation and drift check work.
 - [x] Boundary rules demonstrably reject violations.
-- [x] A preview deployment succeeds and passes health checks. Run by hand: `preview.yml` itself has not run.
+- [x] A preview deployment succeeds and passes health checks. Run by hand: `preview.yml` itself has not run, because it needs repository secrets.
 - [x] S1, S2, S3, S4, S5, S6, and S8 reported, with gaps in [the results](../architecture/cloudflare-validation.md#phase-0-spike-results). S7 deferred to M2, because it needs an Apple account and an iPhone.
 - [x] Documentation matches reality, verified from a clean copy of the working tree. A clone is not possible until the first commit.
 - [x] Outstanding issues are written down, and nothing untested is claimed as done.
@@ -142,12 +142,12 @@ From spec §17, plus spike outcomes:
 
 | Item | Why | Needs |
 |---|---|---|
-| CI on a pull request, `preview.yml`, and the gitleaks action | No GitHub remote. Each local check was shown to catch a failure, but the workflows have never run | A remote and repository secrets |
-| S3 concurrency, and D1 latency with a location hint | The test account appears to be on the Free plan | Workers Paid |
+| `preview.yml` | Has never run. The same script passed when run by hand | Repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` |
 | S1 over a full day | Ran for 44 minutes | A longer run, before M3 |
 | S6 with Custom Domains and across zones | Not tested, to avoid changing zones on the account | A test zone, before M3 |
 | S5 on Hermes and browsers | Not tested. Mobile does not need to sign | Before anything on mobile signs |
-| Two unexplained preview failures | See [results](../architecture/cloudflare-validation.md#found-while-deploying) | Watch for them in CI |
+| Three unexplained one-off results: a job that did not arrive in time, an HTML 404, and 48 messages after 50 sends | See [results](../architecture/cloudflare-validation.md#found-while-deploying) | M1b tests that count outcomes, and watching CI |
+| Smart Placement | Write latency depends on Worker location, which varied between runs | Test before M1b |
 | Name clearance | "OpenChat" is used by unrelated projects, and no trademark search was done | Owner, before publishing |
 
 ## Not in Phase 0

@@ -157,7 +157,8 @@ Tap -> read oc.installationId, oc.workspaceId, oc.conversationId from the payloa
   -> session expired: sign in, retaining the destination
   -> switch Connection and workspace
   -> fetch the conversation from the installation
-      404 (access removed): show a message and return to the inbox
+      404 problem response (access removed): show a message and return to the inbox
+      any other 404 (the platform's HTML page): retry, since access may be fine
   -> navigate
 ```
 

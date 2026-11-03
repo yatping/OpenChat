@@ -139,13 +139,13 @@ Spike results are in [Phase 0 spike results](#phase-0-spike-results).
 
 Run on 2026-11-03 on one Cloudflare account, from one client location. Code is in [`spikes/lab`](../../spikes/lab), and all resources were deleted afterwards.
 
-**The account appears to be on the Workers Free plan.** Scrypt requests were killed with `exceededCpu` at a reported 10 ms of CPU. The plan itself was not confirmed, but any result that depends on CPU limits should be repeated on Workers Paid.
+The first runs appeared to be on the Workers Free plan, because scrypt requests were killed with `exceededCpu` at a reported 10 ms of CPU. The owner then upgraded the account, and S3 and S4 were repeated the same day. No request hit a CPU limit afterwards, at up to 2,702 ms of CPU. The other spikes were not repeated.
 
 | Spike | Result | What was measured | Not covered |
 |---|---|---|---|
 | **S1** APNs | **Pass, within its limits** | `403 MissingProviderToken` on all 75 requests: 10 from `fetch`, 10 from a Durable Object, 10 from a queue consumer, and 45 from cron over 44 minutes. Local curl over HTTP/1.1 fails, so this implies an HTTP/2 path | The planned run over a full day. A real push, which needs Apple credentials |
 | **S2** Hibernation | **Pass** | Details below | Forced resets at `max_delay`. Thousands of sockets |
-| **S3** Scrypt | **Partial** | N=2^15, r=8, p=3 took 284 to 385 ms of CPU per hash in Worker logs, under the 500 ms target. No memory failure appeared in any run, including one successful run of eight hashes in one request | **Concurrency is inconclusive**, because the CPU limit killed most requests of more than one hash, and also some single ones. Repeat on Workers Paid |
+| **S3** Scrypt | **Pass** | N=2^15, r=8, p=3 on Workers Paid: all 77 requests succeeded, with no CPU or memory failure. One hash took a median of about 261 ms of CPU, with a range of 205 to 636 ms. Eight hashes in one request took about 2,221 ms, so CPU grows linearly. 20 parallel requests all succeeded, with a 95th percentile near 941 ms | Sustained login load. The occasional hash above 500 ms is worth watching |
 | **S4** D1 | **Pass** | Details below | Latency from several regions, and real overload |
 | **S5** Ed25519 | **Pass in Workers** | A deployed Worker reproduced the published signature and verified it. Node and workerd pass the full tamper suite | Hermes and browsers. Mobile only carries grants, so it does not need to sign |
 | **S6** Worker to Worker | **Pass for what was tested** | Details below | Custom Domains and a different zone, because testing them meant changing zones on the account |
@@ -172,8 +172,12 @@ Run on 2026-11-03 on one Cloudflare account, from one client location. Code is i
 | 10 racing sends with one `clientMessageId` | One message. One `created`, the rest `replayed` |
 | 20 concurrent compare-and-set updates at one version | One winner, 19 conflicts, one event |
 | A migration file that fails midway | Tables it had already created were gone, and it was not recorded as applied |
-| 100 sends through 40 connections | All 96 that reached the Worker succeeded, gapless, with no overload error. Four failed connecting from the client, before reaching Cloudflare. **This shows moderate load only** |
-| Latency of one write batch | p50 about 375 ms when sent one at a time. The database was in APAC, and a request traced through LAX, which may explain this. Repeat with a location hint on Workers Paid |
+| 100 sends through 40 connections | Repeated three times. Every send that reached the Worker succeeded, gapless, with no overload error. 3 to 5 per run failed connecting from the client, before reaching Cloudflare. **This shows moderate load only** |
+| 1,100 sends in rounds of 50, with outcomes counted | 1,099 created, in 22 rounds. Message counts and sequences matched exactly each time, and 10 rounds mixed in notes, with `public_seq` gapless. The other send got the HTML 404 described below, and wrote nothing |
+| Latency of one write batch, with the Worker near the database | About 90 ms (DFW to WNAM) |
+| The same, with the Worker far from the database | About 380 ms (ARN to APAC, and SIN to WNAM). Stable across eight writes in one request, so this is distance rather than a slow first call |
+
+**Write latency depends on the distance from the Worker to the D1 primary, and the Worker's location varied between runs for one client** (LAX, ARN, DFW, and SIN). Choose the D1 location deliberately. Smart Placement is worth testing before M1b, as it is not covered here.
 
 ### S6: Worker to Worker
 
@@ -192,7 +196,9 @@ Run on 2026-11-03 on one Cloudflare account, from one client location. Code is i
 | Deleting a D1 database does not need its Worker to be deleted first | Failed teardowns can leave a running Worker with no database, so teardown order matters |
 | Queue creation returned `code: 10013` once with no explanation, shortly after queues of the same name were deleted | Creation retries. Cause unknown |
 | Wrangler warned that `queues:write` was missing, yet creating queues worked | Trust the API result, not the warning |
-| In one preview run, no job reached the consumer within 5 minutes. In another, discovery returned 404 once after a deploy. Neither recurred on the final runs, and **neither was explained** | The preview script now waits up to 10 minutes and logs each discovery attempt. Treat these as open until seen again |
+| **Cloudflare occasionally answers with its own HTML 404 instead of reaching the Worker.** Seen once in 1,100 D1 sends, with nothing written, and possibly the same as a discovery 404 straight after one deploy. Cause unknown | Clients must treat a 404 as "not found" only if it is `application/problem+json`, and otherwise retry. See [conventions](../api/conventions.md) |
+| In one preview run, no job reached the consumer within 5 minutes. It did not recur, and **was not explained** | The preview script now waits up to 10 minutes. Open until seen again |
+| In one D1 run, 50 sends were reported as successful and the conversation's highest `seq` was 48. That client counted `not_found` as success and did not record outcomes, so it cannot show what happened. It did not recur in 1,100 counted sends, including 500 with notes. **Not explained** | M1b tests must count outcomes, and treat `not_found` on a known conversation as a failure |
 | `@cloudflare/vitest-plugin` 1.5.1 shares storage between tests in a file, omits `delaySeconds` from `getQueueResult`, and bypasses asset routing through the default export | Tests reset their own data and observe `retry()` directly. Asset routing is checked with `wrangler dev` and the preview |
 | The SPA fallback answers `/__scheduled` unless that path is in `run_worker_first` | Added. In production the Worker answers it with 404, and the preview checks that |
 
