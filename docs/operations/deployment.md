@@ -42,7 +42,7 @@ Durable Object classes are declared using `exports`, which Cloudflare prefers fo
 
 **Preview and teardown.** `node tooling/scripts/preview.mjs preview-<name>` creates a throwaway installation, verifies it, and removes it. Order matters when removing one: queue consumers first, then the Worker, then queues, R2, and D1, because Cloudflare refuses to delete a Worker that consumes a queue or a queue that is bound to a Worker.
 
-**D1 location.** The primary is placed near whoever creates the database unless `--location` is given. Choose it deliberately, because it fixes write latency for every user.
+**D1 location.** The primary is placed near whoever creates the database unless `--location` is given. Choose it deliberately: S4 measured about 90 ms per write with the Worker nearby and about 380 ms with it far away.
 
 ## Fresh install: `oc deploy`
 

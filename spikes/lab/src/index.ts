@@ -98,7 +98,7 @@ const SEED = [
   `INSERT OR IGNORE INTO contacts (id,workspace_id,first_seen_at,last_seen_at,created_at,updated_at) VALUES ('p1','w1',1,1,1,1)`,
 ];
 
-async function d1Route(path: string, url: URL, env: Env): Promise<Response> {
+async function d1Route(path: string, url: URL, env: Env, request: Request): Promise<Response> {
   const db = openDatabase(env.DB);
   const n = Number(url.searchParams.get('n') ?? 1);
 
@@ -156,6 +156,16 @@ async function d1Route(path: string, url: URL, env: Env): Promise<Response> {
     } catch (e) {
       return Response.json({ ok: false, ms: Date.now() - started, error: String(e) }, { status: 503 });
     }
+  }
+  if (path === '/s4/timing') {
+    // Several writes in one request separate a slow first call from slow writes in general.
+    const ms: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const started = Date.now();
+      await repo.messages.send({ conversationId: conversation, clientMessageId: crypto.randomUUID(), sender: { type: 'visitor', id: null }, type: 'text', content: 'spike' });
+      ms.push(Date.now() - started);
+    }
+    return Response.json({ ms, colo: (request.cf as { colo?: string } | undefined)?.colo });
   }
   if (path === '/s4/assign') {
     const started = Date.now();
@@ -280,7 +290,7 @@ export default {
         return Response.json({ status: response.status });
       }
       default:
-        return path.startsWith('/s4/') ? d1Route(path, url, env) : new Response('Unknown', { status: 404 });
+        return path.startsWith('/s4/') ? d1Route(path, url, env, request) : new Response('Unknown', { status: 404 });
     }
   },
 } satisfies ExportedHandler<Env>;

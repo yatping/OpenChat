@@ -79,6 +79,8 @@ RFC 9457 problem details with a stable machine-readable `code`:
 | 429 | Rate limited, with `Retry-After` |
 | 503 | D1 overloaded or dependency unavailable, with `Retry-After` |
 
+A 404 means "not found" only when it is `application/problem+json`. Cloudflare occasionally answers with its own HTML 404 before a request reaches the Worker ([S4](../architecture/cloudflare-validation.md#found-while-deploying)), so clients retry any other 404.
+
 ### Pagination
 
 Keyset only. Requests take `limit` (default 25, max 100) and `cursor`. Responses return `{ "data": [...], "nextCursor": "..." | null }`. Cursors are opaque, include a version, and are bound to the filters used.

@@ -143,11 +143,11 @@ From spec §17, plus spike outcomes:
 | Item | Why | Needs |
 |---|---|---|
 | CI on a pull request, `preview.yml`, and the gitleaks action | No GitHub remote. Each local check was shown to catch a failure, but the workflows have never run | A remote and repository secrets |
-| S3 concurrency, and D1 latency with a location hint | The test account appears to be on the Free plan | Workers Paid |
 | S1 over a full day | Ran for 44 minutes | A longer run, before M3 |
 | S6 with Custom Domains and across zones | Not tested, to avoid changing zones on the account | A test zone, before M3 |
 | S5 on Hermes and browsers | Not tested. Mobile does not need to sign | Before anything on mobile signs |
-| Two unexplained preview failures | See [results](../architecture/cloudflare-validation.md#found-while-deploying) | Watch for them in CI |
+| Three unexplained one-off results: a job that did not arrive in time, an HTML 404, and 48 messages after 50 sends | See [results](../architecture/cloudflare-validation.md#found-while-deploying) | M1b tests that count outcomes, and watching CI |
+| Smart Placement | Write latency depends on Worker location, which varied between runs | Test before M1b |
 | Name clearance | "OpenChat" is used by unrelated projects, and no trademark search was done | Owner, before publishing |
 
 ## Not in Phase 0
