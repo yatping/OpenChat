@@ -15,5 +15,6 @@ export default defineConfig(async () => ({
       miniflare: { bindings: { AUTH_SIGNING_KEY, TEST_MIGRATIONS: await readD1Migrations('../../packages/database/migrations') } },
     }),
   ],
-  test: { setupFiles: ['./test/setup.ts'] },
+  // These tests use real scrypt, on purpose, and some hash over 20 times. CI runners are much slower than laptops.
+  test: { setupFiles: ['./test/setup.ts'], testTimeout: 60_000, hookTimeout: 60_000 },
 }));
