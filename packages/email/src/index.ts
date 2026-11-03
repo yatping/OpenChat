@@ -1,4 +1,4 @@
-/** Email delivery. Vendor neutral. Drivers arrive in Milestone 1a. See spec amendment A6. */
+/** Email delivery. Vendor neutral. See spec amendment A6. */
 export interface EmailMessage {
   to: string;
   from: { name: string; email: string };
@@ -25,5 +25,68 @@ export class ConsoleEmailProvider implements EmailProvider {
     this.sent.push(input);
     console.log(`[console email] to=${input.to} subject=${input.subject}\n${input.text ?? input.html}`);
     return { messageId: `console-${this.sent.length}` };
+  }
+}
+
+/** Holds only the HTTP status. A provider's response can quote addresses, and errors end up in logs. */
+export class EmailSendError extends Error {
+  readonly status: number | null;
+  constructor(status: number | null) {
+    super(status === null ? 'The email provider could not be reached' : `The email provider answered ${status}`);
+    this.name = 'EmailSendError';
+    this.status = status;
+  }
+}
+
+const SEND_TIMEOUT_MS = 10_000;
+
+/** A display name, quoted so that it cannot add addresses or line breaks to the sender. */
+export function formatSender(from: EmailMessage['from']): string {
+  const name = from.name.replace(/\p{Cc}+/gu, ' ').replace(/["\\]/g, '\\$&');
+  return `"${name}" <${from.email}>`;
+}
+
+/**
+ * Resend over HTTP. Every failure throws and is retried, then dead-lettered. That includes 4xx answers, so
+ * a bad API key or an unverified domain is visible to the operator rather than quietly losing email. A key
+ * reused with a different body gets a 409, so callers must not reuse one across different content.
+ */
+export class ResendEmailProvider implements EmailProvider {
+  readonly #apiKey: string;
+  readonly #fetch: typeof fetch;
+
+  constructor(apiKey: string, fetcher: typeof fetch = (...args) => fetch(...args)) {
+    this.#apiKey = apiKey;
+    this.#fetch = fetcher;
+  }
+
+  async send(input: EmailMessage): Promise<{ messageId: string }> {
+    let response: Response;
+    try {
+      response = await this.#fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${this.#apiKey}`,
+          'content-type': 'application/json',
+          ...(input.idempotencyKey ? { 'idempotency-key': input.idempotencyKey } : {}),
+        },
+        body: JSON.stringify({
+          from: formatSender(input.from),
+          to: [input.to],
+          subject: input.subject,
+          html: input.html,
+          ...(input.text === undefined ? {} : { text: input.text }),
+          ...(input.replyTo === undefined ? {} : { reply_to: input.replyTo }),
+          ...(input.headers === undefined ? {} : { headers: input.headers }),
+        }),
+        signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+      });
+    } catch {
+      throw new EmailSendError(null);
+    }
+    if (!response.ok) throw new EmailSendError(response.status);
+    const body = (await response.json().catch(() => null)) as { id?: unknown } | null;
+    // Accepted is accepted. Throwing here would retry, and could send the email twice.
+    return { messageId: typeof body?.id === 'string' ? body.id : 'unknown' };
   }
 }

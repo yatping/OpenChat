@@ -19,7 +19,7 @@ Managed and independent configurations stay separate (spec rule 18). Only the co
 | Queues | `oc-<name>-notifications`, `-email`, `-jobs`, each with a `-dlq` |
 | Durable Objects | `WorkspaceHub`, `ConversationRoom`, plus an auth guard |
 | Analytics Engine dataset | `oc_<name>`. Opt-in with `analyticsEngine: true` in deployment state, because it must first be enabled once per account in the Cloudflare dashboard, or the deploy fails |
-| Secrets | `AUTH_SIGNING_KEY`, `TICKET_SIGNING_KEY`, `RELAY_SIGNING_KEY`, `DATA_ENCRYPTION_KEY`, email provider credentials |
+| Secrets | `AUTH_SIGNING_KEY`, `TICKET_SIGNING_KEY`, `RELAY_SIGNING_KEY`, `DATA_ENCRYPTION_KEY`, `RESEND_API_KEY` |
 
 ## Configuration model
 
