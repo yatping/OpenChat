@@ -111,7 +111,8 @@ CI runs secret scanning. `.dev.vars.example` contains placeholders only, and `.d
 
 ## Web and API
 
-- Strict CSP on the dashboard; no third-party scripts.
+- Strict CSP on the dashboard, from `apps/dashboard/public/_headers`, with no third-party scripts or inline code.
+- The dashboard keeps its access token in memory. Refreshes are serialised by one promise per tab and a Web Lock across tabs, because a repeated refresh revokes the session. Tokens in emailed links are removed from the address bar on load.
 - CORS allowed only on `/api/v1/widget/*`, per website origin. The dashboard is same-origin and needs none.
 - All input validated with Zod. Request bodies have explicit limits.
 - Message content is plain text, rendered escaped on every client. There is no HTML message type. Links are detected on display and get `rel="noopener noreferrer"`.

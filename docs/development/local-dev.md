@@ -39,7 +39,7 @@ pnpm dev           # runs everything below
 | Cron | `curl "localhost:8787/__scheduled?cron=*+*+*+*+*"` | Manually triggered. `pnpm dev` passes `--test-scheduled` |
 | R2 | Local files | Good |
 | Rate limit binding | Simulated | Do not rely on exact numbers |
-| Email | A `ConsoleEmailProvider` that writes to a local page | Not real delivery |
+| Email | A `ConsoleEmailProvider` that prints each email, with its link, in the Worker's terminal | Not real delivery |
 | **APNs** | **`MockApnsTransport` only** | **`workerd` has no HTTP/2 client, so real APNs cannot be reached locally** |
 
 Local state lives in `.wrangler/state`. `pnpm dev:reset` removes and reseeds it.

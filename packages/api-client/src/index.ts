@@ -3,15 +3,42 @@
  * so changing a contract without updating a caller fails to compile. Contracts are imported as types
  * only, which keeps Zod out of client bundles.
  */
-import type { getDiscoveryRoute, getHealthRoute } from '@openchat/api-contracts';
+import type {
+  createInvitationRoute,
+  createWebsiteRoute,
+  createWorkspaceRoute,
+  getDiscoveryRoute,
+  getHealthRoute,
+  getMeRoute,
+  listMembersRoute,
+  listWebsitesRoute,
+  loginRoute,
+  updateMemberRoute,
+  updateWebsiteRoute,
+  updateWorkspaceRoute,
+} from '@openchat/api-contracts';
 import type { z } from 'zod';
 
-type JsonBody<R> = R extends { responses: { 200: { content: { 'application/json': { schema: infer S extends z.ZodType } } } } }
-  ? z.output<S>
-  : never;
+type Schema<R, Status extends number> = R extends { responses: Record<Status, { content: { 'application/json': { schema: infer S extends z.ZodType } } }> } ? S : never;
+type Json200<R> = z.output<Schema<R, 200>>;
+type Json201<R> = z.output<Schema<R, 201>>;
+type BodyOf<R> = R extends { request: { body: { content: { 'application/json': { schema: infer S extends z.ZodType } } } } } ? z.input<S> : never;
 
-export type HealthResponse = JsonBody<typeof getHealthRoute>;
-export type DiscoveryResponse = JsonBody<typeof getDiscoveryRoute>;
+export type HealthResponse = Json200<typeof getHealthRoute>;
+export type DiscoveryResponse = Json200<typeof getDiscoveryRoute>;
+export type TokenPair = Json200<typeof loginRoute>;
+export type Me = Json200<typeof getMeRoute>;
+export type Workspace = Json200<typeof updateWorkspaceRoute>;
+export type MemberPage = Json200<typeof listMembersRoute>;
+export type Member = MemberPage['data'][number];
+export type Website = Json200<typeof listWebsitesRoute>['data'][number];
+export type WebsiteInput = BodyOf<typeof createWebsiteRoute>;
+export type WebsiteUpdate = BodyOf<typeof updateWebsiteRoute>;
+export type MemberUpdate = BodyOf<typeof updateMemberRoute>;
+export type InvitationInput = BodyOf<typeof createInvitationRoute>;
+export type Invitation = Json201<typeof createInvitationRoute>;
+export type LoginInput = BodyOf<typeof loginRoute>;
+export type CreatedWorkspace = Json201<typeof createWorkspaceRoute>;
 
 export class ApiError extends Error {
   readonly status: number;
@@ -30,6 +57,8 @@ export class ApiError extends Error {
 export interface ClientOptions {
   baseUrl: string;
   getAccessToken?: () => string | null | Promise<string | null>;
+  /** Called once when a request answers 401. Return true if a new access token is now available. */
+  onUnauthorized?: () => Promise<boolean>;
   fetch?: typeof globalThis.fetch;
 }
 
@@ -38,21 +67,51 @@ export function createClient(options: ClientOptions) {
   const doFetch = options.fetch ?? globalThis.fetch.bind(globalThis);
   const baseUrl = options.baseUrl.replace(/\/+$/, '');
 
-  async function get<T>(path: string): Promise<T> {
+  async function send(method: string, path: string, body: unknown): Promise<Response> {
     const headers = new Headers({ accept: 'application/json' });
     const token = await options.getAccessToken?.();
     if (token) headers.set('authorization', `Bearer ${token}`);
-    const response = await doFetch(`${baseUrl}${path}`, { headers });
+    if (body !== undefined) headers.set('content-type', 'application/json');
+    return doFetch(`${baseUrl}${path}`, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+  }
+
+  async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    let response = await send(method, path, body);
+    if (response.status === 401 && options.onUnauthorized && (await options.onUnauthorized())) {
+      response = await send(method, path, body);
+    }
     if (!response.ok) {
       const problem = (await response.json().catch(() => null)) as { code?: string; title?: string; requestId?: string } | null;
       throw new ApiError(response.status, problem?.code ?? 'unknown', problem?.title ?? 'Request failed', problem?.requestId);
     }
+    if (response.status === 202 || response.status === 204) return undefined as T;
     return (await response.json()) as T;
   }
+
+  const get = <T>(path: string) => request<T>('GET', path);
+  const workspace = (id: string) => `/api/v1/workspaces/${encodeURIComponent(id)}`;
 
   return {
     getHealth: () => get<HealthResponse>('/health'),
     getDiscovery: () => get<DiscoveryResponse>('/.well-known/openchat.json'),
+
+    login: (input: LoginInput) => request<TokenPair>('POST', '/api/v1/auth/login', input),
+    logout: () => request<void>('POST', '/api/v1/auth/logout'),
+    requestPasswordReset: (email: string) => request<void>('POST', '/api/v1/auth/password-reset/request', { email }),
+    confirmPasswordReset: (token: string, password: string) => request<void>('POST', '/api/v1/auth/password-reset/confirm', { token, password }),
+    acceptInvitation: (input: { token: string; name?: string; password?: string }) => request<{ workspaceId: string }>('POST', '/api/v1/invitations/accept', input),
+    getMe: () => get<Me>('/api/v1/me'),
+
+    createWorkspace: (name: string) => request<CreatedWorkspace>('POST', '/api/v1/workspaces', { name }),
+    listMembers: (workspaceId: string, cursor?: string) => get<MemberPage>(`${workspace(workspaceId)}/members?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`),
+    updateMember: (workspaceId: string, memberId: string, input: MemberUpdate) =>
+      request<Member>('PATCH', `${workspace(workspaceId)}/members/${encodeURIComponent(memberId)}`, input),
+    removeMember: (workspaceId: string, memberId: string) => request<void>('DELETE', `${workspace(workspaceId)}/members/${encodeURIComponent(memberId)}`),
+    invite: (workspaceId: string, input: InvitationInput) => request<Invitation>('POST', `${workspace(workspaceId)}/invitations`, input),
+    listWebsites: (workspaceId: string) => get<{ data: Website[] }>(`${workspace(workspaceId)}/websites`),
+    createWebsite: (workspaceId: string, input: WebsiteInput) => request<Website>('POST', `${workspace(workspaceId)}/websites`, input),
+    updateWebsite: (workspaceId: string, websiteId: string, input: WebsiteUpdate) =>
+      request<Website>('PATCH', `${workspace(workspaceId)}/websites/${encodeURIComponent(websiteId)}`, input),
   };
 }
 
