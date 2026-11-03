@@ -46,22 +46,37 @@ Durable Object classes are declared using `exports`, which Cloudflare prefers fo
 
 ## Fresh install: `oc deploy`
 
-Delivered in basic form in Milestone 1, and polished in Milestone 5. Every step is idempotent, so a failed run can be resumed.
+```bash
+pnpm exec wrangler login      # once
+pnpm oc deploy --env acme --owner-email you@example.com --workspace "Support team"
+```
+
+This needs Workers Paid ([ADR-0009](../architecture/decisions/0009-paid-plan-and-password-hashing.md)). It prints the dashboard URL and a one-hour link for the owner to set a password, shown only once. To send email, verify a domain with Resend, then deploy again:
+
+```bash
+RESEND_API_KEY=... pnpm oc deploy --env acme --email-from no-reply@mail.example.com
+```
+
+Metrics are optional: enable Analytics Engine once in the Cloudflare dashboard, then add `--analytics`. To use your own domain, attach it to the Worker, then pass `--public-url https://chat.example.com`, because links in emails are built from that URL.
+
+**Without email, or locked out:** `pnpm oc recover --env acme --email you@example.com` prints a one-hour reset link. Using it signs the account out everywhere. It works because holding Cloudflare access already means holding the database.
+
+Delivered in basic form in Milestone 1, and polished in Milestone 5. Each step is recorded in `.openchat/<env>/state.json` as it finishes, so a failed run can be resumed by running it again. Keep that directory, because a deployment refuses to adopt a resource name it has no record of creating. Steps marked *(M5)* below do not exist yet.
 
 | # | Step | How | Spec §13 |
 |---|---|---|---|
 | 1 | Authenticate | `wrangler login` or `CLOUDFLARE_API_TOKEN` | 1 |
-| 2 | Select account | `wrangler whoami`, prompt | 2 |
-| 3 | Pre-flight | Plan check, name collisions, version check | |
+| 2 | Select account | `wrangler whoami`. Selection among several accounts *(M5)* | 2 |
+| 3 | Pre-flight | Name collisions stop the run. Plan and version checks *(M5)* | |
 | 4 | Create resources | Wrangler, recording IDs in `state.json` | 3 |
-| 5 | Generate secrets | Generated locally, set through `wrangler secret`, **never written to disk** | 6 |
+| 5 | Generate secrets | Generated locally, sent to `wrangler secret bulk` on stdin, **never written to disk**. Only once, because a new signing key signs everyone out. Set after the first deploy, so auth routes answer 503 for a few seconds on a new install. Others arrive with the features that use them | 6 |
 | 6 | Apply migrations | `wrangler d1 migrations apply --remote` | 4 |
 | 7 | Build and deploy | Dashboard and widget, then Worker | 5 |
-| 8 | Domain | Custom Domain if given | 7 |
-| 9 | Initialise | One-time signed bootstrap: creates installation identity, first owner, and workspace | 8 |
-| 10 | Register with relay | If push is enabled | |
-| 11 | Verify | Health checks, plus a synthetic visitor message end to end | 9 |
-| 12 | Print | Dashboard URL, widget snippet, and the restore command | 10 |
+| 8 | Domain | `--public-url` for a domain you attached. Attaching it *(M5)* | 7 |
+| 9 | Initialise | `wrangler d1 execute`: creates the installation, first owner, and workspace, guarded so a repeat adds nothing. The owner has no password until they use the printed link | 8 |
+| 10 | Register with relay | If push is enabled *(M3)* | |
+| 11 | Verify | Health, discovery, and a login probe that proves the signing key loads. A synthetic visitor message *(M1b)* | 9 |
+| 12 | Print | Dashboard URL and the owner's link. Widget snippet and restore command *(M5)* | 10 |
 
 ## Upgrades: `oc upgrade`
 
