@@ -16,7 +16,7 @@ Decisions for the project owner. Each has a recommended default so work is not b
 |---|---|---|---|
 | Q9 | **MVP scope:** are teams, canned responses, and business-hour schedules in or out? §2.2 and §17 disagree. | M1 | Out, as in Phase 6. The inbox's "assigned to team" view is omitted until then. |
 | Q10 | **Are EU data residency guarantees required?** A D1 location hint is not a compliance guarantee. | M1, because jurisdiction choices are hard to change after data exists | Document as not guaranteed for the MVP. Investigate D1, R2, and Durable Object jurisdiction options before making any claim. |
-| Q11 | **Who may create workspaces in an installation?** | M1 | Invite-only by default, with the first owner created by the CLI. Open signup is a setting. |
+| Q11 | **Who may create workspaces in an installation?** | M1 | Invite-only by default, with the first owner created by the CLI. Open signup is a setting. **Implemented in M1a with this default.** On invite-only, existing owners may create further workspaces. |
 | Q12 | **Which consent model for follow-up emails?** The spec requires consent but not its wording, default, or jurisdiction. | M4 | An explicit, unticked checkbox in the widget, stored with timestamp and source. Customers remain responsible for their legal basis. Legal review advised. |
 | Q13 | **Which email drivers ship first?** | M1 (system email) | Resend or Postmark over HTTP, plus Cloudflare Email Sending as an option, since it is in public beta and needs a paid plan. SMTP through `connect()` afterwards, on port 465 or 587, as port 25 is blocked. |
 | Q14 | **How long must the official app support old installations?** | M2 | Support API versions from the last 12 months. Installations outside this see an upgrade prompt. |

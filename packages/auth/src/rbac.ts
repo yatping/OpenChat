@@ -21,6 +21,7 @@ const CAPABILITIES = {
   'email.manage': MANAGERS,
   'member.invite': MANAGERS,
   'member.remove': MANAGERS,
+  'workspace.manage': MANAGERS,
   'workspace.security': OWNER,
   'workspace.delete': OWNER,
   'workspace.transfer': OWNER,

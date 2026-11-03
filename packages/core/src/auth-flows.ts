@@ -21,6 +21,7 @@ import {
   confirmEmailVerification,
   confirmPasswordReset,
   createSession,
+  deleteAccount,
   findActiveUserId,
   findUserForLogin,
   getUserContact,
@@ -60,6 +61,7 @@ export const LIMITS = {
   resetEmail: { limit: 3, windowSeconds: 60 * 60 },
   resetIp: { limit: 20, windowSeconds: 60 * 60 },
   confirmIp: { limit: 20, windowSeconds: 15 * 60 },
+  invitationsPerWorkspace: { limit: 30, windowSeconds: 60 * 60 },
 } as const;
 
 export const PASSWORD_RESET_JOB = 'auth.password_reset_email';
@@ -67,7 +69,7 @@ const RESET_TTL_MS = 60 * 60 * 1000;
 
 const invalidCredentials = () => new AppError(401, 'invalid_credentials', 'The email or password is incorrect');
 const unauthorized = () => new AppError(401, 'unauthorized', 'Sign in again');
-const invalidToken = () => new AppError(400, 'invalid_token', 'This link is invalid or has expired');
+export const invalidToken = () => new AppError(400, 'invalid_token', 'This link is invalid or has expired');
 
 async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
@@ -77,7 +79,7 @@ async function sha256Hex(value: string): Promise<string> {
 // Limiter keys are hashed, so that emails and IP addresses do not appear in Durable Object names.
 export const limitKey = async (kind: string, value: string) => `${kind}:${await sha256Hex(value.toLowerCase())}`;
 
-async function enforce(limiter: RateLimiter, key: string, rule: { limit: number; windowSeconds: number }): Promise<void> {
+export async function enforce(limiter: RateLimiter, key: string, rule: { limit: number; windowSeconds: number }): Promise<void> {
   const result = await limiter.consume(key, rule.limit, rule.windowSeconds);
   if (!result.allowed) {
     throw new AppError(429, 'rate_limited', 'Too many attempts. Try again later', { retryAfterSeconds: result.retryAfterSeconds });
@@ -159,6 +161,12 @@ export async function getMe(deps: Pick<AuthDeps, 'db'>, principal: Principal) {
   };
 }
 
+export async function deleteMe(deps: Pick<AuthDeps, 'db'>, principal: Principal): Promise<void> {
+  if (!(await deleteAccount(deps.db, principal.userId))) {
+    throw new AppError(409, 'last_owner', 'Transfer or delete the workspaces you are the only owner of first');
+  }
+}
+
 export function passwordResetJob(userId: string): JobEnvelope<{ userId: string }> {
   const id = newId('job');
   return {
@@ -189,7 +197,7 @@ export async function requestPasswordReset(deps: AuthDeps, input: { email: strin
   if (userId) await deps.emailJobs.send(passwordResetJob(userId));
 }
 
-const escapeHtml = (value: string) =>
+export const escapeHtml = (value: string) =>
   value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 
 /**

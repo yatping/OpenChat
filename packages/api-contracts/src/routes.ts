@@ -1,5 +1,5 @@
 import { createRoute, z } from '@hono/zod-openapi';
-import { problemResponse } from './common';
+import { page, PaginationQuery, problemResponse } from './common';
 
 export const HealthSchema = z.object({ status: z.literal('ok') }).openapi('Health');
 
@@ -52,6 +52,7 @@ export const API_MINOR_VERSION = 0;
 
 // ---------- Authentication ----------
 
+export const SafeName = z.string().trim().min(1).max(100).regex(/^\P{Cc}*$/u, 'Must not contain control characters');
 const Email = z.string().trim().max(320).pipe(z.email());
 const bearer = [{ bearerAuth: [] }];
 const json = <T extends z.ZodType>(schema: T) => ({ content: { 'application/json': { schema } } });
@@ -164,4 +165,205 @@ export const getMeRoute = createRoute({
   summary: 'The current user and their workspace memberships',
   security: bearer,
   responses: { 200: { description: 'Current user', ...json(MeSchema) }, default: problemResponse },
+});
+
+export const deleteMeRoute = createRoute({
+  method: 'delete',
+  path: '/api/v1/me',
+  tags: ['auth'],
+  operationId: 'deleteMe',
+  summary: 'Anonymise the account and leave all workspaces. Refused for the last owner of a workspace.',
+  security: bearer,
+  responses: { 204: { description: 'Deleted' }, default: problemResponse },
+});
+
+// ---------- Workspaces ----------
+
+const workspaceParams = z.object({ workspaceId: z.string() });
+const memberParams = workspaceParams.extend({ memberId: z.string() });
+const websiteParams = workspaceParams.extend({ websiteId: z.string() });
+
+export const MemberStatusSchema = z.enum(['active', 'suspended']);
+export const MemberSchema = z
+  .object({ id: z.string(), name: z.string(), email: z.string(), role: RoleSchema, status: MemberStatusSchema })
+  .openapi('Member');
+
+export const createWorkspaceRoute = createRoute({
+  method: 'post',
+  path: '/api/v1/workspaces',
+  tags: ['workspaces'],
+  operationId: 'createWorkspace',
+  summary: 'Create a workspace, subject to the installation signup policy',
+  security: bearer,
+  request: { body: { required: true, ...json(z.strictObject({ name: SafeName })) } },
+  responses: { 201: { description: 'Created', ...json(WorkspaceSchema) }, default: problemResponse },
+});
+
+export const getWorkspaceRoute = createRoute({
+  method: 'get',
+  path: '/api/v1/workspaces/{workspaceId}',
+  tags: ['workspaces'],
+  operationId: 'getWorkspace',
+  summary: 'Get a workspace',
+  security: bearer,
+  request: { params: workspaceParams },
+  responses: { 200: { description: 'Workspace', ...json(WorkspaceSchema) }, default: problemResponse },
+});
+
+export const updateWorkspaceRoute = createRoute({
+  method: 'patch',
+  path: '/api/v1/workspaces/{workspaceId}',
+  tags: ['workspaces'],
+  operationId: 'updateWorkspace',
+  summary: 'Update workspace settings',
+  security: bearer,
+  request: { params: workspaceParams, body: { required: true, ...json(z.strictObject({ name: SafeName.optional() })) } },
+  responses: { 200: { description: 'Updated', ...json(WorkspaceSchema) }, default: problemResponse },
+});
+
+export const listMembersRoute = createRoute({
+  method: 'get',
+  path: '/api/v1/workspaces/{workspaceId}/members',
+  tags: ['workspaces'],
+  operationId: 'listMembers',
+  summary: 'List members',
+  security: bearer,
+  request: { params: workspaceParams, query: PaginationQuery },
+  responses: { 200: { description: 'Members', ...json(page(MemberSchema)) }, default: problemResponse },
+});
+
+export const updateMemberRoute = createRoute({
+  method: 'patch',
+  path: '/api/v1/workspaces/{workspaceId}/members/{memberId}',
+  tags: ['workspaces'],
+  operationId: 'updateMember',
+  summary: 'Change a role or status. A workspace must keep one active owner.',
+  security: bearer,
+  request: {
+    params: memberParams,
+    body: {
+      required: true,
+      ...json(
+        z
+          .strictObject({ role: RoleSchema.optional(), status: MemberStatusSchema.optional() })
+          .refine((v) => v.role !== undefined || v.status !== undefined, 'Change a role or a status'),
+      ),
+    },
+  },
+  responses: { 200: { description: 'Updated', ...json(MemberSchema) }, default: problemResponse },
+});
+
+export const removeMemberRoute = createRoute({
+  method: 'delete',
+  path: '/api/v1/workspaces/{workspaceId}/members/{memberId}',
+  tags: ['workspaces'],
+  operationId: 'removeMember',
+  summary: 'Remove a member and their push subscriptions',
+  security: bearer,
+  request: { params: memberParams },
+  responses: { 204: { description: 'Removed' }, default: problemResponse },
+});
+
+export const InvitationSchema = z
+  .object({ id: z.string(), email: z.string(), role: z.enum(['admin', 'supervisor', 'agent']), expiresAt: z.string() })
+  .openapi('Invitation');
+
+export const createInvitationRoute = createRoute({
+  method: 'post',
+  path: '/api/v1/workspaces/{workspaceId}/invitations',
+  tags: ['workspaces'],
+  operationId: 'createInvitation',
+  summary: 'Invite someone by email. Replaces any pending invitation for the address.',
+  security: bearer,
+  request: {
+    params: workspaceParams,
+    body: { required: true, ...json(z.strictObject({ email: Email, role: z.enum(['admin', 'supervisor', 'agent']) })) },
+  },
+  responses: { 201: { description: 'Invitation queued', ...json(InvitationSchema) }, default: problemResponse },
+});
+
+export const acceptInvitationRoute = createRoute({
+  method: 'post',
+  path: '/api/v1/invitations/accept',
+  tags: ['workspaces'],
+  operationId: 'acceptInvitation',
+  summary: 'Accept an invitation. A new account needs a name and password; an existing account keeps its own.',
+  security: [],
+  request: {
+    body: {
+      required: true,
+      ...json(z.strictObject({ token: z.string().max(256), name: SafeName.optional(), password: z.string().min(10).max(1024).optional() })),
+    },
+  },
+  responses: { 200: { description: 'Accepted', ...json(z.object({ workspaceId: z.string() })) }, default: problemResponse },
+});
+
+// ---------- Websites ----------
+
+/** An exact origin. No wildcards, paths, or plain HTTP, except on the local machine. */
+const isOrigin = (value: string) => {
+  if (!URL.canParse(value) || value.includes('*')) return false;
+  const url = new URL(value);
+  const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+  return url.origin === value && (url.protocol === 'https:' || (url.protocol === 'http:' && local));
+};
+const Origin = z.string().max(300).refine(isOrigin, 'Must be an exact origin, such as https://example.com');
+
+export const WidgetSettingsSchema = z
+  .strictObject({
+    welcomeMessage: z.string().max(500).optional(),
+    primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+    availabilityMode: z.enum(['auto', 'online', 'offline']).optional(),
+    collectEmail: z.enum(['never', 'optional', 'required']).optional(),
+    requireTurnstile: z.boolean().optional(),
+    showAgentNames: z.boolean().optional(),
+  })
+  .openapi('WidgetSettings');
+
+const websiteFields = { allowedOrigins: z.array(Origin).max(50), settings: WidgetSettingsSchema.optional() };
+
+export const WebsiteSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    websiteKey: z.string().openapi({ description: 'Public identifier embedded in page source. Not a credential.' }),
+    allowedOrigins: z.array(z.string()),
+    settings: WidgetSettingsSchema,
+  })
+  .openapi('Website');
+
+export const listWebsitesRoute = createRoute({
+  method: 'get',
+  path: '/api/v1/workspaces/{workspaceId}/websites',
+  tags: ['websites'],
+  operationId: 'listWebsites',
+  summary: 'List websites',
+  security: bearer,
+  request: { params: workspaceParams },
+  responses: { 200: { description: 'Websites', ...json(z.object({ data: z.array(WebsiteSchema) })) }, default: problemResponse },
+});
+
+export const createWebsiteRoute = createRoute({
+  method: 'post',
+  path: '/api/v1/workspaces/{workspaceId}/websites',
+  tags: ['websites'],
+  operationId: 'createWebsite',
+  summary: 'Register a website and obtain its public key',
+  security: bearer,
+  request: { params: workspaceParams, body: { required: true, ...json(z.strictObject({ name: SafeName, ...websiteFields })) } },
+  responses: { 201: { description: 'Created', ...json(WebsiteSchema) }, default: problemResponse },
+});
+
+export const updateWebsiteRoute = createRoute({
+  method: 'patch',
+  path: '/api/v1/workspaces/{workspaceId}/websites/{websiteId}',
+  tags: ['websites'],
+  operationId: 'updateWebsite',
+  summary: 'Update a website',
+  security: bearer,
+  request: {
+    params: websiteParams,
+    body: { required: true, ...json(z.strictObject({ name: SafeName.optional(), allowedOrigins: websiteFields.allowedOrigins.optional(), settings: websiteFields.settings })) },
+  },
+  responses: { 200: { description: 'Updated', ...json(WebsiteSchema) }, default: problemResponse },
 });
