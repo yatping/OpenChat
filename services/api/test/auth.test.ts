@@ -474,7 +474,8 @@ describe('password reset', () => {
     const { sent } = await requestReset(email);
     const batch = createMessageBatch('oc-email', [{ id: 'm1', timestamp: new Date(), attempts: 1, body: sent[0]! }]);
     const retry = vi.spyOn(batch.messages[0]!, 'retry');
-    await handleQueue(batch as never, env as unknown as Env);
+    // Explicit, because a developer's .dev.vars selects the console provider.
+    await handleQueue(batch as never, { ...env, EMAIL_PROVIDER: undefined } as unknown as Env);
     expect(retry).toHaveBeenCalledOnce();
   });
 

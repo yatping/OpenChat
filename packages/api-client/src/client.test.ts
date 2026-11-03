@@ -1,4 +1,4 @@
-import { describe, expect, expectTypeOf, it } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { ApiError, createClient, type DiscoveryResponse, type HealthResponse } from './index';
 
 const stub = (status: number, body: unknown) => {
@@ -30,5 +30,40 @@ describe('api client', () => {
     const error = await createClient({ baseUrl: 'https://a.example', fetch }).getDiscovery().catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ status: 503, code: 'not_initialized', requestId: 'req_1' });
+  });
+});
+
+describe('when a token has expired', () => {
+  const problem = () => new Response(JSON.stringify({ code: 'unauthorized', title: 'Sign in again' }), { status: 401 });
+  const me = () => new Response(JSON.stringify({ id: 'u', email: 'e', name: 'n', memberships: [] }));
+
+  it('refreshes once and retries with the new token', async () => {
+    let token = 'old';
+    const fetcher = vi.fn<typeof fetch>((_url, init) => Promise.resolve(new Headers(init?.headers).get('authorization') === 'Bearer new' ? me() : problem()));
+    const client = createClient({
+      baseUrl: 'https://x.test',
+      fetch: fetcher,
+      getAccessToken: () => token,
+      onUnauthorized: () => {
+        token = 'new';
+        return Promise.resolve(true);
+      },
+    });
+    expect((await client.getMe()).id).toBe('u');
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it('gives up after one retry', async () => {
+    const fetcher = vi.fn<typeof fetch>(() => Promise.resolve(problem()));
+    const onUnauthorized = vi.fn(() => Promise.resolve(true));
+    await expect(createClient({ baseUrl: 'https://x.test', fetch: fetcher, onUnauthorized }).getMe()).rejects.toMatchObject({ status: 401, code: 'unauthorized' });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(onUnauthorized).toHaveBeenCalledOnce();
+  });
+
+  it('handles an empty success, and encodes IDs in paths', async () => {
+    const fetcher = vi.fn<typeof fetch>(() => Promise.resolve(new Response(null, { status: 204 })));
+    await createClient({ baseUrl: 'https://x.test', fetch: fetcher }).removeMember('w/1', 'm 2');
+    expect(fetcher.mock.calls[0]![0]).toBe('https://x.test/api/v1/workspaces/w%2F1/members/m%202');
   });
 });
