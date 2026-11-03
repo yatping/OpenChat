@@ -4,5 +4,11 @@
     "src",
     "test",
     "*.ts"
-  ]
+  ],
+  "compilerOptions": {
+    "types": [
+      "@cloudflare/workers-types",
+      "node"
+    ]
+  }
 }

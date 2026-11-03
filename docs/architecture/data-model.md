@@ -29,6 +29,7 @@ Beyond the spec's entities, the schema adds what stated requirements need:
 | `messages.seq`, `public_seq`, `visibility`, `client_message_id` | Ordering, note isolation, idempotency |
 | `conversation_read_cursors` | Delivered and read status without one row per message and reader |
 | `conversations.version`, `last_mutation_id` | Optimistic concurrency without interactive transactions |
+| `auth_tokens.consumed_by` | The same guard for one-time tokens: later statements in a reset batch apply only to the attempt that spent the token |
 | `conversations.next_automation_at` | Inactivity detection without table scans |
 | `tags`, `conversation_tags`, `contact_tags` | Tagging |
 | `push_subscriptions` | Replaces `Devices`. Holds handles, never APNs tokens |

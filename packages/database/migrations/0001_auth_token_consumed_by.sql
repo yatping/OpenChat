@@ -1,0 +1,1 @@
+ALTER TABLE `auth_tokens` ADD `consumed_by` text;

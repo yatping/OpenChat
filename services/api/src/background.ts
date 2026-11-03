@@ -2,11 +2,19 @@
  * Queue consumers and cron. Phase 0 proves the pipeline end to end with one job. Rules are in
  * docs/architecture/background-jobs.md: acknowledge per message, classify errors, check notAfter.
  */
-import { claimJob, openDatabase, recordFailedJob } from '@openchat/database';
+import { PASSWORD_RESET_JOB, sendPasswordResetEmail } from '@openchat/core';
+import { claimJob, getInstallation, openDatabase, recordFailedJob } from '@openchat/database';
+import { ConsoleEmailProvider, type EmailProvider } from '@openchat/email';
 import { AppError, createLogger, newId, retryDelaySeconds, type JobEnvelope } from '@openchat/shared';
 import type { Env } from './env';
 
 export const HEARTBEAT_JOB = 'system.heartbeat';
+
+/** Fails closed: with no provider configured, jobs retry rather than dropping an email silently. */
+function emailProviderFor(env: Env): EmailProvider {
+  if (env.EMAIL_PROVIDER === 'console') return new ConsoleEmailProvider();
+  return { send: () => Promise.reject(new Error('No email provider is configured')) };
+}
 
 export function heartbeatJob(scheduledTime: number): JobEnvelope<Record<string, never>> {
   const minute = Math.floor(scheduledTime / 60_000);
@@ -26,11 +34,24 @@ export async function handleScheduled(controller: ScheduledController, env: Env)
   await env.JOBS_QUEUE.send(heartbeatJob(controller.scheduledTime));
 }
 
-type Handler = (job: JobEnvelope, env: Env) => Promise<void>;
+export interface BackgroundDeps {
+  email: EmailProvider;
+}
+
+type Handler = (job: JobEnvelope, env: Env, deps: BackgroundDeps) => Promise<void>;
 
 const HANDLERS: Record<string, Handler> = {
   [HEARTBEAT_JOB]: async (job, env) => {
     await claimJob(openDatabase(env.DB), job.idempotencyKey, job.type);
+  },
+  [PASSWORD_RESET_JOB]: async (job, env, deps) => {
+    const db = openDatabase(env.DB);
+    const installation = await getInstallation(db);
+    if (!installation) throw new Error('Installation is not initialised');
+    await sendPasswordResetEmail(
+      { db, email: deps.email, publicBaseUrl: installation.publicBaseUrl, installationName: installation.name, fromEmail: env.SYSTEM_EMAIL_FROM ?? `no-reply@${new URL(installation.publicBaseUrl).hostname}` },
+      (job.payload as { userId: string }).userId,
+    );
   },
 };
 
@@ -44,7 +65,7 @@ function isEnvelope(body: unknown): body is JobEnvelope {
   return job?.v === 1 && typeof job.type === 'string' && typeof job.idempotencyKey === 'string';
 }
 
-export async function handleQueue(batch: MessageBatch, env: Env): Promise<void> {
+export async function handleQueue(batch: MessageBatch, env: Env, deps: BackgroundDeps = { email: emailProviderFor(env) }): Promise<void> {
   const log = createLogger({ queue: batch.queue });
   const database = openDatabase(env.DB);
 
@@ -91,7 +112,7 @@ export async function handleQueue(batch: MessageBatch, env: Env): Promise<void> 
       continue;
     }
     try {
-      await handler(job, env);
+      await handler(job, env, deps);
       message.ack();
     } catch (error) {
       if (isPermanent(error)) {

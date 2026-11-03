@@ -15,11 +15,15 @@ export interface EmailProvider {
   send(input: EmailMessage): Promise<{ messageId: string }>;
 }
 
-/** For local development. Records messages rather than delivering them. */
+/**
+ * For local development only. Records messages, and prints them so that reset links can be used. This
+ * deliberately bypasses the shared logger, and deployments never select it.
+ */
 export class ConsoleEmailProvider implements EmailProvider {
   readonly sent: EmailMessage[] = [];
   async send(input: EmailMessage): Promise<{ messageId: string }> {
     this.sent.push(input);
+    console.log(`[console email] to=${input.to} subject=${input.subject}\n${input.text ?? input.html}`);
     return { messageId: `console-${this.sent.length}` };
   }
 }

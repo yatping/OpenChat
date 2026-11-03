@@ -3,6 +3,7 @@ import { handleQueue, handleScheduled } from './background';
 import type { Env } from './env';
 
 export { ConversationRoom, WorkspaceHub } from '@openchat/realtime';
+export { AuthGuard } from './auth-guard';
 
 const app = createApp();
 

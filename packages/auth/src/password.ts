@@ -66,6 +66,9 @@ export async function verifyPassword(password: string, stored: string): Promise<
   return timingSafeEqual(key, parsed.key);
 }
 
+/** False for a placeholder or corrupt hash, which fails instantly and so must not be timed against. */
+export const isUsableHash = (stored: string): boolean => parseHash(stored) !== null;
+
 /** True when a successful login should replace the stored hash. */
 export function needsRehash(stored: string, params: ScryptParams = CURRENT_PARAMS): boolean {
   const parsed = parseHash(stored);
