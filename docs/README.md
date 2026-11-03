@@ -28,6 +28,7 @@ Suggested reading order for a new contributor is top to bottom.
 | [architecture/realtime.md](architecture/realtime.md) | Durable Objects and the WebSocket lifecycle |
 | [architecture/background-jobs.md](architecture/background-jobs.md) | Queues, the outbox, and cron |
 | [architecture/security.md](architecture/security.md) | Authentication, tenant isolation, threat model |
+| [architecture/security-review-m1a.md](architecture/security-review-m1a.md) | Review of authentication and sessions, with accepted trade-offs and open decisions |
 | [architecture/decisions/](architecture/decisions/) | Architecture decision records |
 
 ## Contracts

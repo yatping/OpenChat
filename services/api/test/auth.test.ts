@@ -93,6 +93,16 @@ describe('login', () => {
     for (const attribute of ['HttpOnly', 'Secure', 'SameSite=Strict', 'Path=/api/v1/auth']) expect(cookie).toContain(attribute);
   });
 
+  it('forbids caching of tokens and of errors', async () => {
+    await createUser();
+    for (const response of [await login(), await login(email, 'wrong password!')]) {
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    }
+    const { accessToken } = await mobileLogin();
+    expect((await me(accessToken)).headers.get('cache-control')).toBe('no-store');
+  });
+
   it('stores only a hash of the refresh token', async () => {
     await createUser();
     const { refreshToken } = await mobileLogin();

@@ -202,6 +202,20 @@ The first runs appeared to be on the Workers Free plan, because scrypt requests 
 | `@cloudflare/vitest-plugin` 1.5.1 shares storage between tests in a file, omits `delaySeconds` from `getQueueResult`, and bypasses asset routing through the default export | Tests reset their own data and observe `retry()` directly. Asset routing is checked with `wrangler dev` and the preview |
 | The SPA fallback answers `/__scheduled` unless that path is in `run_worker_first` | Added. In production the Worker answers it with 404, and the preview checks that |
 
+## Milestone 1a deployment results
+
+Measured on 2026-11-04 on a throwaway deployment, which was then removed.
+
+| Finding | Result |
+|---|---|
+| `_headers` on Workers static assets | Applied to files and to `single-page-application` fallback routes. The API sets its own headers |
+| First login attempt on an address | About 500 ms slower than a repeat, for known and unknown accounts alike. Most likely the cost of creating its `AuthGuard` object, though this was not measured separately |
+| Login with hashing, repeat attempt, from outside | Median about 500 ms, with a wide spread |
+| `wrangler secret bulk` on stdin | Works, so generated secrets need no temporary file |
+| Multiple statements in `wrangler d1 execute --command` | Works on remote D1 |
+| Queue consumer picking up a job after a deploy | About 10 seconds in one sample |
+| `oc deploy` from nothing to verified | About 80 seconds on a laptop, including the build |
+
 ## Sources
 
 - [D1 limits](https://developers.cloudflare.com/d1/platform/limits/), [D1 database API](https://developers.cloudflare.com/d1/worker-api/d1-database/), [migrations](https://developers.cloudflare.com/d1/reference/migrations/), [foreign keys](https://developers.cloudflare.com/d1/sql-api/foreign-keys/), [read replication](https://developers.cloudflare.com/d1/best-practices/read-replication/), [Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/)

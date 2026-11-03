@@ -70,6 +70,13 @@ export function createApp() {
     );
   });
 
+  // Set after the handler, so that it also covers error responses. These can carry tokens or personal data.
+  app.use('/api/*', async (c, next) => {
+    await next();
+    c.header('cache-control', 'no-store');
+    c.header('x-content-type-options', 'nosniff');
+  });
+
   registerAuthRoutes(app);
   registerWorkspaceRoutes(app);
 

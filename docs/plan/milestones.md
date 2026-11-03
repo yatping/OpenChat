@@ -47,7 +47,21 @@ Auth flows (login, refresh rotation, logout, reset, verification) with scrypt. W
 - Isolation test enumerates all routes, and fails when a new route has no case.
 - Refresh reuse revokes the session.
 
-**Security review:** authentication and session handling.
+**Security review:** authentication and session handling. Done: see [the review](../architecture/security-review-m1a.md).
+
+### M1a status
+
+Built and verified on real Cloudflare on 2026-11-04, except for the items below, which need something only the owner has.
+
+| Exit criterion | State |
+|---|---|
+| Deploy with one command | **Partly.** `oc deploy` worked in about 80 seconds on an existing Workers Paid account. **Not tried on a brand new account**, where R2 and a `workers.dev` subdomain may need enabling first |
+| First owner signs in, creates a website, invites a member | Done on a real deployment. The invitation email itself is not delivered without a provider |
+| Reset by email, and CLI recovery without email | **Partly.** CLI recovery is verified on a real deployment. **No email has gone through Resend**, which needs an API key and a verified domain |
+| Isolation test enumerates all routes | Done, and shown to fail for a route with no case |
+| Refresh reuse revokes the session | Done on a real deployment |
+
+Also open: automated browser tests (`pnpm test:e2e`), since the dashboard flows were run by hand, and the owner decisions in [the review](../architecture/security-review-m1a.md#decisions-for-the-owner).
 
 ## M1b: Core messaging (XL)
 

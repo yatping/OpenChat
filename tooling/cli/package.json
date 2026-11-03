@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "jsonc-parser": "^3.3.1",
-    "@openchat/auth": "workspace:*"
+    "@openchat/auth": "workspace:*",
+    "@openchat/shared": "workspace:*"
   },
   "devDependencies": {
     "@openchat/tsconfig": "workspace:*",
