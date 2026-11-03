@@ -2,9 +2,21 @@ import { OpenAPIHono } from '@hono/zod-openapi';
 import { ProblemSchema } from './common';
 import { AgentClientFrameSchema, AgentServerFrameSchema, VisitorClientFrameSchema, VisitorServerFrameSchema } from './realtime';
 import {
+  acceptInvitationRoute,
   confirmEmailVerificationRoute,
   confirmPasswordResetRoute,
+  createInvitationRoute,
+  createWebsiteRoute,
+  createWorkspaceRoute,
+  deleteMeRoute,
   getDiscoveryRoute,
+  getWorkspaceRoute,
+  listMembersRoute,
+  listWebsitesRoute,
+  removeMemberRoute,
+  updateMemberRoute,
+  updateWebsiteRoute,
+  updateWorkspaceRoute,
   getHealthRoute,
   getMeRoute,
   loginRoute,
@@ -24,6 +36,18 @@ export const ALL_ROUTES = [
   confirmPasswordResetRoute,
   confirmEmailVerificationRoute,
   getMeRoute,
+  deleteMeRoute,
+  createWorkspaceRoute,
+  getWorkspaceRoute,
+  updateWorkspaceRoute,
+  listMembersRoute,
+  updateMemberRoute,
+  removeMemberRoute,
+  createInvitationRoute,
+  acceptInvitationRoute,
+  listWebsitesRoute,
+  createWebsiteRoute,
+  updateWebsiteRoute,
 ] as const;
 
 export function buildOpenApiDocument() {
@@ -47,6 +71,8 @@ export function buildOpenApiDocument() {
     tags: [
       { name: 'discovery', description: 'Installation discovery and health.' },
       { name: 'auth', description: 'Sign-in, sessions, and account recovery.' },
+      { name: 'workspaces', description: 'Workspaces, members, and invitations.' },
+      { name: 'websites', description: 'Websites that embed the widget.' },
     ],
     servers: [{ url: '/' }],
   });

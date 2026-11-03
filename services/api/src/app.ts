@@ -5,6 +5,7 @@ import { getInstallation, openDatabase } from '@openchat/database';
 import { AppError, createLogger, newId, toProblem } from '@openchat/shared';
 import type { AppEnv } from './context';
 import { registerAuthRoutes } from './routes/auth';
+import { registerWorkspaceRoutes } from './routes/workspaces';
 
 export function createApp() {
   const app = new OpenAPIHono<AppEnv>({
@@ -70,6 +71,7 @@ export function createApp() {
   });
 
   registerAuthRoutes(app);
+  registerWorkspaceRoutes(app);
 
   app.get('/api/v1/openapi.json', (c) => c.json(openapi));
 

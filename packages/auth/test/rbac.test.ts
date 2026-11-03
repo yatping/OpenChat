@@ -17,6 +17,7 @@ const TABLE: Record<Capability, [owner: boolean, admin: boolean, supervisor: boo
   'email.manage': [true, true, false, false],
   'member.invite': [true, true, false, false],
   'member.remove': [true, true, false, false],
+  'workspace.manage': [true, true, false, false],
   'workspace.security': [true, false, false, false],
   'workspace.delete': [true, false, false, false],
   'workspace.transfer': [true, false, false, false],

@@ -93,6 +93,10 @@ If the update changed no rows, the API returns 409 with the current version.
 
 > **Do not guard follow-up statements with `version = $expected + 1`.** A prototype did this and failed: when a concurrent writer has already advanced the version, the stale request's update correctly does nothing, but its follow-up still matches and writes a false audit event. `last_mutation_id` is unique to the request, so it can only match the request's own update. `changes()` might also work, but its behaviour across D1 batch statements is not documented, so it is not used.
 
+### Pattern 2a: the audit row as the guard
+
+For a table with no `last_mutation_id`, such as `workspace_members`, the first statement inserts an audit row with `INSERT ... SELECT ... WHERE <the rule>`, using a fresh ID. Later statements check that this row exists. The action and its audit record therefore cannot disagree, and a refused action leaves no trace. `consumed_by` on `auth_tokens` does the same job for one-time tokens.
+
 ### Pattern 3: reads that inform a write
 
 Authorisation reads happen before the batch, and that is acceptable because the batch re-checks tenancy in its own SQL. A membership revoked in the gap between the two allows at most one further write. Where that matters, such as last-owner protection, the rule goes in the statement's `WHERE` clause.

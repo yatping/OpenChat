@@ -2,7 +2,7 @@
  * Queue consumers and cron. Phase 0 proves the pipeline end to end with one job. Rules are in
  * docs/architecture/background-jobs.md: acknowledge per message, classify errors, check notAfter.
  */
-import { PASSWORD_RESET_JOB, sendPasswordResetEmail } from '@openchat/core';
+import { INVITATION_EMAIL_JOB, PASSWORD_RESET_JOB, sendInvitationEmail, sendPasswordResetEmail } from '@openchat/core';
 import { claimJob, getInstallation, openDatabase, recordFailedJob } from '@openchat/database';
 import { ConsoleEmailProvider, type EmailProvider } from '@openchat/email';
 import { AppError, createLogger, newId, retryDelaySeconds, type JobEnvelope } from '@openchat/shared';
@@ -38,6 +38,19 @@ export interface BackgroundDeps {
   email: EmailProvider;
 }
 
+async function systemEmailDeps(env: Env, deps: BackgroundDeps) {
+  const db = openDatabase(env.DB);
+  const installation = await getInstallation(db);
+  if (!installation) throw new Error('Installation is not initialised');
+  return {
+    db,
+    email: deps.email,
+    publicBaseUrl: installation.publicBaseUrl,
+    installationName: installation.name,
+    fromEmail: env.SYSTEM_EMAIL_FROM ?? `no-reply@${new URL(installation.publicBaseUrl).hostname}`,
+  };
+}
+
 type Handler = (job: JobEnvelope, env: Env, deps: BackgroundDeps) => Promise<void>;
 
 const HANDLERS: Record<string, Handler> = {
@@ -45,13 +58,10 @@ const HANDLERS: Record<string, Handler> = {
     await claimJob(openDatabase(env.DB), job.idempotencyKey, job.type);
   },
   [PASSWORD_RESET_JOB]: async (job, env, deps) => {
-    const db = openDatabase(env.DB);
-    const installation = await getInstallation(db);
-    if (!installation) throw new Error('Installation is not initialised');
-    await sendPasswordResetEmail(
-      { db, email: deps.email, publicBaseUrl: installation.publicBaseUrl, installationName: installation.name, fromEmail: env.SYSTEM_EMAIL_FROM ?? `no-reply@${new URL(installation.publicBaseUrl).hostname}` },
-      (job.payload as { userId: string }).userId,
-    );
+    await sendPasswordResetEmail(await systemEmailDeps(env, deps), (job.payload as { userId: string }).userId);
+  },
+  [INVITATION_EMAIL_JOB]: async (job, env, deps) => {
+    await sendInvitationEmail(await systemEmailDeps(env, deps), { workspaceId: job.workspaceId ?? '', invitationId: (job.payload as { invitationId: string }).invitationId });
   },
 };
 
