@@ -10,9 +10,11 @@ export interface Env {
   AUTH_GUARD: DurableObjectNamespace<AuthGuard>;
   /** JSON: { active: { kid, privateKey, publicKey }, retired?: [{ kid, publicKey }] }. Worker secret. */
   AUTH_SIGNING_KEY?: string;
-  /** `console` for local development only. Slice 5 adds real providers. */
+  /** `resend`, or `console` for local development only. With neither, email jobs retry and dead-letter. */
   EMAIL_PROVIDER?: string;
-  /** The sending address for system email. */
+  /** Worker secret. */
+  RESEND_API_KEY?: string;
+  /** The sending address for system email, on a domain verified with the provider. */
   SYSTEM_EMAIL_FROM?: string;
   NOTIFICATIONS_QUEUE: Queue;
   EMAIL_QUEUE: Queue;

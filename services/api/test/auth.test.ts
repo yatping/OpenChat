@@ -510,3 +510,36 @@ describe('email verification', () => {
     expect(await verifiedAt(id)).toBeNull();
   });
 });
+
+describe('choosing an email provider', () => {
+  const job = { v: 1, type: PASSWORD_RESET_JOB, id: 'job_1', idempotencyKey: 'k', workspaceId: null, occurredAt: new Date().toISOString(), payload: { userId: '' } };
+  const runJob = async (overrides: Partial<Env>, userId: string) => {
+    const batch = createMessageBatch('oc-email', [{ id: 'm', timestamp: new Date(), attempts: 1, body: { ...job, payload: { userId } } }]);
+    const [ack, retry] = [vi.spyOn(batch.messages[0]!, 'ack'), vi.spyOn(batch.messages[0]!, 'retry')];
+    await handleQueue(batch as never, { ...env, ...overrides } as unknown as Env);
+    return { acked: ack.mock.calls.length, retried: retry.mock.calls.length };
+  };
+
+  it('sends through Resend when configured, and a provider failure retries', async () => {
+    const id = await createUser();
+    const fetcher = vi.fn<typeof fetch>(() => Promise.resolve(new Response(JSON.stringify({ id: 'sent' }), { status: 200 })));
+    vi.stubGlobal('fetch', fetcher);
+    try {
+      expect(await runJob({ EMAIL_PROVIDER: 'resend', RESEND_API_KEY: 'test-key', SYSTEM_EMAIL_FROM: 'no-reply@example.org' }, id)).toEqual({ acked: 1, retried: 0 });
+      const init = fetcher.mock.calls[0]![1]!;
+      expect(fetcher.mock.calls[0]![0]).toBe('https://api.resend.com/emails');
+      expect(JSON.parse(init.body as string)).toMatchObject({ to: [email], from: '"Test installation" <no-reply@example.org>' });
+      expect((init.headers as Record<string, string>)['idempotency-key']).toMatch(/^password-reset:[0-9a-f]{64}$/);
+
+      fetcher.mockImplementation(() => Promise.resolve(new Response('{}', { status: 401 })));
+      expect(await runJob({ EMAIL_PROVIDER: 'resend', RESEND_API_KEY: 'bad-key' }, id)).toEqual({ acked: 0, retried: 1 });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('retries rather than sending when Resend is chosen with no key', async () => {
+    const id = await createUser();
+    expect(await runJob({ EMAIL_PROVIDER: 'resend' }, id)).toEqual({ acked: 0, retried: 1 });
+  });
+});

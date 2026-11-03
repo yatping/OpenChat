@@ -4,7 +4,7 @@
  */
 import { INVITATION_EMAIL_JOB, PASSWORD_RESET_JOB, sendInvitationEmail, sendPasswordResetEmail } from '@openchat/core';
 import { claimJob, getInstallation, openDatabase, recordFailedJob } from '@openchat/database';
-import { ConsoleEmailProvider, type EmailProvider } from '@openchat/email';
+import { ConsoleEmailProvider, EmailSendError, ResendEmailProvider, type EmailProvider } from '@openchat/email';
 import { AppError, createLogger, newId, retryDelaySeconds, type JobEnvelope } from '@openchat/shared';
 import type { Env } from './env';
 
@@ -13,6 +13,7 @@ export const HEARTBEAT_JOB = 'system.heartbeat';
 /** Fails closed: with no provider configured, jobs retry rather than dropping an email silently. */
 function emailProviderFor(env: Env): EmailProvider {
   if (env.EMAIL_PROVIDER === 'console') return new ConsoleEmailProvider();
+  if (env.EMAIL_PROVIDER === 'resend' && env.RESEND_API_KEY) return new ResendEmailProvider(env.RESEND_API_KEY);
   return { send: () => Promise.reject(new Error('No email provider is configured')) };
 }
 
@@ -137,7 +138,13 @@ export async function handleQueue(batch: MessageBatch, env: Env, deps: Backgroun
         });
         message.ack();
       } else {
-        log.warn('job_retrying', { jobType: job.type, jobId: job.id, attempts: message.attempts, errorName: (error as Error).name });
+        log.warn('job_retrying', {
+          jobType: job.type,
+          jobId: job.id,
+          attempts: message.attempts,
+          errorName: (error as Error).name,
+          ...(error instanceof EmailSendError && error.status !== null ? { status: error.status } : {}),
+        });
         message.retry({ delaySeconds: retryDelaySeconds(message.attempts) });
       }
     }
