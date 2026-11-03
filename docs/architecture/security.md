@@ -11,7 +11,7 @@ Five independent layers, on the assumption that any one can fail. See [ADR-0004]
 | 1. Types | `WorkspaceContext` is a branded type that only the authorisation middleware can create | Forgetting to authorise |
 | 2. Repositories | `repositories(ctx)` applies `workspace_id` to every query. The raw handle is private to `packages/database`. System jobs use a separate `systemRepositories` whose calls are searchable and reviewed | Forgetting the filter |
 | 3. Schema | Composite foreign keys on `(workspace_id, id)`. **Tested:** a cross-tenant reference fails at the database | Bugs in layers 1 and 2 on writes |
-| 4. Isolation test suite | For every route in OpenAPI, a test calls it with a valid token for workspace B against resources in workspace A and expects 404. **A new route with no case fails CI** | Bugs on reads |
+| 4. Isolation test suite | For every route in OpenAPI, a test calls it with a valid token for workspace B against resources in workspace A and expects 404. **A new route with no case fails CI.** The suite also fails on a served route missing from the contract. It compares workspace A's rows before and after each refused request, and checks that the workspace's own owner succeeds, so a route that always answered 404 would not pass. See `services/api/test/isolation.test.ts` | Bugs on reads and writes |
 | 5. Other stores | R2 keys are prefixed `w/<workspaceId>/`, and access first checks the attachment row. Durable Object names derive from verified IDs only | Non-SQL leakage |
 
 Every request verifies, in order: identity, membership, permission, resource ownership (spec §9). Cross-tenant requests return **404**, so resource existence does not leak.

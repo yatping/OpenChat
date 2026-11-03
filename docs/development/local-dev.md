@@ -53,7 +53,7 @@ Local development cannot prove these: APNs delivery, D1 performance and concurre
 | Command | Runs | Environment |
 |---|---|---|
 | `pnpm test` | Unit and integration | Vitest. Worker code runs inside workerd through `@cloudflare/vitest-plugin`, with storage isolated per test file but **shared between tests in a file**, so tests reset their own data |
-| `pnpm test:isolation` *(M1a)* | Route-by-route tenant isolation | Same |
+| `pnpm test:isolation` | Route-by-route tenant isolation | Same |
 | `pnpm test:e2e` *(M1)* | Playwright against the local stack | |
 | `pnpm lint`, `pnpm typecheck` | | |
 | `pnpm verify` | Everything CI runs, apart from the audit and gitleaks | |
