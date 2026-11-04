@@ -104,8 +104,10 @@ export function registerAuthRoutes(app: App) {
 
   app.use(getMeRoute.path, requireAuth);
   app.openapi(getMeRoute, async (c) => c.json(await getMe(await authDeps(c.env), c.get('principal')), 200));
+  app.use(deleteMeRoute.path, requireAuth);
   app.openapi(deleteMeRoute, async (c) => {
-    await deleteMe(await authDeps(c.env), c.get('principal'));
+    const { password } = c.req.valid('json');
+    await deleteMe(await authDeps(c.env), c.get('principal'), { password, ip: clientIp(c) });
     deleteCookie(c, REFRESH_COOKIE, { path: COOKIE_PATH, secure: true });
     return c.body(null, 204);
   });
