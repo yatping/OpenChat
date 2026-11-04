@@ -553,8 +553,12 @@ export const VisitorSessionSchema = z
   .openapi('VisitorSession');
 
 export const VisitorConversationSchema = z
-  .object({ id: z.string(), status: ConversationStatusSchema, lastSeq: z.number().int().openapi({ description: 'The latest public sequence number.' }), createdAt: z.string() })
+  .object({ id: z.string(), status: ConversationStatusSchema, lastSeq: z.number().int().openapi({ description: 'The latest public sequence number.' }), readSeq: z.number().int().openapi({ description: "This visitor's own read position." }), agentReadSeq: z.number().int().openapi({ description: 'How far any agent has read, as a public sequence number.' }), createdAt: z.string() })
   .openapi('VisitorConversation', { description: 'A deliberately reduced view, with no assignee, priority, or internal counters.' });
+
+const VisitorConversationStartedSchema = VisitorConversationSchema.extend({ message: VisitorWireMessageSchema }).openapi('VisitorConversationStarted', {
+  description: 'The conversation, and the message that started it, so that a client knows it is committed without asking again.',
+});
 
 export const widgetBootstrapRoute = createRoute({
   method: 'get',
@@ -619,8 +623,8 @@ export const createVisitorConversationRoute = createRoute({
   security: visitor,
   request: { body: { required: true, ...json(z.strictObject({ clientMessageId: ClientMessageId, content: VisitorContent })) } },
   responses: {
-    201: { description: 'Created', ...json(VisitorConversationSchema) },
-    200: { description: 'A replay of an existing clientMessageId. Returns the same conversation.', ...json(VisitorConversationSchema) },
+    201: { description: 'Created', ...json(VisitorConversationStartedSchema) },
+    200: { description: 'A replay of an existing clientMessageId. Returns the same conversation.', ...json(VisitorConversationStartedSchema) },
     default: problemResponse,
   },
 });

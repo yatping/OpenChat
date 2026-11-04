@@ -6,7 +6,7 @@ import { ApiError, type Conversation, type Me, type Member, type Message } from 
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api, errorMessage } from '../app-context';
-import { createRealtime, type Realtime, type RealtimeStatus, type ServerFrame } from './realtime';
+import { createRealtime, type Realtime, type RealtimeStatus, type ServerFrame } from '@openchat/api-client/realtime';
 import {
   applyPatch,
   hasGap,

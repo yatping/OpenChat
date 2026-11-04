@@ -76,7 +76,9 @@ POST /api/v1/widget/sessions { websiteKey, refreshToken? } + Origin header
 | Token scope | Can touch only this visitor's conversations. Internal notes filtered by `visibility` in SQL, in a repository of its own that has no way to return them. The audience claim keeps visitor and agent tokens from working in each other's routes. |
 | Replays | A replayed `clientMessageId` returns a message only if this visitor sent it. An ID already used by anyone else answers 409, because returning that message could reveal an internal note. |
 | Agent names | Hidden from visitors unless the website sets `showAgentNames`. |
-| Storage | `localStorage` on the host site, subject to consent settings. An XSS bug on the host site can read it, but it only exposes that visitor's own chat. |
+| Storage | `localStorage` on the host site. With `data-consent="pending"` on the script tag, everything stays in `sessionStorage` until the page calls `window.OpenChat.grantConsent()`. An XSS bug on the host site can read it, but it only exposes that visitor's own chat. |
+| Rendering | Message content is only ever a text node, in a Shadow DOM. The colour from settings is validated, and applied through the CSSOM. |
+| Host page policy | A site with a CSP allows the installation for `script-src` and `connect-src`. The loader passes its nonce on to the chat bundle, and styles do not need `style-src`. |
 | Abuse controls | Strict counters in the `AuthGuard` Durable Object: 20 messages a minute per visitor, 600 per website, and 30 new sessions an hour per IP address and 3,000 per website. The rate limit binding would be cheaper but is approximate; the load test decides whether to switch. Trade-off: a flood can use up a website's allowance and hold up its real visitors, though not other websites; quotas on attachments per visitor and per day; optional Turnstile on the first message. |
 | Identity upgrade | Email provided by a visitor is unverified, and never merges into an existing contact automatically. Otherwise anyone could type a customer's email and read their history. Merging is an agent action. **A returning visitor only sees history tied to their own visitor token.** |
 | Signed identity (later) | A host site can pass an HMAC of its user ID, signed server-side, to link identities safely. |
@@ -131,7 +133,7 @@ Customers are the controllers of visitor data. For GDPR and similar laws, the pr
 
 - Export and erase-contact operations (Milestone 4, with the chunked job).
 - Consent evidence for follow-ups.
-- A widget consent mode which uses session-only storage until the host site grants consent.
+- A widget consent mode which uses session-only storage until the host site grants consent. Built.
 - Retention settings (Milestone 6).
 - A location hint for D1 and a jurisdiction for Durable Objects and R2 where needed. See [open question Q10](open-questions.md).
 

@@ -1,5 +1,6 @@
 /**
- * The dashboard's socket. Sockets are a hint: everything here can fail, and the inbox then falls back to REST.
+ * The socket client for the dashboard and the widget. Sockets are a hint: everything here can fail, and the
+ * client then falls back to REST. It imports nothing, so that it costs the widget only its own size.
  * Rules are in docs/architecture/realtime.md. Time and sockets are passed in, so that tests can drive them.
  */
 export type RealtimeStatus = 'connecting' | 'connected' | 'reconnecting' | 'polling';

@@ -92,8 +92,9 @@ In progress, one PR per slice. Done so far:
 | Visitor sessions and the widget API | Merged. Tested in workerd and on real D1, including notes and isolation between visitors. Turnstile and attachments are not in yet |
 | Sockets, tickets, outbox dispatch, and the sweep | Merged. Verified on real Cloudflare from a Node client, [with these results](../architecture/cloudflare-validation.md#m1b-sockets-on-real-cloudflare-2026-11-04). Not yet from a browser |
 | Typing, presence, availability, `auth.refresh`, frame limits, stale sockets | Merged, and verified on real Cloudflare from a Node client, except the stale socket alarm, which is tested in workerd only. Metrics from the objects are not written yet |
-| Inbox UI | In review. Conversation list, thread, replies, notes, status, priority, assignment, typing, presence, and reconnection, all covered by browser tests against a local Worker, and checked in a browser on real Cloudflare. Contact details and tags added, with no screen yet to rename or delete a tag, list contacts, or merge them |
-| Widget UI, attachments, load test | Not started |
+| Inbox UI, contact details, tags | Merged. Conversation list, thread, replies, notes, status, priority, assignment, typing, presence, reconnection, contacts, and tags, covered by browser tests against a local Worker. The inbox was verified in a browser on real Cloudflare; contacts and tags were not. There is no UI yet to rename or delete tags, or to list or merge contacts |
+| Widget UI | In review. Loader and chat bundle, within budget at 1.6 KB and 13.8 KB gzipped. Covered by browser tests on a page from another origin, and verified in a browser on real Cloudflare, [with these results](../architecture/cloudflare-validation.md#widget-on-real-cloudflare-2026-11-04). English only, with translations in Milestone 6. It shows one conversation, the latest. A required email is enforced by the widget, not the server. No attachments yet |
+| Attachments, Turnstile, load test, security review | Not started |
 
 ## M2: iOS app without push (L)
 

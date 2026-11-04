@@ -106,6 +106,19 @@ export function dispatchSoon(c: Context<AppEnv>, workspaceId: string, aggregateI
   );
 }
 
+/**
+ * A read position is a hint with no outbox row: it is already in D1, a later read supersedes it, and a client
+ * that misses one gets the position again from REST when it catches up.
+ */
+export function publishRead(c: Context<AppEnv>, event: Extract<DomainEvent, { kind: 'conversation.read' }>): void {
+  c.executionCtx.waitUntil(
+    Promise.all([
+      c.env.WORKSPACE_HUB.getByName(hubName(event.workspaceId)).publish(event),
+      ...(event.reader.type === 'member' ? [c.env.CONVERSATION_ROOM.getByName(roomName(event.workspaceId, event.conversationId)).publishDomainEvent(event)] : []),
+    ]).catch((error: unknown) => createLogger({ workspaceId: event.workspaceId }).warn('read_publish_failed', { errorName: (error as Error).name })),
+  );
+}
+
 export async function sweepOutbox(env: Env, scheduledTime: number): Promise<void> {
   const db = openDatabase(env.DB);
   await dispatchRows(env, db, await staleOutbox(db, SWEEP_AGE_MS, SWEEP_LIMIT));

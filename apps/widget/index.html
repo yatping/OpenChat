@@ -7,9 +7,10 @@
   </head>
   <body>
     <h1>Example customer website</h1>
+    <!-- The real, built scripts, because the loader finds its bundle from its own URL. Run pnpm --filter @openchat/widget build first. -->
     <script>
       window.OpenChatConfig = { websiteKey: 'site_dev', apiUrl: 'http://localhost:8787' };
     </script>
-    <script type="module" src="/src/loader.ts"></script>
+    <script src="/dist/widget.js" async></script>
   </body>
 </html>

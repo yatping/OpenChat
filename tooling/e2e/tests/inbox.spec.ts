@@ -1,10 +1,7 @@
 import { expect, test, type Browser, type Page, type WebSocketRoute } from '@playwright/test';
 import { BASE_URL } from '../playwright.config';
-import { AGENT, OWNER, PASSWORD, SITE_ORIGIN, WEBSITE_KEY } from './fixtures';
-
-let ips = 0;
-/** Its own address each time, so that sign-in limits never decide a result here. */
-const nextIp = () => `198.51.100.${++ips % 250}`;
+import { AGENT, OWNER, SITE_ORIGIN, WEBSITE_KEY } from './fixtures';
+import { nextIp, signIn } from './helpers';
 
 interface Visitor {
   token: string;
@@ -21,7 +18,7 @@ const visitorHeaders = (token?: string) => ({
   ...(token ? { authorization: `Bearer ${token}` } : {}),
 });
 
-/** The widget does not exist yet, so a visitor is played through its API. */
+/** These tests are about the inbox, so a visitor is played through the API. widget.spec.ts drives the real widget. */
 async function startVisitor(first = 'Hello from a visitor'): Promise<Visitor> {
   const post = async (path: string, token: string | undefined, body?: unknown) => {
     const response = await fetch(`${BASE_URL}${path}`, { method: 'POST', headers: visitorHeaders(token), ...(body ? { body: JSON.stringify(body) } : {}) });
@@ -58,15 +55,6 @@ async function startVisitor(first = 'Hello from a visitor'): Promise<Visitor> {
 const rowLabel = (visitor: Visitor) => `Visitor ${visitor.conversationId.slice(-6)}`;
 const row = (page: Page, visitor: Visitor) => page.getByRole('button', { name: new RegExp(rowLabel(visitor)) });
 const messages = (page: Page) => page.getByRole('list', { name: 'Messages' });
-
-async function signIn(page: Page, who: { email: string }) {
-  await page.context().setExtraHTTPHeaders({ 'cf-connecting-ip': nextIp() });
-  await page.goto('/');
-  await page.getByLabel('Email').fill(who.email);
-  await page.getByLabel('Password').fill(PASSWORD);
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByRole('region', { name: 'Conversations' })).toBeVisible();
-}
 
 const openSession = async (browser: Browser, who: { email: string }) => {
   const context = await browser.newContext();

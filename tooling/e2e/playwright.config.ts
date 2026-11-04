@@ -12,7 +12,8 @@ export default defineConfig({
   timeout: 60_000,
   reporter: process.env.CI ? 'github' : 'list',
   use: { baseURL: BASE_URL, trace: 'retain-on-failure' },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  // The widget tests serve a page from a public-looking address, and Chromium otherwise refuses it the local Worker.
+  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], launchOptions: { args: ['--disable-features=LocalNetworkAccessChecks'] } } }],
   webServer: {
     command: 'pnpm exec tsx start-server.ts',
     url: `${BASE_URL}/health`,

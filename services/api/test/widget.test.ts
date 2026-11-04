@@ -150,7 +150,7 @@ describe('starting a conversation', () => {
     const { accessToken } = await session();
     const conversation = await start(accessToken);
     expect(conversation).toMatchObject({ status: 'open', lastSeq: 1 });
-    expect(Object.keys(conversation).sort()).toEqual(['createdAt', 'id', 'lastSeq', 'status']);
+    expect(Object.keys(conversation).sort()).toEqual(['agentReadSeq', 'createdAt', 'id', 'lastSeq', 'message', 'readSeq', 'status']);
     expect((await rows(`SELECT topic FROM outbox ORDER BY topic`))).toEqual([{ topic: 'conversation.created' }, { topic: 'message.created' }]);
   });
 

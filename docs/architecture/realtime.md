@@ -117,6 +117,14 @@ The hub filters by audience before sending. Agents can currently see every conve
 - **Signing out or changing a password** does not close sockets. They end at their expiry, at most 15 minutes for an agent.
 - **A conversation deleted or visitor blocked** will use the same mechanism on the room. Neither exists yet.
 
+### Read positions
+
+Publishing a read position needs no outbox row: it is already in D1, a later one supersedes it, and `GET /api/v1/widget/conversations` returns `readSeq` and `agentReadSeq` to anyone who missed it. A visitor only ever sees public sequence numbers. The widget reports a read only when it has seen something from someone else, so a visitor's own message costs no write.
+
+### The widget's socket
+
+The widget opens none until a conversation exists, and then only while the conversation is open or pending, or the panel is open. A first-time visitor who never writes makes no session and no rows. It shares its client with the dashboard, in `@openchat/api-client/realtime`, which imports nothing else and so stays out of Zod's way.
+
 ### Reconnection and catch-up
 
 Backoff is **full jitter**: `random(0, min(30s, 1s * 2^attempt))`. Server-issued close codes may add a minimum delay.

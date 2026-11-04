@@ -27,7 +27,7 @@ import { AppError, notFound } from '@openchat/shared';
 import type { Context, MiddlewareHandler } from 'hono';
 import { hubName } from '@openchat/realtime';
 import { authDeps, type App, type AppEnv } from '../context';
-import { dispatchSoon, socketUrl } from '../dispatch';
+import { dispatchSoon, publishRead, socketUrl } from '../dispatch';
 
 type WidgetEnv = { Bindings: AppEnv['Bindings']; Variables: AppEnv['Variables'] & { visitor: VisitorContext } };
 
@@ -147,7 +147,10 @@ export function registerWidgetRoutes(app: App) {
   });
 
   app.openapi(markVisitorConversationReadRoute, async (c) => {
-    await markVisitorConversationRead(await authDeps(c.env), visitorOf(c), c.req.valid('param').conversationId, c.req.valid('json'));
+    const visitor = visitorOf(c);
+    const { conversationId } = c.req.valid('param');
+    const position = await markVisitorConversationRead(await authDeps(c.env), visitor, conversationId, c.req.valid('json'));
+    publishRead(c, { v: 1, kind: 'conversation.read', workspaceId: visitor.workspaceId, conversationId, reader: { type: 'visitor', id: visitor.visitorId }, publicReadSeq: null, ...position });
     return c.body(null, 204);
   });
 }
