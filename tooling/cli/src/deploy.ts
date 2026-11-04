@@ -30,6 +30,7 @@ export interface DeployOptions {
   location?: string | undefined;
   analytics?: boolean;
   emailFrom?: string | undefined;
+  turnstileSiteKey?: string | undefined;
   cloudflareEmail?: boolean;
 }
 
@@ -244,6 +245,8 @@ export function createDeployer(root: string) {
       await createResources(state, options.location);
       buildAndDeploy(state);
       await setSecrets(state, options.emailFrom);
+      if (Boolean(process.env.TURNSTILE_SECRET_KEY) !== Boolean(options.turnstileSiteKey)) throw new Error('TURNSTILE_SECRET_KEY and --turnstile-site-key go together');
+      if (options.turnstileSiteKey) putSecrets(state, { TURNSTILE_SECRET_KEY: process.env.TURNSTILE_SECRET_KEY!, TURNSTILE_SITE_KEY: options.turnstileSiteKey });
       const ownerLink = await initialize(state, options);
       await verify(state);
 

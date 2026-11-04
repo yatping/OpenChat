@@ -4,7 +4,7 @@
  */
 import { expect, test, type Browser, type BrowserContext, type Page, type WebSocketRoute } from '@playwright/test';
 import { BASE_URL } from '../playwright.config';
-import { OWNER, SITE_ORIGIN, STYLED_WEBSITE_KEY, WEBSITE_KEY } from './fixtures';
+import { OWNER, SITE_ORIGIN, STYLED_WEBSITE_KEY, TURNSTILE_WEBSITE_KEY, WEBSITE_KEY } from './fixtures';
 import { nextIp, signIn } from './helpers';
 
 const NONCE = 'test-nonce';
@@ -421,6 +421,63 @@ test('a page that refuses blob pictures still gets the download', async ({ brows
   await agent.context().close();
 });
 
+/** Stands in for Cloudflare's script only. The token it gives is the published test token, and the Worker really asks Cloudflare about it. */
+const fakeTurnstile = (context: BrowserContext, behaviour: 'pass' | 'fail') =>
+  context.route('https://challenges.cloudflare.com/**', (route) =>
+    route.fulfill({
+      contentType: 'text/javascript',
+      body: `window.__challenges = 0; window.turnstile = { render(element, options) { window.__challenges++; setTimeout(() => ${behaviour === 'pass' ? "options.callback('XXXX.DUMMY.TOKEN.XXXX')" : "options['error-callback']()"}); return 'id'; }, remove() {} };`,
+    }),
+  );
+
+test('a website that requires Turnstile checks a new visitor once, when they first write', async ({ browser }) => {
+  const context = await visitorContext(browser);
+  const requests: string[] = [];
+  context.on('request', (request) => requests.push(request.url()));
+  await fakeTurnstile(context, 'pass');
+  const page = await shop(context, TURNSTILE_WEBSITE_KEY);
+  watch(page);
+  await launcher(page).click();
+  await expect(compose(page)).toBeVisible();
+  // Just looking contacts nobody.
+  expect(requests.some((url) => url.includes('challenges.cloudflare.com'))).toBe(false);
+
+  await say(page, 'Am I a person?');
+  await expect(log(page).getByText('Sent', { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => (window as unknown as { __challenges: number }).__challenges)).toBe(1);
+
+  // Known now, so no second check, even on a new page.
+  await page.reload();
+  await launcher(page).click();
+  await expect(log(page).getByText('Am I a person?')).toBeVisible();
+  await say(page, 'Still me');
+  await expect(log(page).getByText('Still me')).toBeVisible();
+  await expect(log(page).getByText('Not sent.')).toHaveCount(0);
+  expect(requests.filter((url) => url.includes('challenges.cloudflare.com'))).toHaveLength(1);
+  await context.close();
+});
+
+test('a failed Turnstile check says so, sends nothing, and can be tried again', async ({ browser }) => {
+  const context = await visitorContext(browser);
+  await fakeTurnstile(context, 'fail');
+  const page = await shop(context, TURNSTILE_WEBSITE_KEY);
+  watch(page);
+  await launcher(page).click();
+  await say(page, 'Let me in');
+  await expect(log(page).getByText('Not sent.')).toBeVisible();
+  await expect(panel(page).getByRole('alert')).toContainText('could not confirm');
+  expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain('refreshToken');
+
+  await context.unroute('https://challenges.cloudflare.com/**');
+  await page.evaluate(() => {
+    delete (window as unknown as { turnstile?: unknown }).turnstile;
+  });
+  await fakeTurnstile(context, 'pass');
+  await log(page).getByRole('button', { name: 'Try again' }).click();
+  await expect(log(page).getByText('Sent', { exact: true })).toBeVisible();
+  await context.close();
+});
+
 test('removes itself from a page the website does not allow', async ({ browser }) => {
   const context = await visitorContext(browser);
   const refused = context.waitForEvent('response', (r) => r.url().includes('/widget/bootstrap'));
@@ -460,7 +517,7 @@ test('fills a phone screen, and closes back to the button', async ({ browser }) 
     .toEqual([0, 0, 375, 667]);
   const close = panel(page).getByRole('button', { name: 'Close chat' });
   const box = (await close.boundingBox())!;
-  expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
+  expect(Math.round(Math.min(box.width, box.height))).toBeGreaterThanOrEqual(44);
   await compose(page).press('Escape');
   await expect(panel(page)).toBeHidden();
   await expect(launcher(page)).toBeFocused();

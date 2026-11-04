@@ -357,3 +357,23 @@ test('fits a phone, moving between the list and the conversation', async ({ page
   await page.getByRole('button', { name: 'Back to the list' }).click();
   await expect(page.getByRole('region', { name: 'Conversations' })).toBeVisible();
 });
+
+test('an owner changes the widget from the dashboard', async ({ page }) => {
+  await signIn(page, OWNER);
+  await page.getByRole('button', { name: 'websites', exact: true }).click();
+  const card = page.getByRole('listitem').filter({ hasText: 'Shop' }).first();
+  await card.getByLabel('Welcome message').fill('Hello from settings');
+  await card.getByLabel('Ask for an email').selectOption('optional');
+  await card.getByRole('button', { name: 'Save widget settings' }).click();
+  await expect(card.getByRole('status')).toContainText('Saved');
+  await page.reload();
+  await page.getByRole('button', { name: 'websites', exact: true }).click();
+  const after = page.getByRole('listitem').filter({ hasText: 'Shop' }).first();
+  await expect(after.getByLabel('Welcome message')).toHaveValue('Hello from settings');
+  await expect(after.getByLabel('Ask for an email')).toHaveValue('optional');
+  // Back as it was, because other tests here share this website.
+  await after.getByLabel('Welcome message').fill('');
+  await after.getByLabel('Ask for an email').selectOption('never');
+  await after.getByRole('button', { name: 'Save widget settings' }).click();
+  await expect(after.getByRole('status')).toContainText('Saved');
+});

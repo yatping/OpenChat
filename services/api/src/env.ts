@@ -21,6 +21,9 @@ export interface Env {
   NOTIFICATIONS_QUEUE: Queue;
   EMAIL_QUEUE: Queue;
   JOBS_QUEUE: Queue;
+  /** Worker secret, with its pair. Without both, no website can require Turnstile. */
+  TURNSTILE_SECRET_KEY?: string;
+  TURNSTILE_SITE_KEY?: string;
   /** Optional: Analytics Engine has to be enabled per account. See tooling/cli/src/render-config.ts. */
   METRICS?: AnalyticsEngineDataset;
 }

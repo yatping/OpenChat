@@ -31,6 +31,7 @@ export const STRINGS = {
   start: 'Start chatting',
   notNow: 'Not now',
   profileFailed: 'That did not save. Please try again.',
+  challengeFailed: 'We could not confirm that you are a person. Please try again.',
   attach: 'Attach a file',
   fileToAttach: 'File to attach',
   download: (name: string, size: string) => `Download ${name} (${size})`,

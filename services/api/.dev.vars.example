@@ -3,3 +3,6 @@ ENVIRONMENT=development
 AUTH_SIGNING_KEY=generated-by-pnpm-dev-setup
 # console prints emails here, for local use only. Deployments use cloudflare, or resend with RESEND_API_KEY as a secret.
 EMAIL_PROVIDER=console
+# Optional. Cloudflare's published test keys, which always pass, to try a website that requires Turnstile locally.
+# TURNSTILE_SITE_KEY=1x00000000000000000000AA
+# TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA

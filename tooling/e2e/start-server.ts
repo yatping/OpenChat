@@ -7,7 +7,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { generateSerializedKey, hashPassword } from '@openchat/auth';
-import { AGENT, OWNER, PASSWORD, SITE_ORIGIN, STYLED_WEBSITE_KEY, STYLED_WEBSITE_SETTINGS, WEBSITE_KEY, WORKSPACE_ID } from './tests/fixtures';
+import { AGENT, OWNER, PASSWORD, SITE_ORIGIN, STYLED_WEBSITE_KEY, STYLED_WEBSITE_SETTINGS, TURNSTILE_TEST_SECRET, TURNSTILE_TEST_SITE_KEY, TURNSTILE_WEBSITE_KEY, WEBSITE_KEY, WORKSPACE_ID } from './tests/fixtures';
 
 const api = resolve(dirname(fileURLToPath(import.meta.url)), '../../services/api');
 const state = '.wrangler/e2e';
@@ -16,7 +16,7 @@ mkdirSync(join(api, state), { recursive: true });
 
 const key = await generateSerializedKey(`e2e-${Date.now().toString(36)}`);
 const envFile = `${state}/vars`;
-writeFileSync(join(api, envFile), `ENVIRONMENT=development\nEMAIL_PROVIDER=console\nAUTH_SIGNING_KEY=${JSON.stringify({ active: key })}\n`);
+writeFileSync(join(api, envFile), `ENVIRONMENT=development\nEMAIL_PROVIDER=console\nTURNSTILE_SITE_KEY=${TURNSTILE_TEST_SITE_KEY}\nTURNSTILE_SECRET_KEY=${TURNSTILE_TEST_SECRET}\nAUTH_SIGNING_KEY=${JSON.stringify({ active: key })}\n`);
 
 const hash = await hashPassword(PASSWORD);
 const quote = (value: string) => `'${value.replaceAll("'", "''")}'`;
@@ -32,7 +32,8 @@ INSERT INTO workspace_members (id, workspace_id, user_id, role, status, created_
 INSERT INTO websites (id, workspace_id, name, website_key, allowed_origins_json, created_at, updated_at) VALUES
   ('site_e2e', ${quote(WORKSPACE_ID)}, 'Shop', ${quote(WEBSITE_KEY)}, ${quote(JSON.stringify([SITE_ORIGIN]))}, 1, 1);
 INSERT INTO websites (id, workspace_id, name, website_key, allowed_origins_json, settings_json, created_at, updated_at) VALUES
-  ('site_styled', ${quote(WORKSPACE_ID)}, 'Styled', ${quote(STYLED_WEBSITE_KEY)}, ${quote(JSON.stringify([SITE_ORIGIN]))}, ${quote(JSON.stringify(STYLED_WEBSITE_SETTINGS))}, 1, 1);
+  ('site_styled', ${quote(WORKSPACE_ID)}, 'Styled', ${quote(STYLED_WEBSITE_KEY)}, ${quote(JSON.stringify([SITE_ORIGIN]))}, ${quote(JSON.stringify(STYLED_WEBSITE_SETTINGS))}, 1, 1),
+  ('site_turnstile', ${quote(WORKSPACE_ID)}, 'Checked', ${quote(TURNSTILE_WEBSITE_KEY)}, ${quote(JSON.stringify([SITE_ORIGIN]))}, '{"requireTurnstile":true}', 1, 1);
 `;
 const seedFile = `${state}/seed.sql`;
 writeFileSync(join(api, seedFile), seed);

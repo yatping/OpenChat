@@ -546,7 +546,12 @@ const VisitorContent = z.string().trim().min(1).max(16000);
 const visitorConversationParams = z.object({ conversationId: z.string() });
 
 export const WidgetBootstrapSchema = z
-  .object({ websiteId: z.string(), settings: WidgetSettingsSchema, availability: z.enum(['online', 'offline']) })
+  .object({
+    websiteId: z.string(),
+    settings: WidgetSettingsSchema,
+    availability: z.enum(['online', 'offline']),
+    turnstileSiteKey: z.string().optional().openapi({ description: 'Present when this website requires Turnstile for a new visitor.' }),
+  })
   .openapi('WidgetBootstrap');
 
 export const VisitorSessionSchema = z
@@ -580,7 +585,7 @@ export const createVisitorSessionRoute = createRoute({
   summary: 'Create or resume an anonymous visitor session. The Origin must be allowed for the website.',
   description: 'A refresh token that is unknown or belongs to another website starts a new visitor, with no history.',
   security: [],
-  request: { body: { required: true, ...json(z.strictObject({ websiteKey: z.string().max(128), refreshToken: z.string().max(256).optional() })) } },
+  request: { body: { required: true, ...json(z.strictObject({ websiteKey: z.string().max(128), refreshToken: z.string().max(256).optional(), turnstileToken: z.string().max(2048).optional().openapi({ description: 'Needed to start a new visitor on a website that requires Turnstile. Not needed to resume one.' }) })) } },
   responses: { 200: { description: 'Visitor session', ...json(VisitorSessionSchema) }, default: problemResponse },
 });
 

@@ -156,9 +156,22 @@ const newWebsiteKey = () => `wk_${generateOpaqueToken()}`;
 
 export const listWebsites = async (db: Database, ctx: WorkspaceContext) => ({ data: await repositories(db, ctx).websites.list() });
 
-export function createWebsite(db: Database, ctx: WorkspaceContext, input: { name: string; allowedOrigins: string[]; settings?: Record<string, unknown> | undefined }) {
+export async function createWebsite(
+  db: Database,
+  ctx: WorkspaceContext,
+  input: { name: string; allowedOrigins: string[]; settings?: Record<string, unknown> | undefined },
+  options: { turnstileAvailable: boolean } = { turnstileAvailable: false },
+) {
   requireCapability(ctx, 'website.manage');
+  assertTurnstilePossible(input.settings, options.turnstileAvailable);
   return repositories(db, ctx).websites.create({ ...input, websiteKey: newWebsiteKey() });
+}
+
+/** Otherwise the website would turn away every new visitor, with nothing to say why. */
+function assertTurnstilePossible(settings: Record<string, unknown> | undefined, available: boolean): void {
+  if (settings?.requireTurnstile === true && !available) {
+    throw new AppError(400, 'turnstile_not_configured', 'This installation has no Turnstile keys. Deploy it with them first');
+  }
 }
 
 export async function updateWebsite(
@@ -166,8 +179,10 @@ export async function updateWebsite(
   ctx: WorkspaceContext,
   websiteId: string,
   input: { name?: string | undefined; allowedOrigins?: string[] | undefined; settings?: Record<string, unknown> | undefined },
+  options: { turnstileAvailable: boolean } = { turnstileAvailable: false },
 ) {
   requireCapability(ctx, 'website.manage');
+  assertTurnstilePossible(input.settings, options.turnstileAvailable);
   const row = await repositories(db, ctx).websites.update(websiteId, input);
   if (!row) throw notFound();
   return row;

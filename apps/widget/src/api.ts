@@ -34,6 +34,8 @@ export interface ApiDeps {
   websiteKey: string;
   loadSession(): Session | null;
   saveSession(session: Session): void;
+  /** A token for a website that requires Turnstile, or null for one that does not. */
+  solveChallenge?(): Promise<string | null>;
   fetch?: typeof fetch;
 }
 
@@ -77,8 +79,18 @@ export function createApi(deps: ApiDeps) {
   const startSession = (): Promise<Session> => {
     starting ??= (async () => {
       const refreshToken = deps.loadSession()?.refreshToken;
-      const response = await request('POST', '/api/v1/widget/sessions', null, { websiteKey: deps.websiteKey, ...(refreshToken ? { refreshToken } : {}) });
-      if (!response.ok) throw await failure(response);
+      const start = (turnstileToken: string | null) =>
+        request('POST', '/api/v1/widget/sessions', null, { websiteKey: deps.websiteKey, ...(refreshToken ? { refreshToken } : {}), ...(turnstileToken ? { turnstileToken } : {}) });
+      // Someone new needs one now. Someone known needs one only if the server no longer knows them.
+      const solved = refreshToken ? null : ((await deps.solveChallenge?.()) ?? null);
+      let response = await start(solved);
+      if (!response.ok) {
+        const refused = await failure(response);
+        const token = refused.code === 'turnstile_required' && !solved ? await deps.solveChallenge?.() : null;
+        if (!token) throw refused;
+        response = await start(token);
+        if (!response.ok) throw await failure(response);
+      }
       const body = (await response.json()) as { accessToken: string; accessTokenExpiresAt: string; refreshToken: string };
       const session = { refreshToken: body.refreshToken, accessToken: body.accessToken, expiresAt: Date.parse(body.accessTokenExpiresAt) };
       deps.saveSession(session);

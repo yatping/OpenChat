@@ -27,6 +27,64 @@ function CopyableSnippet({ website }: { website: Website }) {
   return <pre className="overflow-x-auto rounded-md bg-slate-100 p-3 text-xs dark:bg-slate-800">{snippet}</pre>;
 }
 
+/** What a colour input must show when nothing has been chosen. Saved only if someone chooses it. */
+const DEFAULT_WIDGET_COLOR = '#2563eb';
+
+function WidgetSettingsForm({ website, workspaceId }: { website: Website; workspaceId: string }) {
+  const client = useQueryClient();
+  const initial = website.settings;
+  const [welcomeMessage, setWelcome] = useState(initial.welcomeMessage ?? '');
+  const [primaryColor, setColor] = useState(initial.primaryColor ?? DEFAULT_WIDGET_COLOR);
+  const [collectEmail, setCollectEmail] = useState(initial.collectEmail ?? 'never');
+  const [showAgentNames, setShowNames] = useState(initial.showAgentNames ?? false);
+  const [requireTurnstile, setTurnstile] = useState(initial.requireTurnstile ?? false);
+  const save = useMutation({
+    mutationFn: () =>
+      api.updateWebsite(workspaceId, website.id, {
+        settings: { ...initial, ...(primaryColor === DEFAULT_WIDGET_COLOR && !initial.primaryColor ? {} : { primaryColor }), collectEmail, showAgentNames, requireTurnstile, ...(welcomeMessage.trim() ? { welcomeMessage: welcomeMessage.trim() } : { welcomeMessage: undefined }) },
+      }),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['websites', workspaceId] }),
+  });
+  return (
+    <form
+      className="space-y-3 border-t border-slate-200 pt-3 dark:border-slate-800"
+      onSubmit={(event) => {
+        event.preventDefault();
+        save.mutate();
+      }}
+    >
+      <h4 className="text-sm font-medium">Widget</h4>
+      <label className="block text-sm font-medium">
+        Welcome message
+        <textarea className="field mt-1 font-normal" rows={2} maxLength={500} value={welcomeMessage} onChange={(e) => setWelcome(e.target.value)} />
+      </label>
+      <label className="block text-sm font-medium">
+        Colour
+        <input className="field mt-1 h-10 w-20 p-1" type="color" value={primaryColor} onChange={(e) => setColor(e.target.value)} />
+      </label>
+      <label className="block text-sm font-medium">
+        Ask for an email
+        <select className="field mt-1 w-auto font-normal" value={collectEmail} onChange={(e) => setCollectEmail(e.target.value as typeof collectEmail)}>
+          <option value="never">Never</option>
+          <option value="optional">Offer it, after the first message</option>
+          <option value="required">Before the first message</option>
+        </select>
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={showAgentNames} onChange={(e) => setShowNames(e.target.checked)} />
+        Show agents' names to visitors
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={requireTurnstile} onChange={(e) => setTurnstile(e.target.checked)} />
+        Check that new visitors are people, with Cloudflare Turnstile
+      </label>
+      <Failure error={save.error} />
+      {save.isSuccess && <p className="notice" role="status">Saved. The widget picks this up within a minute.</p>}
+      <button className="button-quiet" disabled={save.isPending}>Save widget settings</button>
+    </form>
+  );
+}
+
 function WebsiteCard({ website, workspaceId, editable }: { website: Website; workspaceId: string; editable: boolean }) {
   const client = useQueryClient();
   const [name, setName] = useState(website.name);
@@ -60,6 +118,7 @@ function WebsiteCard({ website, workspaceId, editable }: { website: Website; wor
           <button className="button-quiet" disabled={save.isPending}>Save changes</button>
         </form>
       )}
+      {editable && <WidgetSettingsForm website={website} workspaceId={workspaceId} />}
     </li>
   );
 }

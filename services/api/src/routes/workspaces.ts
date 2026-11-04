@@ -95,12 +95,12 @@ export function registerWorkspaceRoutes(app: App) {
 
   app.openapi(createWebsiteRoute, async (c) => {
     const { deps, ctx } = await scoped(c, c.req.valid('param').workspaceId);
-    return c.json(await createWebsite(deps.db, ctx, c.req.valid('json')), 201);
+    return c.json(await createWebsite(deps.db, ctx, c.req.valid('json'), { turnstileAvailable: deps.turnstile !== undefined }), 201);
   });
 
   app.openapi(updateWebsiteRoute, async (c) => {
     const { workspaceId, websiteId } = c.req.valid('param');
     const { deps, ctx } = await scoped(c, workspaceId);
-    return c.json(await updateWebsite(deps.db, ctx, websiteId, c.req.valid('json')), 200);
+    return c.json(await updateWebsite(deps.db, ctx, websiteId, c.req.valid('json'), { turnstileAvailable: deps.turnstile !== undefined }), 200);
   });
 }
