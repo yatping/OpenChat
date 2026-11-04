@@ -217,6 +217,14 @@ Measured on 2026-11-04 on a throwaway deployment, which was then removed.
 | `oc deploy` from nothing to verified | About 80 seconds on a laptop, including the build |
 
 
+### Cloudflare Email Service, 2026-11-04
+
+Sending from a Worker through the `send_email` binding delivered a real reset email to an outside mailbox, and its link worked. The sending domain had been enabled about three minutes earlier, with `wrangler email sending enable`, on a zone in the account. That needed a login with `email_sending:write`, which an older Wrangler login lacks and `wrangler login` grants. Cloudflare set `_dmarc` to `v=DMARC1; p=reject;` on the zone, so any other service sending as that domain must pass DMARC. Whether mail lands in the inbox or in spam, and how large the daily quota is, were not measured.
+
+### M1b REST slices on real D1, 2026-11-04
+
+27 of 27 outside checks passed against a throwaway deployment: origins, retries reaching the same conversation, notes staying out of a visitor's history with no gap in `seq`, a note's client ID refused, compare-and-set, reopening, and tokens refused across audiences. Eight concurrent replays produced one 201 and seven 200s, with no gap in the sequence. Sending a message took a median of 186 ms and at most 317 ms from one client, n=10, which is too few to rely on. The load test replaces this.
+
 ### Follow-up deployment, 2026-11-04
 
 A second throwaway deployment on the same account took about 90 seconds, then was removed. `oc preflight` passed, and with a bad API token it stopped before creating anything. `/api/*` answers carried `no-store` and `nosniff`. Account deletion answered 401 with no token, 400 with no password, 403 with a wrong password, and 409 for the last owner with the right one. A successful deletion has only run in workerd, because this deployment had one user. The check's failure cases for R2, D1, Queues, and several accounts, and the missing `workers.dev` message, have only run against a fake Wrangler.
