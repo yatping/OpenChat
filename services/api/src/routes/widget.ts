@@ -25,6 +25,7 @@ import {
 } from '@openchat/core';
 import { AppError, notFound } from '@openchat/shared';
 import type { Context, MiddlewareHandler } from 'hono';
+import { hubName } from '@openchat/realtime';
 import { authDeps, type App, type AppEnv } from '../context';
 import { dispatchSoon, socketUrl } from '../dispatch';
 
@@ -75,6 +76,16 @@ interface CachedBootstrap {
   websiteId?: string;
   settings?: Record<string, unknown>;
   allowedOrigins?: string[];
+  availability?: 'online' | 'offline';
+}
+
+/** Cached with the rest, so that page views on a busy site do not wake the hub. */
+async function availabilityOf(c: Context<AppEnv>, workspaceId: string, mode: unknown): Promise<'online' | 'offline'> {
+  if (mode === 'online' || mode === 'offline') return mode;
+  const agents = await c.env.WORKSPACE_HUB.getByName(hubName(workspaceId))
+    .connectionCount()
+    .catch(() => 0);
+  return agents > 0 ? 'online' : 'offline';
 }
 
 /** Keeps busy pages off D1. A key that does not exist is cached too, so that guessing cannot reach D1 either. */
@@ -84,7 +95,7 @@ async function loadBootstrap(c: Context<AppEnv>, websiteKey: string): Promise<Ca
   const hit = await cache.match(key);
   if (hit) return (await hit.json()) as CachedBootstrap;
   const website = await websiteForWidget(await authDeps(c.env), websiteKey);
-  const value: CachedBootstrap = website ? { found: true, websiteId: website.id, settings: website.settings, allowedOrigins: website.allowedOrigins } : { found: false };
+  const value: CachedBootstrap = website ? { found: true, availability: await availabilityOf(c, website.workspaceId, website.settings.availabilityMode), websiteId: website.id, settings: website.settings, allowedOrigins: website.allowedOrigins } : { found: false };
   await cache.put(key, new Response(JSON.stringify(value), { headers: { 'cache-control': `public, max-age=${BOOTSTRAP_TTL_SECONDS}` } }));
   return value;
 }
@@ -101,9 +112,7 @@ export function registerWidgetRoutes(app: App) {
     if (!bootstrap.found) throw notFound();
     const origin = c.req.header('origin');
     if (origin !== undefined && !bootstrap.allowedOrigins!.includes(origin)) throw new AppError(403, 'bad_origin', 'This website does not allow requests from this origin');
-    // In auto mode this will come from the workspace hub once sockets exist. Until then, nobody is shown as online.
-    const availability = bootstrap.settings?.availabilityMode === 'online' ? ('online' as const) : ('offline' as const);
-    return c.json({ websiteId: bootstrap.websiteId!, settings: bootstrap.settings!, availability }, 200);
+    return c.json({ websiteId: bootstrap.websiteId!, settings: bootstrap.settings!, availability: bootstrap.availability ?? 'offline' }, 200);
   });
 
   app.openapi(createVisitorSessionRoute, async (c) => {

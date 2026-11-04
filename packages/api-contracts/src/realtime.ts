@@ -86,8 +86,8 @@ const ErrorFrame = frame(
   z.object({ code: z.enum(['invalid_frame', 'unsupported', 'rate_limited', 'forbidden']), requestId: z.string().optional() }),
 );
 const AuthRefreshFrame = frame('auth.refresh', z.object({ ticket: z.string() }));
-/** Sent at most every 3 seconds while typing. Receivers expire the indicator after 5 seconds. */
-const TypingSetFrame = frame('typing.set', z.object({ conversationId: z.string(), isTyping: z.boolean() }));
+/** Sent at most every 3 seconds while typing. Receivers expire the indicator after 5 seconds. Set `internal` while writing a note, which keeps it from visitors. */
+const TypingSetFrame = frame('typing.set', z.object({ conversationId: z.string(), isTyping: z.boolean(), internal: z.boolean().optional() }));
 
 const Reader = z.object({ type: z.enum(['visitor', 'member']), id: z.string() });
 

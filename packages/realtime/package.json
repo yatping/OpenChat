@@ -13,6 +13,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@openchat/auth": "workspace:*",
     "@openchat/shared": "workspace:*",
     "@openchat/api-contracts": "workspace:*"
   },

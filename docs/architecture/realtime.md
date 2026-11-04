@@ -81,7 +81,7 @@ The following are forbidden in these classes, because they block hibernation or 
 
 ### Typing indicators
 
-Clients send `typing.set` at most every 3 seconds while typing, and the object forwards it. **Receivers expire the indicator after 5 seconds without an update.** There are no timers or stored state on the server, so typing never affects hibernation. Typing from a member crosses to the room, and typing from a visitor crosses to the hub, by RPC.
+Clients send `typing.set` at most every 3 seconds while typing, and the object forwards it. **Receivers expire the indicator after 5 seconds without an update.** A client writing a note sets `internal`, which keeps that typing from the room. Frames carry no names, and a client finds a member by ID. There are no timers or stored state on the server, so typing never affects hibernation. Typing from a member crosses to the room, and typing from a visitor crosses to the hub, by RPC.
 
 ### Presence
 
@@ -93,7 +93,7 @@ Presence is advisory. It is derived from `getWebSockets()` when asked.
 
 Per spec §8.2, **disconnect is never treated as abandonment**. Follow-up decisions use message timestamps.
 
-The widget's availability comes from `GET /widget/bootstrap`, cached for 30 seconds through the Cache API, so that page views on a busy site do not wake the hub.
+The widget's availability comes from `GET /widget/bootstrap`, cached for 30 seconds through the Cache API, so that page views on a busy site do not wake the hub. In `auto` mode it is online if any agent has a socket. The `availability` frame is reserved, because reaching every room from the hub would wake them all, so an open widget learns of a change on its next bootstrap.
 
 ### Publishing
 
@@ -111,7 +111,7 @@ The hub filters by audience before sending. Agents can currently see every conve
 
 ### Token expiry and revocation
 
-- **Expiry:** `expiresAt` in the attachment is checked on each inbound message and before each send. There is no alarm per socket. Clients send `auth.refresh` with a new ticket before expiry (from the next M1b slice; until then they reconnect); otherwise the socket closes with 4401 at the next event. An expired socket never receives anything.
+- **Expiry:** `expiresAt` in the attachment is checked on each inbound message and before each send. There is no alarm per socket. Clients send `auth.refresh` with a new ticket before expiry, timed from `authExpiresAt` in `hello`, and receive a new `hello`. The ticket must name the same person, workspace, conversation, and page, or the answer is `error: forbidden` and nothing changes. `auth.expiring` is reserved and not sent, because that would need a timer per socket. Otherwise the socket closes with 4401 at the next event. An expired socket never receives anything.
 - **Revocation:** a role change or removal writes an outbox row (`member.access_changed`), and the sweep guarantees that `hub.revokeMember(memberId)` runs. It closes `member:<id>` sockets with 4403, and clients reconnect with fresh permissions.
 - **Account deletion** writes the same row inside the deletion, and relies on the sweep, so its sockets close within about two minutes.
 - **Signing out or changing a password** does not close sockets. They end at their expiry, at most 15 minutes for an agent.

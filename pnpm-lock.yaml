@@ -440,6 +440,9 @@ importers:
       '@openchat/api-contracts':
         specifier: workspace:*
         version: link:../api-contracts
+      '@openchat/auth':
+        specifier: workspace:*
+        version: link:../auth
       '@openchat/shared':
         specifier: workspace:*
         version: link:../shared
