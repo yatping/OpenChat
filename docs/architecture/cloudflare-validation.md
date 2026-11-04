@@ -24,7 +24,7 @@ Spike results are in [Phase 0 spike results](#phase-0-spike-results).
 | Workers static assets | Fits | Preferred over Pages for atomic deploys |
 | Rate limiting binding | Partly | Approximate and per location |
 | APNs from a Worker | **Risk, reduced** | Reached APNs from every Worker context in S1, but still rests on undocumented proxy behaviour |
-| Cloudflare Email Service | Optional, driver not built | Beta. Sending to any recipient needs Workers Paid and a domain on Cloudflare DNS. 3,000 emails a month included, then $0.35 per 1,000. The `send_email` binding documents no idempotency key. Checked on 2026-11-04 against the [docs](https://developers.cloudflare.com/email-service/); nothing has been sent |
+| Cloudflare Email Service | Optional, driver built | Beta. Sending to any recipient needs Workers Paid and a domain on Cloudflare DNS. 3,000 emails a month included, then $0.35 per 1,000. The `send_email` binding documents no idempotency key. Checked on 2026-11-04 against the [docs](https://developers.cloudflare.com/email-service/); nothing has been sent |
 | Wrangler as deploy tool | Fits | The `cf` CLI is in beta; do not adopt it yet |
 
 ## D1

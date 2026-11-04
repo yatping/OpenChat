@@ -9,9 +9,9 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
 function usage(): never {
   console.error(`Usage:
-  pnpm oc preflight [--analytics] [--public-url <https origin>] [--email-from <address>]
+  pnpm oc preflight [--analytics] [--public-url <https origin>] [--cloudflare-email] [--email-from <address>]
   pnpm oc deploy --env <name> --owner-email <address> [--owner-name <name>] [--workspace <name>]
-                 [--public-url <https origin>] [--location <hint>] [--analytics] [--email-from <address>]
+                 [--public-url <https origin>] [--location <hint>] [--analytics] [--cloudflare-email] [--email-from <address>]
   pnpm oc recover --env <name> --email <address>
   pnpm oc render --env <name> --service <api|notification-relay>
 
@@ -27,7 +27,7 @@ const flag = (name: string) => {
 const env = flag('env');
 
 if (command === 'preflight') {
-  const ready = createDeployer(root).preflight({ analytics: rest.includes('--analytics'), emailFrom: flag('email-from'), publicUrl: flag('public-url') });
+  const ready = createDeployer(root).preflight({ analytics: rest.includes('--analytics'), emailFrom: flag('email-from'), publicUrl: flag('public-url'), cloudflareEmail: rest.includes('--cloudflare-email') });
   process.exit(ready ? 0 : 1);
 }
 if (!env) usage();
@@ -44,6 +44,7 @@ async function main(name: string) {
       location: flag('location'),
       analytics: rest.includes('--analytics'),
       emailFrom: flag('email-from'),
+      cloudflareEmail: rest.includes('--cloudflare-email'),
     });
     return;
   }

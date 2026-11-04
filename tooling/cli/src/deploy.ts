@@ -30,6 +30,7 @@ export interface DeployOptions {
   location?: string | undefined;
   analytics?: boolean;
   emailFrom?: string | undefined;
+  cloudflareEmail?: boolean;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -147,7 +148,11 @@ export function createDeployer(root: string) {
       save(state);
     }
     const resendKey = process.env.RESEND_API_KEY;
-    if (resendKey) {
+    if (state.cloudflareEmailFrom) {
+      // Not secret, but set the same way as the Resend settings, so that switching needs no other change.
+      putSecrets(state, { EMAIL_PROVIDER: 'cloudflare', SYSTEM_EMAIL_FROM: state.cloudflareEmailFrom });
+      console.log('Configured Cloudflare Email Sending');
+    } else if (resendKey) {
       if (!emailFrom) throw new Error('RESEND_API_KEY needs --email-from, an address on a domain verified with Resend');
       assertEmail(emailFrom);
       putSecrets(state, { EMAIL_PROVIDER: 'resend', RESEND_API_KEY: resendKey, SYSTEM_EMAIL_FROM: emailFrom });
@@ -204,11 +209,12 @@ export function createDeployer(root: string) {
   }
 
   /** Prints every check and returns false if any failed. Creates nothing. */
-  function preflight(options: Pick<DeployOptions, 'analytics' | 'emailFrom' | 'publicUrl'>): boolean {
+  function preflight(options: Pick<DeployOptions, 'analytics' | 'emailFrom' | 'publicUrl' | 'cloudflareEmail'>): boolean {
     const checks = runPreflight((args) => wrangler(args), {
       nodeVersion: process.version,
       accountIdFromEnv: process.env.CLOUDFLARE_ACCOUNT_ID,
       resendKey: Boolean(process.env.RESEND_API_KEY),
+      ...(options.cloudflareEmail === undefined ? {} : { cloudflareEmail: options.cloudflareEmail }),
       ...(options.analytics === undefined ? {} : { analytics: options.analytics }),
       emailFrom: options.emailFrom,
       publicUrl: options.publicUrl,
@@ -229,6 +235,12 @@ export function createDeployer(root: string) {
       if (options.publicUrl) state.publicBaseUrl = options.publicUrl;
 
       if (!preflight(options)) throw new Error('\nFix the items marked FAIL, then run this again. Nothing was created by this check.');
+      if (options.cloudflareEmail) {
+        assertEmail(options.emailFrom ?? '');
+        state.cloudflareEmailFrom = options.emailFrom!;
+      } else if (process.env.RESEND_API_KEY) {
+        delete state.cloudflareEmailFrom;
+      }
       await createResources(state, options.location);
       buildAndDeploy(state);
       await setSecrets(state, options.emailFrom);
@@ -239,9 +251,9 @@ export function createDeployer(root: string) {
       if (ownerLink) {
         console.log(`\nSet the owner's password within one hour. This link is shown only once:\n${ownerLink}`);
       }
-      if (!process.env.RESEND_API_KEY) {
+      if (!process.env.RESEND_API_KEY && !state.cloudflareEmailFrom) {
         console.log('\nNo email provider was set in this run. Without one, resets and invitations are not delivered.');
-        console.log(`Set RESEND_API_KEY and --email-from, then deploy again. Until then: pnpm oc recover --env ${options.name} --email <address>`);
+        console.log(`Use --cloudflare-email, or RESEND_API_KEY, with --email-from, then deploy again. Until then: pnpm oc recover --env ${options.name} --email <address>`);
       }
     },
 

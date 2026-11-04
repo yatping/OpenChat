@@ -17,7 +17,7 @@ Run `pnpm oc preflight` to check them. It only reads, and `oc deploy` runs the s
 | **`workers.dev` subdomain** | Unless every route is on your own domain, which `oc deploy` does not set up yet | Workers & Pages in the dashboard | **Confirm yourself.** The deploy stops with these instructions if it is missing, and running it again resumes |
 | Analytics Engine | With `--analytics` | Enable once in the dashboard | Confirm yourself |
 | Custom domain | With `--public-url` | A zone on Cloudflare, attached to the Worker. A domain is recommended, but `workers.dev` also works | Confirm yourself |
-| Email | To deliver invitations and resets | A Resend API key and verified domain. [Cloudflare Email Sending](../architecture/open-questions.md) is planned, not built. Without either, use `oc recover` | `--email-from` is present. Resend is not contacted |
+| Email | To deliver invitations and resets | Cloudflare Email Sending (a domain on Cloudflare DNS in this account, onboarded with `wrangler email sending enable <domain>`, and a login with `email_sending:write`), or a Resend API key and verified domain. Without either, use `oc recover` | Cloudflare: the domain is listed as onboarded. Resend: `--email-from` is present, and Resend is not contacted |
 | Push | Later, in M3 | Nothing for the managed relay, or an Apple Developer account for independent mode | Not checked yet |
 
 A brand-new account has not been tried yet, so this list comes from Cloudflare's documentation and Wrangler's source, and may be incomplete.
@@ -33,6 +33,7 @@ A brand-new account has not been tried yet, so this list comes from Cloudflare's
 | Durable Objects | `WorkspaceHub`, `ConversationRoom`, plus an auth guard |
 | Analytics Engine dataset | `oc_<name>`. Opt-in with `analyticsEngine: true` in deployment state, because it must first be enabled once per account in the Cloudflare dashboard, or the deploy fails |
 | Secrets | `AUTH_SIGNING_KEY`, `TICKET_SIGNING_KEY`, `RELAY_SIGNING_KEY`, `DATA_ENCRYPTION_KEY`, `RESEND_API_KEY` |
+| Email binding | `EMAIL`, only with `--cloudflare-email`, and able to send only from `--email-from` |
 
 ## Configuration model
 
@@ -64,9 +65,10 @@ pnpm exec wrangler login      # once
 pnpm oc deploy --env acme --owner-email you@example.com --workspace "Support team"
 ```
 
-This needs Workers Paid ([ADR-0009](../architecture/decisions/0009-paid-plan-and-password-hashing.md)). It prints the dashboard URL and a one-hour link for the owner to set a password, shown only once. To send email, verify a domain with Resend, then deploy again:
+This needs Workers Paid ([ADR-0009](../architecture/decisions/0009-paid-plan-and-password-hashing.md)). It prints the dashboard URL and a one-hour link for the owner to set a password, shown only once. To send email, onboard a domain, then deploy again with either provider. Cloudflare needs no API key, but it's in beta and documents no idempotency key, so a retry after a lost answer can send twice:
 
 ```bash
+pnpm oc deploy --env acme --cloudflare-email --email-from no-reply@mail.example.com
 RESEND_API_KEY=... pnpm oc deploy --env acme --email-from no-reply@mail.example.com
 ```
 

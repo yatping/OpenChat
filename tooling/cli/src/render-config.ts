@@ -14,6 +14,8 @@ export interface DeploymentState {
    * binds it fails until then. So it is opt-in, and the Worker treats the binding as optional.
    */
   analyticsEngine?: boolean;
+  /** The sending address, for a deployment using Cloudflare Email Service. The binding can send from nothing else. */
+  cloudflareEmailFrom?: string;
 }
 
 interface Template {
@@ -67,5 +69,6 @@ export function renderConfig(templateSource: string, state: DeploymentState, rel
   } else {
     delete t.analytics_engine_datasets;
   }
+  if (state.cloudflareEmailFrom) t.send_email = [{ name: 'EMAIL', allowed_sender_addresses: [state.cloudflareEmailFrom] }];
   return t;
 }

@@ -28,21 +28,25 @@ export class ConsoleEmailProvider implements EmailProvider {
   }
 }
 
-/** Holds only the HTTP status. A provider's response can quote addresses, and errors end up in logs. */
+/** Holds only a status or an error code. A provider's own message can quote addresses, and errors end up in logs. */
 export class EmailSendError extends Error {
   readonly status: number | null;
-  constructor(status: number | null) {
-    super(status === null ? 'The email provider could not be reached' : `The email provider answered ${status}`);
+  readonly code: string | null;
+  constructor(status: number | null, code: string | null = null) {
+    super(code ? `The email provider answered ${code}` : status === null ? 'The email provider could not be reached' : `The email provider answered ${status}`);
     this.name = 'EmailSendError';
     this.status = status;
+    this.code = code;
   }
 }
 
 const SEND_TIMEOUT_MS = 10_000;
 
+const withoutControlCharacters = (name: string) => name.replace(/\p{Cc}+/gu, ' ');
+
 /** A display name, quoted so that it cannot add addresses or line breaks to the sender. */
 export function formatSender(from: EmailMessage['from']): string {
-  const name = from.name.replace(/\p{Cc}+/gu, ' ').replace(/["\\]/g, '\\$&');
+  const name = withoutControlCharacters(from.name).replace(/["\\]/g, '\\$&');
   return `"${name}" <${from.email}>`;
 }
 
@@ -88,5 +92,50 @@ export class ResendEmailProvider implements EmailProvider {
     const body = (await response.json().catch(() => null)) as { id?: unknown } | null;
     // Accepted is accepted. Throwing here would retry, and could send the email twice.
     return { messageId: typeof body?.id === 'string' ? body.id : 'unknown' };
+  }
+}
+
+/** The part of Cloudflare's `send_email` binding used here, so that this package needs no Workers types. */
+export interface CloudflareEmailBinding {
+  send(message: {
+    to: string;
+    from: { name: string; email: string };
+    subject: string;
+    html: string;
+    text?: string;
+    replyTo?: string;
+    headers?: Record<string, string>;
+  }): Promise<{ messageId: string }>;
+}
+
+const CLOUDFLARE_ERROR_CODE = /^E_[A-Z_]{1,64}$/;
+
+/**
+ * Cloudflare Email Service, through the Worker's binding. Every failure throws and is retried, then
+ * dead-lettered, as with Resend. The binding documents no idempotency key, so `idempotencyKey` is unused and
+ * a retry after a lost answer can send twice.
+ */
+export class CloudflareEmailProvider implements EmailProvider {
+  readonly #binding: CloudflareEmailBinding;
+
+  constructor(binding: CloudflareEmailBinding) {
+    this.#binding = binding;
+  }
+
+  async send(input: EmailMessage): Promise<{ messageId: string }> {
+    try {
+      return await this.#binding.send({
+        to: input.to,
+        from: { name: withoutControlCharacters(input.from.name), email: input.from.email },
+        subject: input.subject,
+        html: input.html,
+        ...(input.text === undefined ? {} : { text: input.text }),
+        ...(input.replyTo === undefined ? {} : { replyTo: input.replyTo }),
+        ...(input.headers === undefined ? {} : { headers: input.headers }),
+      });
+    } catch (error) {
+      const code = (error as { code?: unknown } | null)?.code;
+      throw new EmailSendError(null, typeof code === 'string' && CLOUDFLARE_ERROR_CODE.test(code) ? code : null);
+    }
   }
 }

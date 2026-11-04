@@ -80,6 +80,30 @@ describe('runPreflight', () => {
     expect(find(runPreflight(wrangler().run, base), 'Email')?.status).toBe('note');
   });
 
+  describe('Cloudflare email', () => {
+    const options = { ...base, cloudflareEmail: true, emailFrom: 'no-reply@holfun.example' };
+    const list = 'email sending list holfun.example';
+
+    it('passes when the domain is onboarded', () => {
+      expect(find(runPreflight(wrangler({ [list]: 'holfun.example  enabled' }).run, options), 'Email')?.status).toBe('ok');
+    });
+
+    it('says how to onboard a domain that is not', () => {
+      const email = find(runPreflight(wrangler({ [list]: 'No sending subdomains found in this account.' }).run, options), 'Email');
+      expect(email).toMatchObject({ status: 'fail', detail: expect.stringContaining('wrangler email sending enable holfun.example') });
+    });
+
+    it('explains a login without the email permission', () => {
+      const email = find(runPreflight(wrangler({ [list]: failure('A request failed.\n  Authentication error [code: 10000]') }).run, options), 'Email');
+      expect(email).toMatchObject({ status: 'fail', detail: expect.stringContaining('wrangler login') });
+    });
+
+    it('needs a sender, and refuses two providers', () => {
+      expect(find(runPreflight(wrangler().run, { ...base, cloudflareEmail: true }), 'Email')?.status).toBe('fail');
+      expect(find(runPreflight(wrangler().run, { ...options, resendKey: true }), 'Email')?.status).toBe('fail');
+    });
+  });
+
   it('lists the optional items only when asked for', () => {
     expect(find(runPreflight(wrangler().run, base), 'Analytics Engine')).toBeUndefined();
     expect(find(runPreflight(wrangler().run, { ...base, analytics: true }), 'Analytics Engine')?.status).toBe('confirm');

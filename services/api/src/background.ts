@@ -4,7 +4,7 @@
  */
 import { INVITATION_EMAIL_JOB, PASSWORD_RESET_JOB, sendInvitationEmail, sendPasswordResetEmail } from '@openchat/core';
 import { claimJob, getInstallation, openDatabase, recordFailedJob } from '@openchat/database';
-import { ConsoleEmailProvider, EmailSendError, ResendEmailProvider, type EmailProvider } from '@openchat/email';
+import { CloudflareEmailProvider, ConsoleEmailProvider, EmailSendError, ResendEmailProvider, type EmailProvider } from '@openchat/email';
 import { AppError, createLogger, newId, retryDelaySeconds, type JobEnvelope } from '@openchat/shared';
 import type { Env } from './env';
 
@@ -14,6 +14,7 @@ export const HEARTBEAT_JOB = 'system.heartbeat';
 function emailProviderFor(env: Env): EmailProvider {
   if (env.EMAIL_PROVIDER === 'console') return new ConsoleEmailProvider();
   if (env.EMAIL_PROVIDER === 'resend' && env.RESEND_API_KEY) return new ResendEmailProvider(env.RESEND_API_KEY);
+  if (env.EMAIL_PROVIDER === 'cloudflare' && env.EMAIL) return new CloudflareEmailProvider(env.EMAIL);
   return { send: () => Promise.reject(new Error('No email provider is configured')) };
 }
 
@@ -144,6 +145,7 @@ export async function handleQueue(batch: MessageBatch, env: Env, deps: Backgroun
           attempts: message.attempts,
           errorName: (error as Error).name,
           ...(error instanceof EmailSendError && error.status !== null ? { status: error.status } : {}),
+          ...(error instanceof EmailSendError && error.code !== null ? { errorCode: error.code } : {}),
         });
         message.retry({ delaySeconds: retryDelaySeconds(message.attempts) });
       }
