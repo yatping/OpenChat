@@ -376,11 +376,16 @@ export const updateWebsiteRoute = createRoute({
 const conversationParams = workspaceParams.extend({ conversationId: z.string() });
 
 
+export const TagSchema = z.object({ id: z.string(), name: z.string() }).openapi('Tag');
+
 export const ConversationSchema = z
   .object({
     id: z.string(),
     websiteId: z.string(),
     contactId: z.string(),
+    contactName: z.string().nullable(),
+    contactEmail: z.string().nullable().openapi({ description: 'Given by the visitor or an agent. Never verified.' }),
+    tags: z.array(TagSchema),
     assignedMemberId: z.string().nullable(),
     status: ConversationStatusSchema,
     priority: ConversationPrioritySchema,
@@ -698,4 +703,105 @@ export const connectRealtimeRoute = createRoute({
   security: [],
   request: { query: z.object({ ticket: z.string().max(4096) }) },
   responses: { 101: { description: 'Switching protocols' }, default: problemResponse },
+});
+
+// ---------- Contacts and tags ----------
+
+const contactParams = workspaceParams.extend({ contactId: z.string() });
+const tagParams = workspaceParams.extend({ tagId: z.string() });
+
+export const ContactSchema = z
+  .object({
+    id: z.string(),
+    name: z.string().nullable(),
+    email: z.string().nullable().openapi({ description: 'Never verified, so it proves nothing about who this is.' }),
+    phone: z.string().nullable(),
+    firstSeenAt: z.string(),
+    lastSeenAt: z.string(),
+  })
+  .openapi('Contact');
+
+export const getContactRoute = createRoute({
+  method: 'get',
+  path: '/api/v1/workspaces/{workspaceId}/contacts/{contactId}',
+  tags: ['conversations'],
+  operationId: 'getContact',
+  summary: 'Get a contact',
+  security: bearer,
+  request: { params: contactParams },
+  responses: { 200: { description: 'Contact', ...json(ContactSchema) }, default: problemResponse },
+});
+
+export const updateContactRoute = createRoute({
+  method: 'patch',
+  path: '/api/v1/workspaces/{workspaceId}/contacts/{contactId}',
+  tags: ['conversations'],
+  operationId: 'updateContact',
+  summary: 'Correct a name, email, or phone number',
+  security: bearer,
+  request: {
+    params: contactParams,
+    body: {
+      required: true,
+      ...json(
+        z
+          .strictObject({
+            name: SafeName.nullable().optional(),
+            email: z.email().max(254).nullable().optional(),
+            phone: z.string().trim().max(40).regex(/^\P{Cc}*$/u, 'Must not contain control characters').nullable().optional(),
+          })
+          .refine((b) => b.name !== undefined || b.email !== undefined || b.phone !== undefined, 'Nothing to change'),
+      ),
+    },
+  },
+  responses: { 200: { description: 'Updated', ...json(ContactSchema) }, default: problemResponse },
+});
+
+export const listTagsRoute = createRoute({
+  method: 'get',
+  path: '/api/v1/workspaces/{workspaceId}/tags',
+  tags: ['conversations'],
+  operationId: 'listTags',
+  summary: "The workspace's tags, by name",
+  security: bearer,
+  request: { params: workspaceParams },
+  responses: { 200: { description: 'Tags', ...json(z.object({ data: z.array(TagSchema) })) }, default: problemResponse },
+});
+
+export const createTagRoute = createRoute({
+  method: 'post',
+  path: '/api/v1/workspaces/{workspaceId}/tags',
+  tags: ['conversations'],
+  operationId: 'createTag',
+  summary: 'Create a tag, or return the one with this name',
+  security: bearer,
+  request: { params: workspaceParams, body: { required: true, ...json(z.strictObject({ name: SafeName.max(50) })) } },
+  responses: {
+    201: { description: 'Created', ...json(TagSchema) },
+    200: { description: 'A tag with this name already exists, whatever its capitals.', ...json(TagSchema) },
+    default: problemResponse,
+  },
+});
+
+export const deleteTagRoute = createRoute({
+  method: 'delete',
+  path: '/api/v1/workspaces/{workspaceId}/tags/{tagId}',
+  tags: ['conversations'],
+  operationId: 'deleteTag',
+  summary: 'Delete a tag, and take it off everything',
+  security: bearer,
+  request: { params: tagParams },
+  responses: { 204: { description: 'Deleted' }, default: problemResponse },
+});
+
+export const setConversationTagsRoute = createRoute({
+  method: 'put',
+  path: '/api/v1/workspaces/{workspaceId}/conversations/{conversationId}/tags',
+  tags: ['conversations'],
+  operationId: 'setConversationTags',
+  summary: 'Replace the tags on a conversation',
+  description: "Does not move the conversation's version, so tagging never conflicts with a reply or an assignment. The last write wins.",
+  security: bearer,
+  request: { params: conversationParams, body: { required: true, ...json(z.strictObject({ tagIds: z.array(z.string().max(64)).max(50) })) } },
+  responses: { 204: { description: 'Updated' }, default: problemResponse },
 });

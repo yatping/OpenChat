@@ -1,5 +1,5 @@
-import { createAgentTicketRoute, getConversationRoute, listConversationsRoute, listMessagesRoute, markConversationReadRoute, sendMessageRoute, updateConversationRoute } from '@openchat/api-contracts';
-import { createAgentTicket, getConversation, listConversations, listMessages, markConversationRead, sendMessage, updateConversation, workspaceContext } from '@openchat/core';
+import { createAgentTicketRoute, createTagRoute, deleteTagRoute, getContactRoute, listTagsRoute, setConversationTagsRoute, updateContactRoute, getConversationRoute, listConversationsRoute, listMessagesRoute, markConversationReadRoute, sendMessageRoute, updateConversationRoute } from '@openchat/api-contracts';
+import { createAgentTicket, createTag, deleteTag, getContact, listTags, setConversationTags, updateContact, getConversation, listConversations, listMessages, markConversationRead, sendMessage, updateConversation, workspaceContext } from '@openchat/core';
 import type { Context } from 'hono';
 import { authDeps, type App, type AppEnv } from '../context';
 import { dispatchSoon, socketUrl } from '../dispatch';
@@ -14,6 +14,44 @@ export function registerConversationRoutes(app: App) {
   app.openapi(listConversationsRoute, async (c) => {
     const { db, ctx } = await scoped(c, c.req.valid('param').workspaceId);
     return c.json(await listConversations(db, ctx, c.req.valid('query')), 200);
+  });
+
+  app.openapi(getContactRoute, async (c) => {
+    const { workspaceId, contactId } = c.req.valid('param');
+    const { db, ctx } = await scoped(c, workspaceId);
+    return c.json(await getContact(db, ctx, contactId), 200);
+  });
+
+  app.openapi(updateContactRoute, async (c) => {
+    const { workspaceId, contactId } = c.req.valid('param');
+    const { db, ctx } = await scoped(c, workspaceId);
+    return c.json(await updateContact(db, ctx, contactId, c.req.valid('json')), 200);
+  });
+
+  app.openapi(listTagsRoute, async (c) => {
+    const { db, ctx } = await scoped(c, c.req.valid('param').workspaceId);
+    return c.json(await listTags(db, ctx), 200);
+  });
+
+  app.openapi(createTagRoute, async (c) => {
+    const { db, ctx } = await scoped(c, c.req.valid('param').workspaceId);
+    const { created, tag } = await createTag(db, ctx, c.req.valid('json').name);
+    return c.json(tag, created ? 201 : 200);
+  });
+
+  app.openapi(deleteTagRoute, async (c) => {
+    const { workspaceId, tagId } = c.req.valid('param');
+    const { db, ctx } = await scoped(c, workspaceId);
+    await deleteTag(db, ctx, tagId);
+    return c.body(null, 204);
+  });
+
+  app.openapi(setConversationTagsRoute, async (c) => {
+    const { workspaceId, conversationId } = c.req.valid('param');
+    const { db, ctx } = await scoped(c, workspaceId);
+    await setConversationTags(db, ctx, conversationId, c.req.valid('json').tagIds);
+    dispatchSoon(c, workspaceId, [conversationId]);
+    return c.body(null, 204);
   });
 
   app.openapi(getConversationRoute, async (c) => {

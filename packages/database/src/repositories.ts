@@ -71,10 +71,28 @@ export interface StoredMessage {
 export type ConversationStatus = 'open' | 'pending' | 'resolved' | 'archived';
 export type ConversationPriority = 'low' | 'normal' | 'high' | 'urgent';
 
+export interface TagRow {
+  id: string;
+  name: string;
+}
+
+export interface ContactRow {
+  id: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  firstSeenAt: number;
+  lastSeenAt: number;
+}
+
 export interface ConversationRow {
   id: string;
   websiteId: string;
   contactId: string;
+  contactName: string | null;
+  contactEmail: string | null;
+  /** A JSON array of TagRow. */
+  tagsJson: string;
   assignedMemberId: string | null;
   status: ConversationStatus;
   priority: ConversationPriority;
@@ -126,10 +144,20 @@ export const MESSAGE_SELECT = `SELECT m.id, m.conversation_id AS conversationId,
   LEFT JOIN contacts ct ON ct.workspace_id = sv.workspace_id AND ct.id = sv.contact_id`;
 
 /** ?1 is the calling member, for their read position. */
-const CONVERSATION_SELECT = `SELECT c.id, c.website_id AS websiteId, c.contact_id AS contactId, c.assigned_member_id AS assignedMemberId,
+const CONTACT_SELECT = `SELECT id, name, email, phone, first_seen_at AS firstSeenAt, last_seen_at AS lastSeenAt FROM contacts`;
+const MAX_TAGS = 500;
+
+/** The tags are read by primary key per row, and a page is at most 100 rows. */
+export const CONVERSATION_TAGS_JSON = `(SELECT COALESCE(json_group_array(json_object('id', t.id, 'name', t.name)), '[]')
+       FROM conversation_tags ct JOIN tags t ON t.workspace_id = ct.workspace_id AND t.id = ct.tag_id
+      WHERE ct.workspace_id = c.workspace_id AND ct.conversation_id = c.id)`;
+
+const CONVERSATION_SELECT = `SELECT c.id, c.website_id AS websiteId, c.contact_id AS contactId, k.name AS contactName, k.email AS contactEmail,
+    ${CONVERSATION_TAGS_JSON} AS tagsJson, c.assigned_member_id AS assignedMemberId,
     c.status, c.priority, c.subject, c.version, c.last_message_seq AS lastMessageSeq, c.last_public_seq AS lastPublicSeq,
     c.last_message_at AS lastMessageAt, COALESCE(r.read_seq, 0) AS lastReadSeq, c.created_at AS createdAt, c.updated_at AS updatedAt
   FROM conversations c
+  JOIN contacts k ON k.workspace_id = c.workspace_id AND k.id = c.contact_id
   LEFT JOIN conversation_read_cursors r ON r.workspace_id = c.workspace_id AND r.conversation_id = c.id
     AND r.reader_type = 'member' AND r.reader_id = ?1`;
 
@@ -177,6 +205,50 @@ export function repositories(database: Database, ctx: WorkspaceContext) {
       .bind(newId('outbox'), w, memberId, audit);
 
   return {
+    contacts: {
+      get(contactId: string): Promise<ContactRow | null> {
+        return d1.prepare(`${CONTACT_SELECT} WHERE workspace_id = ?1 AND id = ?2`).bind(w, contactId).first<ContactRow>();
+      },
+      /** Undefined leaves a field alone, and null clears it. */
+      async update(contactId: string, change: { name?: string | null | undefined; email?: string | null | undefined; phone?: string | null | undefined }): Promise<boolean> {
+        const field = (value: string | null | undefined) => [value === undefined ? 0 : 1, value ?? null];
+        const result = await d1
+          .prepare(
+            `UPDATE contacts
+                SET name = CASE WHEN ?1 THEN ?2 ELSE name END, email = CASE WHEN ?3 THEN ?4 ELSE email END,
+                    phone = CASE WHEN ?5 THEN ?6 ELSE phone END, updated_at = ${DB_NOW_MS}
+              WHERE workspace_id = ?7 AND id = ?8`,
+          )
+          .bind(...field(change.name), ...field(change.email), ...field(change.phone), w, contactId)
+          .run();
+        return result.meta.changes === 1;
+      },
+    },
+
+    tags: {
+      async list(): Promise<TagRow[]> {
+        const { results } = await d1.prepare(`SELECT id, name FROM tags WHERE workspace_id = ?1 ORDER BY name LIMIT ${MAX_TAGS}`).bind(w).all<TagRow>();
+        return results;
+      },
+      /** Null means that the workspace is at its limit, decided in SQL so that a race cannot exceed it. */
+      async create(name: string): Promise<{ created: boolean; tag: TagRow } | null> {
+        const insert = await d1
+          .prepare(
+            `INSERT INTO tags (id, workspace_id, name, created_at)
+             SELECT ?1, ?2, ?3, ${DB_NOW_MS} WHERE (SELECT COUNT(*) FROM tags WHERE workspace_id = ?2) < ${MAX_TAGS}
+             ON CONFLICT (workspace_id, name) DO NOTHING`,
+          )
+          .bind(newId('tag'), w, name)
+          .run();
+        const tag = await d1.prepare(`SELECT id, name FROM tags WHERE workspace_id = ?1 AND name = ?2`).bind(w, name).first<TagRow>();
+        return tag ? { created: insert.meta.changes === 1, tag } : null;
+      },
+      async delete(tagId: string): Promise<boolean> {
+        // D1 counts cascaded rows here too, so this cannot compare with 1.
+        return (await d1.prepare(`DELETE FROM tags WHERE workspace_id = ?1 AND id = ?2`).bind(w, tagId).run()).meta.changes > 0;
+      },
+    },
+
     workspace: {
       get(): Promise<WorkspaceRow | null> {
         return d1.prepare(`SELECT id, name, slug, created_at AS createdAt FROM workspaces WHERE id = ?1`).bind(w).first<WorkspaceRow>();
@@ -383,6 +455,46 @@ export function repositories(database: Database, ctx: WorkspaceContext) {
 
       assign(conversationId: string, memberId: string | null, expectedVersion: number): Promise<AssignResult> {
         return this.update(conversationId, { assignedMemberId: memberId }, expectedVersion);
+      },
+
+      /**
+       * Pattern 2 without a version: the first statement applies only if the conversation and every tag are in
+       * this workspace, and leaves a mark that guards the rest. Tagging does not conflict with anything else.
+       */
+      async setTags(conversationId: string, tagIds: string[]): Promise<'updated' | 'not_found' | 'unknown_tag'> {
+        const mutation = newId('mutation');
+        const ids = JSON.stringify(tagIds);
+        const mine = `EXISTS (SELECT 1 FROM conversations WHERE workspace_id = ?1 AND id = ?2 AND last_mutation_id = ?3)`;
+        const [update] = await d1.batch([
+          d1
+            .prepare(
+              `UPDATE conversations SET last_mutation_id = ?3, updated_at = ${DB_NOW_MS}
+                WHERE workspace_id = ?1 AND id = ?2
+                  AND (SELECT COUNT(*) FROM tags WHERE workspace_id = ?1 AND id IN (SELECT value FROM json_each(?4))) = ?5`,
+            )
+            .bind(w, conversationId, mutation, ids, tagIds.length),
+          d1.prepare(`DELETE FROM conversation_tags WHERE workspace_id = ?1 AND conversation_id = ?2 AND ${mine}`).bind(w, conversationId, mutation),
+          d1
+            .prepare(
+              `INSERT INTO conversation_tags (workspace_id, conversation_id, tag_id, created_at)
+               SELECT workspace_id, ?2, id, ${DB_NOW_MS} FROM tags WHERE workspace_id = ?1 AND id IN (SELECT value FROM json_each(?4)) AND ${mine}`,
+            )
+            .bind(w, conversationId, mutation, ids),
+          d1
+            .prepare(
+              `INSERT INTO conversation_events (id, workspace_id, conversation_id, event_type, actor_type, actor_id, metadata_json, created_at)
+               SELECT ?4, ?1, ?2, 'tags_changed', 'member', ?5, json_object('tagIds', json(?6)), ${DB_NOW_MS} WHERE ${mine}`,
+            )
+            .bind(w, conversationId, mutation, newId('event'), ctx.memberId, ids),
+          d1
+            .prepare(
+              `INSERT INTO outbox (id, workspace_id, topic, aggregate_id, payload_json, created_at)
+               SELECT ?4, ?1, 'conversation.updated', ?2, json_object('conversationId', ?2), ${DB_NOW_MS} WHERE ${mine}`,
+            )
+            .bind(w, conversationId, mutation, newId('outbox')),
+        ]);
+        if (update?.meta.changes === 1) return 'updated';
+        return (await this.get(conversationId)) ? 'unknown_tag' : 'not_found';
       },
 
       /** The database's clock, because update times come from it and a Worker's clock can disagree. */

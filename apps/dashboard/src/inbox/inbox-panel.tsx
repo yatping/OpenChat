@@ -35,7 +35,7 @@ const NEWEST = 2_147_483_647;
 const listKey = (workspaceId: string) => ['conversations', workspaceId];
 const threadKey = (workspaceId: string, id: string) => ['messages', workspaceId, id];
 const detailKey = (workspaceId: string, id: string) => ['conversation', workspaceId, id];
-const label = (conversation: Pick<Conversation, 'id' | 'subject'>) => conversation.subject ?? `Visitor ${conversation.id.slice(-6)}`;
+const label = (conversation: Pick<Conversation, 'id' | 'contactName' | 'contactEmail'>) => conversation.contactName ?? conversation.contactEmail ?? `Visitor ${conversation.id.slice(-6)}`;
 
 function eachList(client: QueryClient, workspaceId: string, change: (data: ConversationPages, filter: InboxFilter) => ConversationPages) {
   for (const query of client.getQueryCache().findAll({ queryKey: listKey(workspaceId) })) {
@@ -228,7 +228,11 @@ function ConversationList(props: { workspaceId: string; memberId: string; select
                 onClick={() => onSelect(row.id)}
               >
                 <span className={`size-2 shrink-0 rounded-full ${visitorsOnline.has(row.id) ? 'bg-green-600' : 'bg-transparent'}`} aria-hidden="true" />
-                <span className={`min-w-0 flex-1 truncate ${unread > 0 ? 'font-semibold' : ''}`}>{label(row)}</span>
+                <span className="min-w-0 flex-1">
+                  <span className={`block truncate ${unread > 0 ? 'font-semibold' : ''}`}>{label(row)}</span>
+                  {row.subject && <span className="block truncate text-xs text-slate-600 dark:text-slate-400">{row.subject}</span>}
+                  {row.tags.length > 0 && <span className="block truncate text-xs text-slate-600 dark:text-slate-400">{row.tags.map((tag) => tag.name).join(', ')}</span>}
+                </span>
                 {row.priority === 'urgent' || row.priority === 'high' ? <span className="text-xs font-medium text-red-700 dark:text-red-400">{row.priority}</span> : null}
                 {unread > 0 && <span className="rounded-full bg-blue-700 px-2 text-xs text-white">{unread}<span className="sr-only"> unread</span></span>}
               </button>
@@ -326,6 +330,97 @@ function Composer(props: { workspaceId: string; conversationId: string; drafts: 
   );
 }
 
+function ContactCard({ workspaceId, contactId }: { workspaceId: string; contactId: string }) {
+  const client = useQueryClient();
+  const contact = useQuery({ queryKey: ['contact', workspaceId, contactId], queryFn: () => api.getContact(workspaceId, contactId) });
+  const [edits, setEdits] = useState<{ name?: string; email?: string; phone?: string }>({});
+  const save = useMutation({
+    // An emptied field clears it. Only what was touched is sent.
+    mutationFn: () => api.updateContact(workspaceId, contactId, Object.fromEntries(Object.entries(edits).map(([key, value]) => [key, value.trim() || null]))),
+    onSuccess: (saved) => {
+      client.setQueryData(['contact', workspaceId, contactId], saved);
+      setEdits({});
+      void client.invalidateQueries({ queryKey: listKey(workspaceId) });
+      void client.invalidateQueries({ queryKey: ['conversation', workspaceId] });
+    },
+  });
+  const data = contact.data;
+  const field = (name: 'name' | 'email' | 'phone', title: string, type: string) => (
+    <label className="block text-xs font-medium">
+      {title}
+      <input className="field mt-1 font-normal" type={type} value={edits[name] ?? data?.[name] ?? ''} maxLength={name === 'phone' ? 40 : name === 'name' ? 100 : 254} onChange={(e) => setEdits({ ...edits, [name]: e.target.value })} />
+    </label>
+  );
+  return (
+    <form
+      className="card space-y-2"
+      aria-label="Contact"
+      onSubmit={(event) => {
+        event.preventDefault();
+        save.mutate();
+      }}
+    >
+      <h3 className="text-sm font-medium">Contact</h3>
+      {contact.error ? <p className="error" role="alert">{errorMessage(contact.error)}</p> : null}
+      {field('name', 'Name', 'text')}
+      {field('email', 'Email', 'email')}
+      {data?.email && <p className="text-xs text-slate-600 dark:text-slate-400">Not verified. Anyone can type any address.</p>}
+      {field('phone', 'Phone', 'tel')}
+      {save.error ? <p className="error" role="alert">{errorMessage(save.error)}</p> : null}
+      {Object.keys(edits).length > 0 && <button className="button-quiet" disabled={save.isPending}>Save contact</button>}
+      {data && <p className="text-xs text-slate-600 dark:text-slate-400">First seen {new Date(data.firstSeenAt).toLocaleDateString()}</p>}
+    </form>
+  );
+}
+
+function TagPicker({ workspaceId, conversation }: { workspaceId: string; conversation: Conversation }) {
+  const client = useQueryClient();
+  const available = useQuery({ queryKey: ['tags', workspaceId], queryFn: () => api.listTags(workspaceId) });
+  const [name, setName] = useState('');
+  const set = useMutation({
+    mutationFn: async (next: Conversation['tags']) => {
+      await api.setConversationTags(workspaceId, conversation.id, next.map((tag) => tag.id));
+      return next;
+    },
+    onSuccess: (tags) => applyConversationPatch(client, workspaceId, { id: conversation.id, version: conversation.version, tags }),
+  });
+  const add = useMutation({
+    mutationFn: () => api.createTag(workspaceId, name.trim()),
+    onSuccess: (tag) => {
+      setName('');
+      void client.invalidateQueries({ queryKey: ['tags', workspaceId] });
+      if (!conversation.tags.some((t) => t.id === tag.id)) set.mutate([...conversation.tags, tag]);
+    },
+  });
+  const failure = add.error ?? set.error;
+  const listId = `tags-${conversation.id}`;
+  return (
+    <section className="card space-y-2" aria-label="Tags">
+      <h3 className="text-sm font-medium">Tags</h3>
+      <ul className="flex flex-wrap gap-1">
+        {conversation.tags.map((tag) => (
+          <li key={tag.id} className="flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-xs dark:bg-slate-800">
+            {tag.name}
+            <button type="button" className="cursor-pointer font-bold" aria-label={`Remove tag ${tag.name}`} disabled={set.isPending} onClick={() => set.mutate(conversation.tags.filter((t) => t.id !== tag.id))}>×</button>
+          </li>
+        ))}
+      </ul>
+      <form
+        className="flex gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (name.trim()) add.mutate();
+        }}
+      >
+        <input className="field" aria-label="Add a tag" list={listId} maxLength={50} placeholder="Add a tag" value={name} onChange={(e) => setName(e.target.value)} />
+        <datalist id={listId}>{available.data?.data.map((tag) => <option key={tag.id} value={tag.name} />)}</datalist>
+        <button className="button-quiet" disabled={add.isPending || set.isPending || !name.trim()}>Add</button>
+      </form>
+      {failure ? <p className="error" role="alert">{errorMessage(failure)}</p> : null}
+    </section>
+  );
+}
+
 function Thread(props: { workspaceId: string; conversationId: string; members: Member[]; typing: TypingEntry[]; visitorOnline: boolean; drafts: Map<string, string>; realtime: { current: Realtime | null }; onBack: () => void }) {
   const { workspaceId, conversationId, members, typing, drafts, realtime } = props;
   const client = useQueryClient();
@@ -387,6 +482,7 @@ function Thread(props: { workspaceId: string; conversationId: string; members: M
   const data = conversation.data;
   const conflict = update.error instanceof ApiError && update.error.status === 409;
   return (
+    <div className="flex min-w-0 flex-1 flex-col gap-6 lg:flex-row">
     <section aria-label="Conversation" className="flex min-w-0 flex-1 flex-col gap-3">
       <button className="button-quiet self-start md:hidden" onClick={props.onBack}>Back to the list</button>
       {data && (
@@ -427,6 +523,13 @@ function Thread(props: { workspaceId: string; conversationId: string; members: M
       <p className="min-h-5 text-xs text-slate-600 dark:text-slate-400" aria-live="polite">{typists.length > 0 ? `${typists.join(', ')} ${typists.length > 1 ? 'are' : 'is'} typing…` : ''}</p>
       <Composer key={conversationId} workspaceId={workspaceId} conversationId={conversationId} drafts={drafts} realtime={realtime} />
     </section>
+    {data && (
+      <aside className="space-y-4 lg:w-64 lg:shrink-0">
+        <ContactCard key={data.contactId} workspaceId={workspaceId} contactId={data.contactId} />
+        <TagPicker workspaceId={workspaceId} conversation={data} />
+      </aside>
+    )}
+    </div>
   );
 }
 

@@ -221,6 +221,16 @@ describe('live delivery', () => {
     expect(status.data).toEqual({ conversationId, status: 'resolved' });
   });
 
+  it('tells agents about tags, and tells a visitor nothing about them', async () => {
+    const [a, v] = [await agentSocket(), await visitorSocket()];
+    const tag = await json<{ id: string }>(await call('POST', `${W}/tags`, { token: agent, body: { name: 'SECRET-TAG' } }));
+    await call('PUT', `${W}/conversations/${conversationId}/tags`, { token: agent, body: { tagIds: [tag.id] } });
+    expect((await a.next('conversation.updated')).data).toMatchObject({ conversation: { id: conversationId, tags: [{ id: tag.id, name: 'SECRET-TAG' }] } });
+    await agentSend('agent-after-tag');
+    await v.next('message.created');
+    expect(JSON.stringify(v.frames)).not.toContain('SECRET-TAG');
+  });
+
   it('announces a new conversation to agents', async () => {
     const a = await agentSocket();
     const session = await json<{ accessToken: string }>(await call('POST', '/api/v1/widget/sessions', { body: { websiteKey: 'key_rt' }, origin: SITE }));

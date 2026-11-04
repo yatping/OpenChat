@@ -243,6 +243,8 @@ A throwaway deployment, since removed, driven by a Node client.
 
 A second throwaway deployment, also removed, checked the next slice from the same client. Presence, typing in both directions, note typing kept from the visitor, `auth.refresh`, bootstrap availability, and a flood closed with 4429 all held. The real alarm reported a visitor gone 15 s after closing. Agent typing reached the other sockets in about 510 ms. After the objects began answering closes, a client's own close completed with 1000 in 146 to 439 ms, n=3, instead of 1006 after about 10 s.
 
+A third, also removed, ran the inbox in headless Chromium: sign-in, a conversation appearing without a reload, a `wss` socket allowed by the page's CSP, a reply reaching a visitor's socket and a note not reaching it, a message arriving after 40 s idle, and no script or CSP errors. Live arrival took 3,287 ms in that run, again with the Worker far from D1.
+
 **Latency here was poor, for a known reason:** this client reached the Worker through LAX, and D1 was in Singapore, at about 170 ms per query. A send answered in a median of 1,095 ms and reached a socket in 1,813 ms, n=12. Queries repeat this distance, so placement matters more than anything in the dispatch path. Smart Placement is still untested, and is part of the M1b load test.
 
 ### Follow-up deployment, 2026-11-04

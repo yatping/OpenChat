@@ -219,6 +219,45 @@ test('a new message does not get in the way of the next change', async ({ page }
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
+test('an agent corrects a contact, and the list shows the name', async ({ page }) => {
+  await signIn(page, OWNER);
+  const visitor = await startVisitor();
+  await row(page, visitor).click();
+  const contact = page.getByRole('form', { name: 'Contact' });
+  const name = `Dana ${visitor.conversationId.slice(-6)}`;
+  await contact.getByLabel('Name').fill(name);
+  await contact.getByLabel('Email').fill('dana@example.com');
+  await contact.getByRole('button', { name: 'Save contact' }).click();
+  await expect(contact.getByText('Not verified')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Conversations' }).getByRole('button', { name: new RegExp(name) })).toBeVisible();
+  await expect(page.getByRole('heading', { name })).toBeVisible();
+});
+
+test('tags appear for other agents as they change, and a visitor never sees them', async ({ page, browser }) => {
+  await signIn(page, OWNER);
+  const visitor = await startVisitor();
+  const socket = await visitor.socket();
+  const frames: string[] = [];
+  socket.addEventListener('message', (event) => frames.push(String(event.data)));
+  const other = await openSession(browser, AGENT);
+  await row(page, visitor).click();
+  await row(other, visitor).click();
+  const tags = page.getByRole('region', { name: 'Tags' });
+  await tags.getByLabel('Add a tag').fill('Refund');
+  await tags.getByRole('button', { name: 'Add' }).click();
+  await expect(tags.getByRole('button', { name: 'Remove tag Refund' })).toBeVisible();
+  await expect(other.getByRole('region', { name: 'Tags' }).getByRole('button', { name: 'Remove tag Refund' })).toBeVisible();
+  await expect(row(other, visitor)).toContainText('Refund');
+  await tags.getByRole('button', { name: 'Remove tag Refund' }).click();
+  await expect(other.getByRole('region', { name: 'Tags' }).getByRole('button', { name: 'Remove tag Refund' })).toHaveCount(0);
+  expect(frames.join()).not.toContain('Refund');
+  // Tagging does not stand in the way of a change that follows it.
+  await page.getByLabel('Priority').selectOption('low');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  socket.close();
+  await other.context().close();
+});
+
 test('typing shows while it happens, and goes away by itself', async ({ page }) => {
   await signIn(page, OWNER);
   const visitor = await startVisitor();

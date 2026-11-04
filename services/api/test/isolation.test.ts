@@ -55,6 +55,12 @@ const CASES: Record<string, Case> = {
   listVisitorMessages: { kind: 'visitor', ownerStatus: 200 },
   sendVisitorMessage: { kind: 'visitor', body: { clientMessageId: 'isolation-3', content: 'Taken over' }, ownerStatus: 201 },
   markVisitorConversationRead: { kind: 'visitor', body: { deliveredSeq: 0, readSeq: 0 }, ownerStatus: 204 },
+  getContact: { kind: 'workspace', ownerStatus: 200 },
+  updateContact: { kind: 'workspace', body: { name: 'Taken over' }, ownerStatus: 200 },
+  listTags: { kind: 'workspace', ownerStatus: 200 },
+  createTag: { kind: 'workspace', body: { name: 'taken-over' }, ownerStatus: 201 },
+  deleteTag: { kind: 'workspace', ownerStatus: 204 },
+  setConversationTags: { kind: 'workspace', body: { tagIds: [] }, ownerStatus: 204 },
   connectRealtime: { kind: 'public', reason: 'Takes a signed ticket, which names exactly what it may reach. Covered in realtime.test.ts' },
   createAgentTicket: { kind: 'workspace', ownerStatus: 201 },
   createVisitorTicket: { kind: 'visitor', ownerStatus: 201 },
@@ -130,8 +136,8 @@ const testEnv = { ...env, EMAIL_QUEUE: { send: async (_job: JobEnvelope) => unde
 
 /** Resources in each workspace, by the name of the path parameter that holds them. */
 const RESOURCES: Record<'a' | 'b', Record<string, string>> = {
-  a: { workspaceId: 'work_a', memberId: 'mem_a_agent', websiteId: 'site_a', conversationId: 'conv_a' },
-  b: { workspaceId: 'work_b', memberId: 'mem_b_agent', websiteId: 'site_b', conversationId: 'conv_b' },
+  a: { workspaceId: 'work_a', memberId: 'mem_a_agent', websiteId: 'site_a', conversationId: 'conv_a', contactId: 'cont_a', tagId: 'tag_a' },
+  b: { workspaceId: 'work_b', memberId: 'mem_b_agent', websiteId: 'site_b', conversationId: 'conv_b', contactId: 'cont_b', tagId: 'tag_b' },
 };
 
 function urlFor(path: string, ...sources: Record<string, string>[]): string {
@@ -163,7 +169,7 @@ const request = async (method: string, path: string, token: string | null, body?
   return response;
 };
 
-const TABLES = ['workspaces', 'workspace_members', 'websites', 'invitations', 'audit_log', 'outbox', 'conversation_read_cursors', 'conversation_events', 'messages', 'conversations', 'contacts', 'visitors'];
+const TABLES = ['workspaces', 'workspace_members', 'websites', 'invitations', 'audit_log', 'outbox', 'conversation_read_cursors', 'conversation_events', 'messages', 'conversations', 'tags', 'conversation_tags', 'contacts', 'visitors'];
 
 /** Every row belonging to workspace A. A refused request must leave this exactly as it was. */
 async function snapshotOfA(): Promise<string> {
@@ -189,6 +195,7 @@ async function seed() {
          (?1, ?2, ?3, 'owner', 'active', 1, 1), (?4, ?2, ?5, 'agent', 'active', 1, 1)`,
       ).bind(`mem_${w}_owner`, `work_${w}`, `user_${w}_owner`, `mem_${w}_agent`, `user_${w}_agent`),
       env.DB.prepare(`INSERT INTO websites (id, workspace_id, name, website_key, created_at, updated_at) VALUES (?1, ?2, 'Site', ?3, 1, 1)`).bind(`site_${w}`, `work_${w}`, `key_${w}`),
+      env.DB.prepare(`INSERT INTO tags (id, workspace_id, name, created_at) VALUES (?1, ?2, 'existing', 1)`).bind(`tag_${w}`, `work_${w}`),
       env.DB.prepare(`INSERT INTO contacts (id, workspace_id, first_seen_at, last_seen_at, created_at, updated_at) VALUES (?1, ?2, 1, 1, 1, 1)`).bind(`cont_${w}`, `work_${w}`),
       env.DB.prepare(`INSERT INTO conversations (id, workspace_id, website_id, contact_id, last_message_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, 1, 1, 1)`).bind(`conv_${w}`, `work_${w}`, `site_${w}`, `cont_${w}`),
     ]),

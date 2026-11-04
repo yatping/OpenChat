@@ -5,6 +5,9 @@
  */
 import type {
   createAgentTicketRoute,
+  createTagRoute,
+  getContactRoute,
+  updateContactRoute,
   createInvitationRoute,
   createWebsiteRoute,
   createWorkspaceRoute,
@@ -51,6 +54,9 @@ export type ConversationUpdate = BodyOf<typeof updateConversationRoute>;
 export type Message = Json200<typeof listMessagesRoute>['data'][number];
 export type MessageInput = BodyOf<typeof sendMessageRoute>;
 export type RealtimeTicket = Json201<typeof createAgentTicketRoute>;
+export type Tag = Json201<typeof createTagRoute>;
+export type Contact = Json200<typeof getContactRoute>;
+export type ContactUpdate = BodyOf<typeof updateContactRoute>;
 
 export class ApiError extends Error {
   readonly status: number;
@@ -139,6 +145,11 @@ export function createClient(options: ClientOptions) {
       get<{ data: Message[] }>(`${conversation(workspaceId, id)}/messages${query({ ...input, limit: 50 })}`),
     sendMessage: (workspaceId: string, id: string, input: MessageInput) => request<Message>('POST', `${conversation(workspaceId, id)}/messages`, input),
     markConversationRead: (workspaceId: string, id: string, seq: number) => request<void>('POST', `${conversation(workspaceId, id)}/read`, { deliveredSeq: seq, readSeq: seq }),
+    getContact: (workspaceId: string, id: string) => get<Contact>(`${workspace(workspaceId)}/contacts/${encodeURIComponent(id)}`),
+    updateContact: (workspaceId: string, id: string, input: ContactUpdate) => request<Contact>('PATCH', `${workspace(workspaceId)}/contacts/${encodeURIComponent(id)}`, input),
+    listTags: (workspaceId: string) => get<{ data: Tag[] }>(`${workspace(workspaceId)}/tags`),
+    createTag: (workspaceId: string, name: string) => request<Tag>('POST', `${workspace(workspaceId)}/tags`, { name }),
+    setConversationTags: (workspaceId: string, id: string, tagIds: string[]) => request<void>('PUT', `${conversation(workspaceId, id)}/tags`, { tagIds }),
     createRealtimeTicket: (workspaceId: string) => request<RealtimeTicket>('POST', `${workspace(workspaceId)}/realtime/tickets`),
   };
 }
