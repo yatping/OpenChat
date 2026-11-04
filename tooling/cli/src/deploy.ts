@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { generateOpaqueToken, generateSerializedKey, hashOpaqueToken } from '@openchat/auth';
 import { assertEmail, assertPublicUrl, bootstrapSql, recoverySql, resetLink } from './bootstrap';
+import { formatChecks, hasFailure, isMissingWorkersDev, runPreflight, WORKERS_DEV_HELP } from './preflight';
 import { renderConfig, type DeploymentState } from './render-config';
 
 export interface State extends Omit<DeploymentState, 'd1DatabaseId'> {
@@ -117,7 +118,13 @@ export function createDeployer(root: string) {
     console.log('Applying migrations');
     wrangler(['d1', 'migrations', 'apply', `oc-${state.name}`, '--remote', '-c', configPath(state.name)], { ci: true });
     console.log('Deploying the Worker');
-    const output = wrangler(['deploy', '-c', configPath(state.name)]);
+    let output: string;
+    try {
+      output = wrangler(['deploy', '-c', configPath(state.name)]);
+    } catch (error) {
+      if (isMissingWorkersDev(describeFailure(error))) throw new Error(WORKERS_DEV_HELP, { cause: error });
+      throw error;
+    }
     const url = /https:\/\/\S+\.workers\.dev/.exec(output)?.[0];
     if (url) state.publicBaseUrl ??= url;
     state.deployed = true;
@@ -172,6 +179,7 @@ export function createDeployer(root: string) {
     const base = state.publicBaseUrl!;
     console.log('Verifying');
     let last = 'no answer';
+    let loginFailing = false;
     for (let attempt = 0; attempt < 24; attempt++) {
       if (attempt > 0) await sleep(5000);
       try {
@@ -183,16 +191,35 @@ export function createDeployer(root: string) {
           body: JSON.stringify({ email: 'deploy-check@example.invalid', password: 'not a real password', clientType: 'mobile' }),
         });
         last = `health ${health.status}, discovery ${discovery.status}, login ${login.status}`;
+        loginFailing = login.status >= 500;
         // 429 counts too: the signing key loads before the limiter, and this address may just be busy.
         if (health.status === 200 && discovery.status === 200 && (login.status === 401 || login.status === 429)) return;
       } catch (error) {
         last = (error as Error).message;
       }
     }
-    throw new Error(`The deployment did not become healthy: ${last}`);
+    // On the Free plan, scrypt runs past the CPU limit, so the first sign of it is a login that errors.
+    const hint = loginFailing ? '\nLogin is erroring. Check that this account is on Workers Paid: the Free plan cannot run password hashing.' : '';
+    throw new Error(`The deployment did not become healthy: ${last}${hint}`);
+  }
+
+  /** Prints every check and returns false if any failed. Creates nothing. */
+  function preflight(options: Pick<DeployOptions, 'analytics' | 'emailFrom' | 'publicUrl'>): boolean {
+    const checks = runPreflight((args) => wrangler(args), {
+      nodeVersion: process.version,
+      accountIdFromEnv: process.env.CLOUDFLARE_ACCOUNT_ID,
+      resendKey: Boolean(process.env.RESEND_API_KEY),
+      ...(options.analytics === undefined ? {} : { analytics: options.analytics }),
+      emailFrom: options.emailFrom,
+      publicUrl: options.publicUrl,
+    });
+    console.log(formatChecks(checks));
+    return !hasFailure(checks);
   }
 
   return {
+    preflight,
+
     async deploy(options: DeployOptions) {
       if (options.publicUrl) assertPublicUrl(options.publicUrl);
       if (options.ownerEmail) assertEmail(options.ownerEmail);
@@ -201,7 +228,7 @@ export function createDeployer(root: string) {
       if (options.analytics) state.analyticsEngine = true;
       if (options.publicUrl) state.publicBaseUrl = options.publicUrl;
 
-      console.log(wrangler(['whoami']).split('\n').find((line) => /account|logged in/i.test(line)) ?? 'Checked Cloudflare login');
+      if (!preflight(options)) throw new Error('\nFix the items marked FAIL, then run this again. Nothing was created by this check.');
       await createResources(state, options.location);
       buildAndDeploy(state);
       await setSecrets(state, options.emailFrom);

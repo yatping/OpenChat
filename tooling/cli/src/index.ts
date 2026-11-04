@@ -9,6 +9,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
 function usage(): never {
   console.error(`Usage:
+  pnpm oc preflight [--analytics] [--public-url <https origin>] [--email-from <address>]
   pnpm oc deploy --env <name> --owner-email <address> [--owner-name <name>] [--workspace <name>]
                  [--public-url <https origin>] [--location <hint>] [--analytics] [--email-from <address>]
   pnpm oc recover --env <name> --email <address>
@@ -24,6 +25,11 @@ const flag = (name: string) => {
   return i >= 0 ? rest[i + 1] : undefined;
 };
 const env = flag('env');
+
+if (command === 'preflight') {
+  const ready = createDeployer(root).preflight({ analytics: rest.includes('--analytics'), emailFrom: flag('email-from'), publicUrl: flag('public-url') });
+  process.exit(ready ? 0 : 1);
+}
 if (!env) usage();
 
 async function main(name: string) {

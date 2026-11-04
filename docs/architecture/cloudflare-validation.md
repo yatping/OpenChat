@@ -24,7 +24,7 @@ Spike results are in [Phase 0 spike results](#phase-0-spike-results).
 | Workers static assets | Fits | Preferred over Pages for atomic deploys |
 | Rate limiting binding | Partly | Approximate and per location |
 | APNs from a Worker | **Risk, reduced** | Reached APNs from every Worker context in S1, but still rests on undocumented proxy behaviour |
-| Cloudflare Email Service | Optional | Public beta, paid plan |
+| Cloudflare Email Service | Optional, driver not built | Beta. Sending to any recipient needs Workers Paid and a domain on Cloudflare DNS. 3,000 emails a month included, then $0.35 per 1,000. The `send_email` binding documents no idempotency key. Checked on 2026-11-04 against the [docs](https://developers.cloudflare.com/email-service/); nothing has been sent |
 | Wrangler as deploy tool | Fits | The `cf` CLI is in beta; do not adopt it yet |
 
 ## D1
@@ -215,6 +215,11 @@ Measured on 2026-11-04 on a throwaway deployment, which was then removed.
 | Multiple statements in `wrangler d1 execute --command` | Works on remote D1 |
 | Queue consumer picking up a job after a deploy | About 10 seconds in one sample |
 | `oc deploy` from nothing to verified | About 80 seconds on a laptop, including the build |
+
+
+### Follow-up deployment, 2026-11-04
+
+A second throwaway deployment on the same account took about 90 seconds, then was removed. `oc preflight` passed, and with a bad API token it stopped before creating anything. `/api/*` answers carried `no-store` and `nosniff`. Account deletion answered 401 with no token, 400 with no password, 403 with a wrong password, and 409 for the last owner with the right one. A successful deletion has only run in workerd, because this deployment had one user. The check's failure cases for R2, D1, Queues, and several accounts, and the missing `workers.dev` message, have only run against a fake Wrangler.
 
 ## Sources
 

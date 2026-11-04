@@ -2,12 +2,25 @@
 
 Managed and independent configurations stay separate (spec rule 18). Only the configuration differs, and all code comes from the same tagged release.
 
-## Requirements
+## Prerequisites
 
-- Cloudflare account on **Workers Paid** ([ADR-0009](../architecture/decisions/0009-paid-plan-and-password-hashing.md)).
-- A domain on Cloudflare is recommended. `workers.dev` also works.
-- For email: an email provider or Cloudflare Email Sending.
-- For push, either nothing (managed relay), or an Apple Developer account (independent).
+Run `pnpm oc preflight` to check them. It only reads, and `oc deploy` runs the same check before creating anything. It marks what Wrangler can't read as `confirm`, so check those yourself.
+
+| Needed | When | How to set it up | How it is checked |
+|---|---|---|---|
+| Node 24 or newer, pnpm, and `pnpm install` | Always | See [local development](../development/local-dev.md#prerequisites) | Node version |
+| Cloudflare login | Always | `pnpm --filter @openchat/api exec wrangler login`, or `CLOUDFLARE_API_TOKEN` | `wrangler whoami` |
+| One chosen account | If the login reaches several | Set `CLOUDFLARE_ACCOUNT_ID` | Account count |
+| **Workers Paid** ([ADR-0009](../architecture/decisions/0009-paid-plan-and-password-hashing.md)) | Always | Workers & Pages > Plans | **Confirm yourself.** Wrangler can't read the plan. If the login probe errors after a deploy, the CLI points here |
+| **R2** added to the account | Always | Storage & databases > R2 > Overview, then complete the checkout. It's a one-time step | Lists buckets |
+| D1 and Queues access | Always | Included in Workers Paid. An API token needs the edit permissions | Lists each |
+| **`workers.dev` subdomain** | Unless every route is on your own domain, which `oc deploy` does not set up yet | Workers & Pages in the dashboard | **Confirm yourself.** The deploy stops with these instructions if it is missing, and running it again resumes |
+| Analytics Engine | With `--analytics` | Enable once in the dashboard | Confirm yourself |
+| Custom domain | With `--public-url` | A zone on Cloudflare, attached to the Worker. A domain is recommended, but `workers.dev` also works | Confirm yourself |
+| Email | To deliver invitations and resets | A Resend API key and verified domain. [Cloudflare Email Sending](../architecture/open-questions.md) is planned, not built. Without either, use `oc recover` | `--email-from` is present. Resend is not contacted |
+| Push | Later, in M3 | Nothing for the managed relay, or an Apple Developer account for independent mode | Not checked yet |
+
+A brand-new account has not been tried yet, so this list comes from Cloudflare's documentation and Wrangler's source, and may be incomplete.
 
 ## Resources per installation
 
@@ -66,8 +79,8 @@ Delivered in basic form in Milestone 1, and polished in Milestone 5. Each step i
 | # | Step | How | Spec §13 |
 |---|---|---|---|
 | 1 | Authenticate | `wrangler login` or `CLOUDFLARE_API_TOKEN` | 1 |
-| 2 | Select account | `wrangler whoami`. Selection among several accounts *(M5)* | 2 |
-| 3 | Pre-flight | Name collisions stop the run. Plan and version checks *(M5)* | |
+| 2 | Select account | `wrangler whoami`. With several accounts, set `CLOUDFLARE_ACCOUNT_ID`. An interactive choice *(M5)* | 2 |
+| 3 | Pre-flight | [The checks above](#prerequisites), before anything is created. Name collisions stop the run when that resource is created | |
 | 4 | Create resources | Wrangler, recording IDs in `state.json` | 3 |
 | 5 | Generate secrets | Generated locally, sent to `wrangler secret bulk` on stdin, **never written to disk**. Only once, because a new signing key signs everyone out. Set after the first deploy, so auth routes answer 503 for a few seconds on a new install. Others arrive with the features that use them | 6 |
 | 6 | Apply migrations | `wrangler d1 migrations apply --remote` | 4 |
