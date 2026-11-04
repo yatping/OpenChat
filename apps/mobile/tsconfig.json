@@ -1,0 +1,12 @@
+{
+  "extends": "@openchat/tsconfig/base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true
+  },
+  "include": ["app", "src", "config", "app.config.ts"]
+}

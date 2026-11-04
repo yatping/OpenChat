@@ -1,3 +1,11 @@
 # OpenChat mobile
 
-Placeholder. The Expo app is initialised in Milestone 2, after spike S7. The design is in [the iOS build guide](../../docs/ios-build/expo-and-white-label.md).
+The iOS app, built with Expo. It is in progress as Milestone 2, and today shows only a placeholder screen. The design is in [the iOS build guide](../../docs/ios-build/expo-and-white-label.md).
+
+```sh
+pnpm prebuild
+(cd ios && pod install)
+pnpm start
+```
+
+Then build and run `ios/OpenChat.xcworkspace` in Xcode. Signing files never go in this repository.

@@ -9,7 +9,7 @@ Verified from a clean copy of the repository on 2026-11-03. Commands marked *(M1
 | Node | 24, from `.nvmrc` | |
 | pnpm | Pinned through `packageManager` in `package.json` | |
 | Wrangler | Project dev dependency | **Always `pnpm exec wrangler`.** A global install can be years out of date, and old versions lack features this project relies on |
-| Xcode, EAS CLI | Mobile only | |
+| Xcode, CocoaPods | Mobile only | |
 
 No Cloudflare account is needed for ordinary local development.
 
@@ -74,8 +74,10 @@ Local development cannot prove these: APNs delivery, D1 performance and concurre
 Push does not work in a simulator without care, and Expo Go is unsuitable, so use a **development build**:
 
 ```bash
-pnpm --filter mobile eas build --profile development
-pnpm --filter mobile start --dev-client
+pnpm --filter @openchat/mobile prebuild
+(cd apps/mobile/ios && pod install)
+# then build ios/OpenChat.xcworkspace in Xcode, and run:
+pnpm --filter @openchat/mobile start
 ```
 
 iOS requires HTTPS for ordinary connections. To reach a local Worker, use a Cloudflare Tunnel (`cloudflared tunnel --url http://localhost:8787`) rather than weakening App Transport Security. This also matches production. Push testing uses a physical device, a development build (sandbox environment), and a deployed preview relay.
