@@ -82,6 +82,17 @@ Visitor sessions, contacts, conversations, messages with Pattern 1, and status a
 
 **Security review:** tenant isolation, visitor tokens, attachments, and XSS.
 
+### M1b status
+
+In progress, one PR per slice. Done so far:
+
+| Slice | State |
+|---|---|
+| Conversations and messages for agents, over REST | Merged. Tested in workerd. Attachments are empty and tags are not in the response yet |
+| Visitor sessions and the widget API | Next |
+| Sockets, tickets, outbox dispatch, and the sweep | Not started. Outbox rows are written, but nothing dispatches them yet |
+| Inbox UI, widget UI, attachments, load test | Not started |
+
 ## M2: iOS app without push (L)
 
 Expo app, Connection manager, discovery and compatibility check, sign-in, workspace selector, inbox, conversation view, composer, attachments, contact details, profile and account deletion, secure storage, and realtime in the foreground with catch-up.

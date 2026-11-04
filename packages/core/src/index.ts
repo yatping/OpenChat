@@ -27,3 +27,4 @@ export interface BlobStore {
 
 export * from './auth-flows';
 export * from './workspaces';
+export * from './messaging';

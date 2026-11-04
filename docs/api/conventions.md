@@ -85,6 +85,8 @@ A 404 means "not found" only when it is `application/problem+json`. Cloudflare o
 
 Keyset only. Requests take `limit` (default 25, max 100) and `cursor`. Responses return `{ "data": [...], "nextCursor": "..." | null }`. Cursors are opaque, include a version, and are bound to the filters used.
 
+An inbox listing takes one `status`, defaulting to `open`, because the inbox indexes start with it. Listing every status at once would need a sort over the whole workspace.
+
 ### Idempotency and concurrency
 
 | Operation | Mechanism |

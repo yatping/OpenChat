@@ -182,9 +182,9 @@ describe('assignment (Pattern 2)', () => {
     expect((await d1.prepare(`SELECT version FROM conversations WHERE id='c1'`).first<{ version: number }>())!.version).toBe(1);
   });
 
-  it('fails the whole batch if the assignee is in another tenant', async () => {
+  it('refuses an assignee in another tenant, and changes nothing', async () => {
     const ctx = await contextFor('u1', 'w1');
-    await expect(repositories(db, ctx).conversations.assign('c1', 'm2', 1)).rejects.toThrow(/FOREIGN KEY/);
+    expect(await repositories(db, ctx).conversations.assign('c1', 'm2', 1)).toEqual({ outcome: 'invalid_assignee' });
     expect(await count('conversation_events')).toBe(0);
     expect((await repositories(db, ctx).conversations.get('c1'))!.version).toBe(1);
   });

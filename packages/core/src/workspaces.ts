@@ -33,7 +33,7 @@ export async function workspaceContext(db: Database, principal: Principal, works
   return ctx;
 }
 
-const requireCapability = (ctx: WorkspaceContext, capability: Capability) => {
+export const requireCapability = (ctx: WorkspaceContext, capability: Capability) => {
   if (!can(ctx.role, capability)) throw forbidden();
 };
 

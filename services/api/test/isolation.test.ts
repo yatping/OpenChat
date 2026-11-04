@@ -45,6 +45,12 @@ const CASES: Record<string, Case> = {
   listWebsites: { kind: 'workspace', ownerStatus: 200 },
   createWebsite: { kind: 'workspace', body: { name: 'Taken over', allowedOrigins: [] }, ownerStatus: 201 },
   updateWebsite: { kind: 'workspace', body: { name: 'Taken over' }, ownerStatus: 200 },
+  listConversations: { kind: 'workspace', ownerStatus: 200 },
+  getConversation: { kind: 'workspace', ownerStatus: 200 },
+  updateConversation: { kind: 'workspace', body: { expectedVersion: 1, priority: 'urgent' }, ownerStatus: 200 },
+  listMessages: { kind: 'workspace', ownerStatus: 200 },
+  sendMessage: { kind: 'workspace', body: { clientMessageId: 'isolation-1', type: 'text', content: 'Taken over' }, ownerStatus: 201 },
+  markConversationRead: { kind: 'workspace', body: { deliveredSeq: 0, readSeq: 0 }, ownerStatus: 204 },
 };
 
 /** Served by the app, but not part of the versioned contract. */
@@ -111,8 +117,8 @@ const testEnv = { ...env, EMAIL_QUEUE: { send: async (_job: JobEnvelope) => unde
 
 /** Resources in each workspace, by the name of the path parameter that holds them. */
 const RESOURCES: Record<'a' | 'b', Record<string, string>> = {
-  a: { workspaceId: 'work_a', memberId: 'mem_a_agent', websiteId: 'site_a' },
-  b: { workspaceId: 'work_b', memberId: 'mem_b_agent', websiteId: 'site_b' },
+  a: { workspaceId: 'work_a', memberId: 'mem_a_agent', websiteId: 'site_a', conversationId: 'conv_a' },
+  b: { workspaceId: 'work_b', memberId: 'mem_b_agent', websiteId: 'site_b', conversationId: 'conv_b' },
 };
 
 function urlFor(path: string, ...sources: Record<string, string>[]): string {
@@ -139,7 +145,7 @@ const request = (method: string, path: string, token: string | null, body?: Reco
     createExecutionContext(),
   );
 
-const TABLES = ['workspaces', 'workspace_members', 'websites', 'invitations', 'audit_log'];
+const TABLES = ['workspaces', 'workspace_members', 'websites', 'invitations', 'audit_log', 'outbox', 'conversation_read_cursors', 'conversation_events', 'messages', 'conversations', 'contacts'];
 
 /** Every row belonging to workspace A. A refused request must leave this exactly as it was. */
 async function snapshotOfA(): Promise<string> {
@@ -153,7 +159,7 @@ let passwordHash = '';
 const tokens = { ownerA: '', ownerB: '' };
 
 async function seed() {
-  await env.DB.batch([...TABLES.filter((t) => t !== 'workspaces'), 'auth_sessions', 'workspaces', 'users', 'installation'].map((t) => env.DB.prepare(`DELETE FROM ${t}`)));
+  await env.DB.batch([...TABLES.filter((t) => t !== 'workspaces').reverse(), 'auth_sessions', 'workspaces', 'users', 'installation'].map((t) => env.DB.prepare(`DELETE FROM ${t}`)));
   await env.DB.batch([
     env.DB.prepare(`INSERT INTO installation (id, name, public_base_url, created_at, updated_at) VALUES ('inst_test', 'Test', '${ORIGIN}', 1, 1)`),
     ...(['a', 'b'] as const).flatMap((w) => [
@@ -165,6 +171,8 @@ async function seed() {
          (?1, ?2, ?3, 'owner', 'active', 1, 1), (?4, ?2, ?5, 'agent', 'active', 1, 1)`,
       ).bind(`mem_${w}_owner`, `work_${w}`, `user_${w}_owner`, `mem_${w}_agent`, `user_${w}_agent`),
       env.DB.prepare(`INSERT INTO websites (id, workspace_id, name, website_key, created_at, updated_at) VALUES (?1, ?2, 'Site', ?3, 1, 1)`).bind(`site_${w}`, `work_${w}`, `key_${w}`),
+      env.DB.prepare(`INSERT INTO contacts (id, workspace_id, first_seen_at, last_seen_at, created_at, updated_at) VALUES (?1, ?2, 1, 1, 1, 1)`).bind(`cont_${w}`, `work_${w}`),
+      env.DB.prepare(`INSERT INTO conversations (id, workspace_id, website_id, contact_id, last_message_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, 1, 1, 1)`).bind(`conv_${w}`, `work_${w}`, `site_${w}`, `cont_${w}`),
     ]),
   ]);
 }
