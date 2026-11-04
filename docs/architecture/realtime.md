@@ -1,6 +1,6 @@
 # Realtime: Durable Objects and WebSocket lifecycle
 
-Frames are defined in [realtime-protocol.draft.ts](../api/realtime-protocol.draft.ts). Decision record: [ADR-0002](decisions/0002-durable-object-topology.md).
+Frames are defined in `packages/api-contracts/src/realtime.ts`, and published in the generated OpenAPI document. Decision record: [ADR-0002](decisions/0002-durable-object-topology.md).
 
 ## Principles
 

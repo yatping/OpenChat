@@ -4,7 +4,7 @@ OpenChat is an open-source,
 Cloudflare-native customer messaging platform: a website widget, a team inbox, a multi-installation iOS app,
 a replaceable notification relay, and email follow-ups.
 
-**Current state:** Milestone 1a is built and verified on real Cloudflare, with [items only the owner can close](docs/plan/milestones.md#m1a-status). Milestone 1b is in progress: messaging, sockets, the inbox, and the widget work, and [the rest is listed](docs/plan/milestones.md).
+**Current state:** Milestone 1a is built and verified on real Cloudflare, with [items only the owner can close](docs/plan/milestones.md#m1a-status). Milestone 1b's exit criteria are met, with [limits and owner decisions listed](docs/plan/milestones.md#m1b-exit-check). Milestone 2 is next.
 
 ## Read before you change anything
 

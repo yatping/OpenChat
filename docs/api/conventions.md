@@ -14,7 +14,7 @@ packages/api-contracts  (Zod schemas and route definitions, plus WebSocket frame
         +--> generated/openapi.json: committed. CI fails if it differs from a fresh generation.
 ```
 
-[`openapi.draft.yaml`](openapi.draft.yaml) and [`realtime-protocol.draft.ts`](realtime-protocol.draft.ts) are the agreed design for the MVP. In Phase 0 and Milestone 1 they are implemented in Zod, and the generated document replaces the draft.
+[`openapi.draft.yaml`](openapi.draft.yaml) and [`realtime-protocol.draft.ts`](realtime-protocol.draft.ts) were the agreed design for the MVP. **The generated document is now the source of truth for everything it contains.** The draft stays only as the design for what is not built: push grants and subscriptions, notification preferences, and unsubscribe, for later milestones, and a contact list and merge, which no milestone has yet. Its `/api/v1/realtime/tickets` was replaced by one route for agents and one for visitors. Delete the draft when these are built.
 
 **WebSockets and OpenAPI.** OpenAPI has no first-class way to describe WebSocket frames. So the upgrade route is an ordinary path, and frame schemas are published under `components/schemas` from the same Zod source, which gives third parties one document and one set of types. AsyncAPI can be generated later if demand appears.
 

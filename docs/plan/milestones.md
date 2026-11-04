@@ -84,7 +84,7 @@ Visitor sessions, contacts, conversations, messages with Pattern 1, and status a
 
 ### M1b status
 
-In progress, one PR per slice. Done so far:
+**The exit criteria are met, with the limits below.** Every slice is merged. M2 can start, but the [decisions](#m1b-decisions-for-the-owner) should come before anyone runs this for strangers.
 
 | Slice | State |
 |---|---|
@@ -97,7 +97,44 @@ In progress, one PR per slice. Done so far:
 | Attachments | Merged. Files both ways between the widget and the inbox, covered by API and browser tests, and verified on real R2, [with these results](../architecture/cloudflare-validation.md#attachments-on-real-r2-2026-11-04). A visitor can attach only after a conversation exists, one file at a time. The size limit is not yet per workspace. There is no malware scanning, and the iOS app does not exist yet |
 | Turnstile | Merged. Tested in workerd and browsers, and on real Cloudflare with published test keys, [with these results](../architecture/cloudflare-validation.md#turnstile-on-real-cloudflare-2026-11-04). A real site key is untested |
 | Load test | Merged. About 45 messages a second per database, 1,000 sockets reconnecting with nothing missing, Smart Placement now the default, and a cost estimate, [with these results and limits](../architecture/cloudflare-validation.md#m1b-load-test-on-real-d1-2026-11-04). A herd from 1,000 real addresses is untested |
-| Security review | In review. Four defects fixed, and real deployments attacked from outside, [with these results and gaps](../architecture/security-review-m1b.md). Not independent |
+| Security review | Merged. Four defects fixed, and real deployments attacked from outside, [with these results and gaps](../architecture/security-review-m1b.md). Not independent |
+
+### M1b exit check
+
+Checked on 2026-11-04 against what was actually run. "Real" means a throwaway deployment on Cloudflare, since removed.
+
+| Criterion | Evidence | Limit |
+|---|---|---|
+| Visitor starts a conversation, agent replies live, messages persist | Browser tests, and [Chromium on real](../architecture/cloudflare-validation.md#widget-on-real-cloudflare-2026-11-04) | Chromium only |
+| Several agents see the same conversation | Browser test, and one message reaching [1,000 sockets on real](../architecture/cloudflare-validation.md#m1b-load-test-on-real-d1-2026-11-04) | Those sockets were one member |
+| Workspace isolation by test | The isolation suite fails for a route with no case, and [attacked on real](../architecture/security-review-m1b.md#what-was-attacked-on-a-real-deployment) | |
+| Notes never reach a visitor | Table-driven test of all event types, and attacked on real by REST and socket | |
+| Replay creates one message | Browser test, 10 racing sends on real D1, and retries under overload | |
+| Force-disconnect loses nothing | 1,000 clients on real, none missing a message, with messages sent during it | The clients closed their own sockets. A real network failure was not simulated at this scale |
+| REST works if WebSockets are blocked | Browser tests for the inbox and the widget | Local Worker only |
+| Sockets survive hibernation and a deploy | S2 for hibernation. A deploy under the widget in Chromium, one socket throughout, nothing lost. A deploy under 1,000 sockets | **About 5% of the 1,000 closed around the deploy**, and did not reconnect in that run. Recovery by reconnecting was tested separately |
+| Widget budgets | Enforced in the build: 1.6 KB and 15.7 KB gzipped, and loaded only after idle or click | |
+| Load test | About 45 messages a second, p95 under 1 s at that rate, 1,000 reconnecting, and a cost estimate | One machine, so a herd from 1,000 addresses is untested. What sets the ceiling is unknown |
+| Security review | [Done](../architecture/security-review-m1b.md), with four defects fixed | Not independent |
+
+### M1b open items
+
+| Item | Why it matters |
+|---|---|
+| Latency depends on where D1 is | Smart Placement took a send from about 980 ms to 520 ms for a distant client. Choose `--location` near users |
+| Smart Placement on a brand-new deployment | The test deployment had just been on an explicit region |
+| Contacts and tags, the hourly orphan sweep, and the stale socket alarm have not run on real Cloudflare | Covered in workerd or a local Worker only |
+| The widget shows one conversation, and a required email is enforced only by the widget | The API allows more than the widget shows |
+| The inbox does not show a visitor's read position | The data exists |
+| No contact list or merge | In the draft API but not in this milestone's scope, and [`security.md`](../architecture/security.md#visitor-authentication) describes merging as an agent action. It needs a milestone |
+| The uninstall steps do not cover a bucket with files in it | Wrangler cannot empty one |
+| One unexplained missing compose box in a browser | Did not recur in 15 tries |
+| A socket with no heartbeat drops at about 60 s, for a reason not determined | Clients send one, so this does not affect them |
+
+### M1b decisions for the owner
+
+1. **A storage budget per website.** Nothing caps total stored data, and [one address could fill D1 in about a day](../architecture/security-review-m1b.md#gaps-to-close-later). Recommended before anyone runs this for strangers.
+2. **An independent security review** before general release, covering M1a and M1b.
 
 ## M2: iOS app without push (L)
 
