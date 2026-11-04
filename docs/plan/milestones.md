@@ -55,7 +55,7 @@ Built and verified on real Cloudflare on 2026-11-04, except for the items below,
 
 | Exit criterion | State |
 |---|---|
-| Deploy with one command | **Partly.** `oc deploy` worked in about 80 seconds on an existing Workers Paid account. **Not tried on a brand new account**, where R2 and a `workers.dev` subdomain may need enabling first |
+| Deploy with one command | **Partly.** `oc deploy` worked in about 80 seconds on an existing Workers Paid account. **Not tried on a brand new account.** `oc preflight` now checks or lists [the prerequisites](../operations/deployment.md#prerequisites), including R2 and the `workers.dev` subdomain, but its failure cases have only run against a fake Wrangler, apart from a bad login |
 | First owner signs in, creates a website, invites a member | Done on a real deployment. The invitation email itself is not delivered without a provider |
 | Reset by email, and CLI recovery without email | **Partly.** CLI recovery is verified on a real deployment. **No email has gone through Resend**, which needs an API key and a verified domain |
 | Isolation test enumerates all routes | Done, and shown to fail for a route with no case |
