@@ -168,12 +168,14 @@ export const getMeRoute = createRoute({
 });
 
 export const deleteMeRoute = createRoute({
-  method: 'delete',
-  path: '/api/v1/me',
+  method: 'post',
+  path: '/api/v1/me/delete',
   tags: ['auth'],
   operationId: 'deleteMe',
-  summary: 'Anonymise the account and leave all workspaces. Refused for the last owner of a workspace.',
+  summary: 'Anonymise the account and leave all workspaces. Needs the password. Refused for the last owner of a workspace.',
+  description: 'A POST, because the password travels in the body and a DELETE body has no defined meaning. A wrong password answers 403, not 401, since the access token is valid and a client must not refresh and retry. Attempts share the login limit for the account.',
   security: bearer,
+  request: { body: { required: true, ...json(z.strictObject({ password: z.string().min(1).max(1024) })) } },
   responses: { 204: { description: 'Deleted' }, default: problemResponse },
 });
 

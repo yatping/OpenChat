@@ -192,11 +192,24 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Me' }
         default: { $ref: '#/components/responses/Problem' }
-    delete:
+
+  # Implemented in M1a. The generated OpenAPI document is authoritative for this route.
+  /api/v1/me/delete:
+    post:
       tags: [auth]
       operationId: deleteMe
-      summary: Delete the current account on this installation
+      summary: Delete the current account on this installation. Needs the password.
       description: Anonymises the user and removes memberships. Rejected if the user is the last owner of a workspace.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [password]
+              properties:
+                password: { type: string, minLength: 1, maxLength: 1024 }
       responses:
         '204': { description: Deleted }
         default: { $ref: '#/components/responses/Problem' }

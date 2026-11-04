@@ -56,7 +56,7 @@ Every request verifies, in order: identity, membership, permission, resource own
 | Invitation token | Created as the email is sent, so no token reaches a queue, and stored as SHA-256. A duplicate job delivery replaces the token, so the newest email holds the working link. Lasts 7 days. |
 | Accepting | Holding the token proves control of the address, so the account is marked verified. An existing account joins without a password, and its name and password are never changed. |
 | Invitation limit | 30 per workspace per hour, because each one sends an email to any address. |
-| Deleting an account | Anonymised, not deleted, because messages keep their authors. Refused for the last active owner of a workspace. |
+| Deleting an account | Anonymised, not deleted, because messages keep their authors. Needs the password again, because it can't be undone and an access token can be stolen. A wrong password answers 403, so that clients do not refresh and retry, and attempts share the login limits. Refused for the last active owner of a workspace. |
 | Allowed origins | Exact origins only: no wildcards or paths, and plain HTTP only on the local machine. |
 
 ## Visitor authentication

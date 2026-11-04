@@ -59,4 +59,4 @@ An earlier run appeared to show a 300 ms difference. That run used fresh address
 
 ## Decisions for the owner
 
-1. **Should `DELETE /api/v1/me` ask for the password again?** It needs only a bearer token, as the draft API specifies, so a stolen access token could delete the account within its 15 minutes. **Recommendation: yes**, since the operation can't be undone. This is a small contract change.
+1. **Should deleting an account ask for the password again?** **Decided: yes, and implemented.** It needed only a bearer token, so a stolen access token could delete the account within its 15 minutes. It is now `POST /api/v1/me/delete` with the password, under the login limits.
