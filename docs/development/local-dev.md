@@ -78,7 +78,6 @@ pnpm --filter @openchat/mobile prebuild
 (cd apps/mobile/ios && pod install)
 # then build ios/OpenChat.xcworkspace in Xcode, and run:
 pnpm --filter @openchat/mobile start
-pnpm --filter mobile start --dev-client
 ```
 
 iOS requires HTTPS for ordinary connections. To reach a local Worker, use a Cloudflare Tunnel (`cloudflared tunnel --url http://localhost:8787`) rather than weakening App Transport Security. This also matches production. Push testing uses a physical device, a development build (sandbox environment), and a deployed preview relay.
