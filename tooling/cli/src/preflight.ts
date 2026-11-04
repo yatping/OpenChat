@@ -15,6 +15,7 @@ export interface PreflightOptions {
   accountIdFromEnv?: string | undefined;
   analytics?: boolean;
   resendKey?: boolean;
+  cloudflareEmail?: boolean;
   emailFrom?: string | undefined;
   publicUrl?: string | undefined;
 }
@@ -51,6 +52,25 @@ function readLogin(run: (args: string[]) => string): { loggedIn?: boolean; accou
     return JSON.parse(output.slice(output.indexOf('{'))) as { loggedIn?: boolean; accounts?: { name?: string }[] };
   } catch {
     return null;
+  }
+}
+
+function checkCloudflareEmail(run: (args: string[]) => string, options: PreflightOptions): Check {
+  const name = 'Email';
+  if (options.resendKey) return { name, status: 'fail', detail: 'Choose one: RESEND_API_KEY or --cloudflare-email' };
+  const domain = options.emailFrom?.split('@')[1];
+  if (!domain) return { name, status: 'fail', detail: '--cloudflare-email needs --email-from, an address on a domain onboarded for Email Sending' };
+  const enable = `Onboard it with: pnpm --filter @openchat/api exec wrangler email sending enable ${domain}`;
+  try {
+    const output = run(['email', 'sending', 'list', domain]);
+    if (output.toLowerCase().includes(domain.toLowerCase())) return { name, status: 'ok', detail: `Cloudflare Email Sending is set up for ${domain}` };
+    return { name, status: 'fail', detail: `Email Sending is not set up for ${domain}. ${enable}` };
+  } catch (error) {
+    const detail = reason(error);
+    if (/\[code: 10000\]|authentication error/i.test(`${detail} ${(error as { stderr?: string }).stderr ?? ''}`)) {
+      return { name, status: 'fail', detail: 'This login cannot manage Email Sending. Run again: pnpm --filter @openchat/api exec wrangler login. An API token needs Email Sending edit permission' };
+    }
+    return { name, status: 'fail', detail: `${detail}\nThe domain must use Cloudflare DNS in this account. ${enable}` };
   }
 }
 
@@ -100,7 +120,9 @@ export function runPreflight(run: (args: string[]) => string, options: Preflight
     checks.push({ name: 'Custom domain', status: 'confirm', detail: `Attach ${options.publicUrl} to the Worker yourself. The zone must be on Cloudflare` });
   }
 
-  if (options.resendKey && !options.emailFrom) {
+  if (options.cloudflareEmail) {
+    checks.push(checkCloudflareEmail(run, options));
+  } else if (options.resendKey && !options.emailFrom) {
     checks.push({ name: 'Email', status: 'fail', detail: 'RESEND_API_KEY needs --email-from, an address on a domain verified with Resend' });
   } else if (options.resendKey) {
     checks.push({ name: 'Email', status: 'confirm', detail: `Resend is not contacted here. Confirm that the domain of ${options.emailFrom} is verified with Resend` });

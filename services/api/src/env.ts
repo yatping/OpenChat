@@ -10,10 +10,12 @@ export interface Env {
   AUTH_GUARD: DurableObjectNamespace<AuthGuard>;
   /** JSON: { active: { kid, privateKey, publicKey }, retired?: [{ kid, publicKey }] }. Worker secret. */
   AUTH_SIGNING_KEY?: string;
-  /** `resend`, or `console` for local development only. With neither, email jobs retry and dead-letter. */
+  /** `resend`, `cloudflare`, or `console` for local development only. With none, email jobs retry and dead-letter. */
   EMAIL_PROVIDER?: string;
   /** Worker secret. */
   RESEND_API_KEY?: string;
+  /** Cloudflare Email Service. Only rendered for a deployment that chose it, restricted to its sending address. */
+  EMAIL?: SendEmail;
   /** The sending address for system email, on a domain verified with the provider. */
   SYSTEM_EMAIL_FROM?: string;
   NOTIFICATIONS_QUEUE: Queue;

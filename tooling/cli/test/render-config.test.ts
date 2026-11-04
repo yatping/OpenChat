@@ -6,6 +6,11 @@ const source = readFileSync(new URL('../../../services/api/wrangler.template.jso
 const state = { name: 'acme-prod', d1DatabaseId: '00000000-0000-0000-0000-000000000000' };
 
 describe('renderConfig', () => {
+  it('adds the email binding only when chosen, restricted to the sending address', () => {
+    expect(renderConfig(source, state, '../../services/api').send_email).toBeUndefined();
+    expect(renderConfig(source, { ...state, cloudflareEmailFrom: 'no-reply@example.com' }, '../../services/api').send_email).toEqual([{ name: 'EMAIL', allowed_sender_addresses: ['no-reply@example.com'] }]);
+  });
+
   const rendered = renderConfig(source, state, '../../services/api');
 
   it('prefixes every resource', () => {
