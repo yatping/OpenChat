@@ -95,8 +95,9 @@ In progress, one PR per slice. Done so far:
 | Inbox UI, contact details, tags | Merged. Conversation list, thread, replies, notes, status, priority, assignment, typing, presence, reconnection, contacts, and tags, covered by browser tests against a local Worker. The inbox was verified in a browser on real Cloudflare; contacts and tags were not. There is no UI yet to rename or delete tags, or to list or merge contacts |
 | Widget UI | Merged. Loader and chat bundle, within budget. Covered by browser tests on a page from another origin, and verified in Chromium on real Cloudflare, [with these results](../architecture/cloudflare-validation.md#widget-on-real-cloudflare-2026-11-04). English only, with translations in Milestone 6. It shows one conversation, the latest. A required email is enforced by the widget, not the server |
 | Attachments | Merged. Files both ways between the widget and the inbox, covered by API and browser tests, and verified on real R2, [with these results](../architecture/cloudflare-validation.md#attachments-on-real-r2-2026-11-04). A visitor can attach only after a conversation exists, one file at a time. The size limit is not yet per workspace. There is no malware scanning, and the iOS app does not exist yet |
-| Turnstile | In review. Tested in workerd and browsers, and on real Cloudflare with published test keys, [with these results](../architecture/cloudflare-validation.md#turnstile-on-real-cloudflare-2026-11-04). A real site key is untested |
-| Load test, security review | Not started |
+| Turnstile | Merged. Tested in workerd and browsers, and on real Cloudflare with published test keys, [with these results](../architecture/cloudflare-validation.md#turnstile-on-real-cloudflare-2026-11-04). A real site key is untested |
+| Load test | In review. About 45 messages a second per database, 1,000 sockets reconnecting with nothing missing, Smart Placement now the default, and a cost estimate, [with these results and limits](../architecture/cloudflare-validation.md#m1b-load-test-on-real-d1-2026-11-04). A herd from 1,000 real addresses is untested |
+| Security review | Not started |
 
 ## M2: iOS app without push (L)
 

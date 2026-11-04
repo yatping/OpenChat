@@ -7,6 +7,7 @@
   "compatibility_date": "2026-10-30",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+  "placement": { "mode": "smart" },
   "assets": {
     "directory": "./.assets",
     "binding": "ASSETS",

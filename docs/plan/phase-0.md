@@ -147,7 +147,7 @@ From spec §17, plus spike outcomes:
 | S6 with Custom Domains and across zones | Not tested, to avoid changing zones on the account | A test zone, before M3 |
 | S5 on Hermes and browsers | Not tested. Mobile does not need to sign | Before anything on mobile signs |
 | Three unexplained one-off results: a job that did not arrive in time, an HTML 404, and 48 messages after 50 sends | See [results](../architecture/cloudflare-validation.md#found-while-deploying) | M1b tests that count outcomes, and watching CI |
-| Smart Placement | Write latency depends on Worker location, which varied between runs | Test before M1b |
+| Smart Placement | Tested in the [M1b load test](../architecture/cloudflare-validation.md#m1b-load-test-on-real-d1-2026-11-04) and now the default. A brand-new deployment is unproven | Watch on the next real deployment |
 | Name clearance | "OpenChat" is used by unrelated projects, and no trademark search was done | Owner, before publishing |
 
 ## Not in Phase 0

@@ -10,6 +10,13 @@ import { registerRealtimeRoutes } from './routes/realtime';
 import { registerWidgetRoutes } from './routes/widget';
 import { registerWorkspaceRoutes } from './routes/workspaces';
 
+const OVERLOAD_RETRY_SECONDS = 2;
+
+/** D1's message is the only signal it gives. Seen on real D1, and listed in cloudflare-validation.md. */
+function isDatabaseOverload(error: Error): boolean {
+  return /D1.*overloaded/i.test(error.message);
+}
+
 export function createApp() {
   const app = new OpenAPIHono<AppEnv>({
     // A contract violation in a request is a client error with a stable shape.
@@ -37,12 +44,17 @@ export function createApp() {
 
   app.onError((error, c) => {
     const requestId = c.get('requestId') ?? 'unknown';
-    const problem = toProblem(error, requestId);
+    // D1 rolled the batch back, or a later read failed after it committed. Either way a retry with the same
+    // clientMessageId gets the right answer, so tell clients to retry rather than report a fault.
+    const overloaded = isDatabaseOverload(error);
+    const known = overloaded ? new AppError(503, 'overloaded', 'Too busy just now. Please try again', { retryAfterSeconds: OVERLOAD_RETRY_SECONDS }) : error;
+    const problem = toProblem(known, requestId);
     // An AppError is a decision the code made. Only surprises are logged as errors.
-    if (!(error instanceof AppError)) {
+    if (overloaded) createLogger({ requestId }).warn('database_overloaded', { status: problem.status });
+    else if (!(error instanceof AppError)) {
       createLogger({ requestId }).error('unhandled_error', { errorName: error.name, status: problem.status });
     }
-    const retryAfter = error instanceof AppError ? error.details?.retryAfterSeconds : undefined;
+    const retryAfter = known instanceof AppError ? known.details?.retryAfterSeconds : undefined;
     return c.newResponse(JSON.stringify(problem), problem.status as 500, {
       'content-type': 'application/problem+json',
       'x-request-id': requestId,
