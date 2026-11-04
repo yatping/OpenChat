@@ -76,6 +76,14 @@ export async function deleteAccount(database: Database, userId: string): Promise
           WHERE ${guard} AND assigned_member_id IN (SELECT id FROM workspace_members WHERE user_id = ?2)`,
       )
       .bind(audit, userId),
+    // Before the members go, so that their sockets can be found and closed. Swept within about two minutes.
+    d1
+      .prepare(
+        `INSERT INTO outbox (id, workspace_id, topic, aggregate_id, payload_json, created_at)
+         SELECT ?3 || '_' || id, workspace_id, 'member.access_changed', id, json_object('memberId', id), ${DB_NOW_MS}
+           FROM workspace_members WHERE ${guard} AND user_id = ?2`,
+      )
+      .bind(audit, userId, newId('outbox')),
     d1.prepare(`DELETE FROM workspace_members WHERE ${guard} AND user_id = ?2`).bind(audit, userId),
     d1.prepare(`DELETE FROM auth_tokens WHERE ${guard} AND user_id = ?2`).bind(audit, userId),
     d1.prepare(`UPDATE auth_sessions SET revoked_at = ${DB_NOW_MS} WHERE ${guard} AND user_id = ?2 AND revoked_at IS NULL`).bind(audit, userId),

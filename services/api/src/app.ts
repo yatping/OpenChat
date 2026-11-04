@@ -6,6 +6,7 @@ import { AppError, createLogger, newId, toProblem } from '@openchat/shared';
 import type { AppEnv } from './context';
 import { registerAuthRoutes } from './routes/auth';
 import { registerConversationRoutes } from './routes/conversations';
+import { registerRealtimeRoutes } from './routes/realtime';
 import { registerWidgetRoutes } from './routes/widget';
 import { registerWorkspaceRoutes } from './routes/workspaces';
 
@@ -75,6 +76,8 @@ export function createApp() {
   // Set after the handler, so that it also covers error responses. These can carry tokens or personal data.
   app.use('/api/*', async (c, next) => {
     await next();
+    // The headers of an upgrade answer belong to the socket, and cannot be changed.
+    if (c.res.status === 101) return;
     c.header('cache-control', 'no-store');
     c.header('x-content-type-options', 'nosniff');
   });
@@ -83,6 +86,7 @@ export function createApp() {
   registerWorkspaceRoutes(app);
   registerConversationRoutes(app);
   registerWidgetRoutes(app);
+  registerRealtimeRoutes(app);
 
   app.get('/api/v1/openapi.json', (c) => c.json(openapi));
 

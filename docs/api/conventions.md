@@ -24,7 +24,7 @@ packages/api-contracts  (Zod schemas and route definitions, plus WebSocket frame
 |---|---|---|
 | Agent API | `/api/v1/...`, workspace resources under `/api/v1/workspaces/{workspaceId}/...` | Bearer token |
 | Widget API | `/api/v1/widget/...` | Visitor token |
-| Realtime | `/api/v1/realtime/...` | Ticket |
+| Realtime | `/api/v1/realtime/connect` takes a ticket. Tickets come from `/api/v1/workspaces/{workspaceId}/realtime/tickets` or `/api/v1/widget/conversations/{conversationId}/realtime/tickets`, so that each audience keeps its own authentication and CORS | Ticket |
 | Discovery | `/.well-known/openchat.json` | None |
 | Health | `/health` (public, status only), `/health/*` (operator token) | |
 

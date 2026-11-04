@@ -116,7 +116,7 @@ export type AssignResult =
   | { outcome: 'not_found' };
 
 /** Names come by primary key, so that this stays cheap on the hot path. Agents only: it includes internal notes. */
-const MESSAGE_SELECT = `SELECT m.id, m.conversation_id AS conversationId, m.seq, m.public_seq AS publicSeq,
+export const MESSAGE_SELECT = `SELECT m.id, m.conversation_id AS conversationId, m.seq, m.public_seq AS publicSeq,
     m.client_message_id AS clientMessageId, m.sender_type AS senderType, m.sender_id AS senderId,
     m.message_type AS type, m.visibility, m.content, m.created_at AS createdAt, COALESCE(u.name, ct.name) AS senderName
   FROM messages m
@@ -167,6 +167,15 @@ export function repositories(database: Database, ctx: WorkspaceContext) {
       )
       .bind(auditId, action, metadata, w, memberId, role, removesOwner ? 1 : 0, ctx.memberId);
 
+  /** So that the member's sockets close even if the isolate dies right after the commit. */
+  const accessChanged = (memberId: string, audit: string) =>
+    d1
+      .prepare(
+        `INSERT INTO outbox (id, workspace_id, topic, aggregate_id, payload_json, created_at)
+         SELECT ?1, ?2, 'member.access_changed', ?3, json_object('memberId', ?3), ${DB_NOW_MS} WHERE EXISTS (SELECT 1 FROM audit_log WHERE id = ?4)`,
+      )
+      .bind(newId('outbox'), w, memberId, audit);
+
   return {
     workspace: {
       get(): Promise<WorkspaceRow | null> {
@@ -206,6 +215,7 @@ export function repositories(database: Database, ctx: WorkspaceContext) {
                 WHERE workspace_id = ?3 AND id = ?4 AND EXISTS (SELECT 1 FROM audit_log WHERE id = ?5)`,
             )
             .bind(role, status, w, memberId, audit),
+          accessChanged(memberId, audit),
         ]);
         return allowed?.meta.changes === 1 ? { outcome: 'done' } : explainRefusal(memberId);
       },
@@ -222,6 +232,7 @@ export function repositories(database: Database, ctx: WorkspaceContext) {
             )
             .bind(w, memberId, audit),
           d1.prepare(`DELETE FROM workspace_members WHERE workspace_id = ?1 AND id = ?2 AND ${guard}`).bind(w, memberId, audit),
+          accessChanged(memberId, audit),
         ]);
         return allowed?.meta.changes === 1 ? { outcome: 'done' } : explainRefusal(memberId);
       },
@@ -314,6 +325,15 @@ export function repositories(database: Database, ctx: WorkspaceContext) {
         return results;
       },
 
+      /** Everything changed since a position, oldest change first, for a client catching up. */
+      async listChangedSince(after: { updatedAt: number; id: string }, limit: number): Promise<ConversationRow[]> {
+        const { results } = await d1
+          .prepare(`${CONVERSATION_SELECT} WHERE c.workspace_id = ?2 AND (c.updated_at, c.id) > (?3, ?4) ORDER BY c.updated_at, c.id LIMIT ?5`)
+          .bind(ctx.memberId, w, after.updatedAt, after.id, limit)
+          .all<ConversationRow>();
+        return results;
+      },
+
       /**
        * Pattern 2: compare-and-set with follow-up statements, guarded by a value unique to this request.
        * Guarding on version = expected + 1 is wrong: if another writer already advanced the version, a stale
@@ -363,6 +383,11 @@ export function repositories(database: Database, ctx: WorkspaceContext) {
 
       assign(conversationId: string, memberId: string | null, expectedVersion: number): Promise<AssignResult> {
         return this.update(conversationId, { assignedMemberId: memberId }, expectedVersion);
+      },
+
+      /** The database's clock, because update times come from it and a Worker's clock can disagree. */
+      async now(): Promise<number> {
+        return (await d1.prepare(`SELECT ${DB_NOW_MS} AS now`).first<{ now: number }>())!.now;
       },
 
       /** Positions only move forward, and stop at the last message. False if there is no such conversation. */

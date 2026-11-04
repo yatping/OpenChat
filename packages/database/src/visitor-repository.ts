@@ -146,7 +146,7 @@ export function visitorRepositories(database: Database, ctx: VisitorContext) {
        * The conversation's ID comes from the visitor and the client ID, so a retry reaches the same row and
        * the message insert becomes a replay. The first statement after the insert only runs for a new message.
        */
-      async create(input: { clientMessageId: string; content: string }): Promise<{ created: boolean; conversation: VisitorConversationRow }> {
+      async create(input: { clientMessageId: string; content: string }): Promise<{ created: boolean; conversation: VisitorConversationRow; messageId: string }> {
         const id = await deterministicId('conversation', `${ctx.visitorId}|${input.clientMessageId}`);
         const messageId = newId('message');
         const [, insert] = await d1.batch([
@@ -176,7 +176,7 @@ export function visitorRepositories(database: Database, ctx: VisitorContext) {
         ]);
         const conversation = await findOwn(id);
         if (!conversation) throw new Error('A conversation was not readable after its batch');
-        return { created: insert?.meta.changes === 1, conversation };
+        return { created: insert?.meta.changes === 1, conversation, messageId };
       },
     },
 

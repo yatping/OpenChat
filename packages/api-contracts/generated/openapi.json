@@ -1367,6 +1367,26 @@
           }
         ]
       },
+      "RealtimeTicket": {
+        "type": "object",
+        "properties": {
+          "ticket": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticket",
+          "url",
+          "expiresAt"
+        ],
+        "description": "Connect to `url` within 30 seconds. The ticket is good for one purpose only, and grants nothing over REST."
+      },
       "WidgetBootstrap": {
         "type": "object",
         "properties": {
@@ -2020,6 +2040,135 @@
     "parameters": {}
   },
   "paths": {
+    "/api/v1/workspaces/{workspaceId}/realtime/tickets": {
+      "post": {
+        "tags": [
+          "realtime"
+        ],
+        "operationId": "createAgentTicket",
+        "summary": "A ticket for a socket that receives everything in this workspace",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Ticket",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RealtimeTicket"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/widget/conversations/{conversationId}/realtime/tickets": {
+      "post": {
+        "tags": [
+          "widget"
+        ],
+        "operationId": "createVisitorTicket",
+        "summary": "A ticket for a socket that receives this conversation's public events",
+        "security": [
+          {
+            "visitorAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "conversationId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Ticket",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RealtimeTicket"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/realtime/connect": {
+      "get": {
+        "tags": [
+          "realtime"
+        ],
+        "operationId": "connectRealtime",
+        "summary": "Upgrade to a WebSocket",
+        "description": "Frames are published as AgentServerFrame, AgentClientFrame, VisitorServerFrame, and VisitorClientFrame.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "required": true,
+            "name": "ticket",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "101": {
+            "description": "Switching protocols"
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/widget/bootstrap": {
       "get": {
         "tags": [
@@ -2885,6 +3034,17 @@
             "description": "A member ID, `me`, or `none`.",
             "name": "assignee",
             "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "description": "A `syncCursor` from an earlier response. Returns everything changed since, in any status, oldest change first. Other filters are ignored."
+            },
+            "required": false,
+            "description": "A `syncCursor` from an earlier response. Returns everything changed since, in any status, oldest change first. Other filters are ignored.",
+            "name": "updatedAfter",
+            "in": "query"
           }
         ],
         "responses": {
@@ -2906,11 +3066,16 @@
                         "string",
                         "null"
                       ]
+                    },
+                    "syncCursor": {
+                      "type": "string",
+                      "description": "Pass as `updatedAfter` to catch up later."
                     }
                   },
                   "required": [
                     "data",
-                    "nextCursor"
+                    "nextCursor",
+                    "syncCursor"
                   ]
                 }
               }

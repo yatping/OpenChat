@@ -429,9 +429,10 @@ export const listConversationsRoute = createRoute({
     query: PaginationQuery.extend({
       status: ConversationStatusSchema.default('open'),
       assignee: z.string().max(64).optional().openapi({ description: 'A member ID, `me`, or `none`.' }),
+      updatedAfter: z.string().max(512).optional().openapi({ description: 'A `syncCursor` from an earlier response. Returns everything changed since, in any status, oldest change first. Other filters are ignored.' }),
     }),
   },
-  responses: { 200: { description: 'Conversations', ...json(page(ConversationSchema)) }, default: problemResponse },
+  responses: { 200: { description: 'Conversations', ...json(page(ConversationSchema).extend({ syncCursor: z.string().openapi({ description: 'Pass as `updatedAfter` to catch up later.' }) })) }, default: problemResponse },
 });
 
 export const getConversationRoute = createRoute({
@@ -657,4 +658,44 @@ export const markVisitorConversationReadRoute = createRoute({
   security: visitor,
   request: { params: visitorConversationParams, body: { required: true, ...json(z.strictObject({ deliveredSeq: z.number().int().min(0), readSeq: z.number().int().min(0) })) } },
   responses: { 204: { description: 'Recorded' }, default: problemResponse },
+});
+
+// ---------- Realtime ----------
+
+export const RealtimeTicketSchema = z
+  .object({ ticket: z.string(), url: z.string(), expiresAt: z.string() })
+  .openapi('RealtimeTicket', { description: 'Connect to `url` within 30 seconds. The ticket is good for one purpose only, and grants nothing over REST.' });
+
+export const createAgentTicketRoute = createRoute({
+  method: 'post',
+  path: '/api/v1/workspaces/{workspaceId}/realtime/tickets',
+  tags: ['realtime'],
+  operationId: 'createAgentTicket',
+  summary: 'A ticket for a socket that receives everything in this workspace',
+  security: bearer,
+  request: { params: workspaceParams },
+  responses: { 201: { description: 'Ticket', ...json(RealtimeTicketSchema) }, default: problemResponse },
+});
+
+export const createVisitorTicketRoute = createRoute({
+  method: 'post',
+  path: '/api/v1/widget/conversations/{conversationId}/realtime/tickets',
+  tags: ['widget'],
+  operationId: 'createVisitorTicket',
+  summary: "A ticket for a socket that receives this conversation's public events",
+  security: visitor,
+  request: { params: visitorConversationParams },
+  responses: { 201: { description: 'Ticket', ...json(RealtimeTicketSchema) }, default: problemResponse },
+});
+
+export const connectRealtimeRoute = createRoute({
+  method: 'get',
+  path: '/api/v1/realtime/connect',
+  tags: ['realtime'],
+  operationId: 'connectRealtime',
+  summary: 'Upgrade to a WebSocket',
+  description: 'Frames are published as AgentServerFrame, AgentClientFrame, VisitorServerFrame, and VisitorClientFrame.',
+  security: [],
+  request: { query: z.object({ ticket: z.string().max(4096) }) },
+  responses: { 101: { description: 'Switching protocols' }, default: problemResponse },
 });

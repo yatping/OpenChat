@@ -17,6 +17,9 @@ import {
   sendVisitorMessageRoute,
   updateVisitorProfileRoute,
   widgetBootstrapRoute,
+  connectRealtimeRoute,
+  createAgentTicketRoute,
+  createVisitorTicketRoute,
   getConversationRoute,
   getDiscoveryRoute,
   getWorkspaceRoute,
@@ -41,6 +44,9 @@ import {
 
 /** Every route must be listed here so that it reaches the published document. */
 export const ALL_ROUTES = [
+  createAgentTicketRoute,
+  createVisitorTicketRoute,
+  connectRealtimeRoute,
   widgetBootstrapRoute,
   createVisitorSessionRoute,
   updateVisitorProfileRoute,

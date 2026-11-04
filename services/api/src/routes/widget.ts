@@ -1,6 +1,7 @@
 import {
   createVisitorConversationRoute,
   createVisitorSessionRoute,
+  createVisitorTicketRoute,
   listVisitorConversationsRoute,
   listVisitorMessagesRoute,
   markVisitorConversationReadRoute,
@@ -13,6 +14,7 @@ import {
   authenticateVisitor,
   createVisitorConversation,
   createVisitorSession,
+  createVisitorTicket,
   listVisitorConversations,
   listVisitorMessages,
   markVisitorConversationRead,
@@ -24,6 +26,7 @@ import {
 import { AppError, notFound } from '@openchat/shared';
 import type { Context, MiddlewareHandler } from 'hono';
 import { authDeps, type App, type AppEnv } from '../context';
+import { dispatchSoon, socketUrl } from '../dispatch';
 
 type WidgetEnv = { Bindings: AppEnv['Bindings']; Variables: AppEnv['Variables'] & { visitor: VisitorContext } };
 
@@ -116,7 +119,8 @@ export function registerWidgetRoutes(app: App) {
   app.openapi(listVisitorConversationsRoute, async (c) => c.json(await listVisitorConversations(await authDeps(c.env), visitorOf(c)), 200));
 
   app.openapi(createVisitorConversationRoute, async (c) => {
-    const { created, conversation } = await createVisitorConversation(await authDeps(c.env), visitorOf(c), c.req.valid('json'));
+    const { created, conversation, messageId } = await createVisitorConversation(await authDeps(c.env), visitorOf(c), c.req.valid('json'));
+    dispatchSoon(c, visitorOf(c).workspaceId, [conversation.id, messageId]);
     return created ? c.json(conversation, 201) : c.json(conversation, 200);
   });
 
@@ -124,7 +128,13 @@ export function registerWidgetRoutes(app: App) {
 
   app.openapi(sendVisitorMessageRoute, async (c) => {
     const { created, message } = await sendVisitorMessage(await authDeps(c.env), visitorOf(c), c.req.valid('param').conversationId, c.req.valid('json'));
+    dispatchSoon(c, visitorOf(c).workspaceId, [message.id, message.conversationId]);
     return created ? c.json(message, 201) : c.json(message, 200);
+  });
+
+  app.openapi(createVisitorTicketRoute, async (c) => {
+    const { ticket, expiresAt } = await createVisitorTicket(await authDeps(c.env), visitorOf(c), c.req.valid('param').conversationId, c.req.header('origin'));
+    return c.json({ ticket, expiresAt, url: socketUrl(c, ticket) }, 201);
   });
 
   app.openapi(markVisitorConversationReadRoute, async (c) => {

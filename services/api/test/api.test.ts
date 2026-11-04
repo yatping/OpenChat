@@ -63,9 +63,9 @@ describe('HTTP', () => {
     for (const path of ['/health', '/.well-known/openchat.json']) expect(doc.paths).toHaveProperty([path]);
   });
 
-  it('has no public route to the realtime objects yet', async () => {
+  it('reaches the realtime objects only with a ticket', async () => {
     const response = await get('/api/v1/realtime/connect', { headers: { upgrade: 'websocket' } });
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(400);
   });
 
   it('serves the dashboard shell through assets', async () => {

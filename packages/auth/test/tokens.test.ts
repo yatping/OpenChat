@@ -7,7 +7,11 @@ import {
   importSigningKey,
   importVerificationKeys,
   signAccessToken,
+  signTicket,
+  TICKET_TTL_SECONDS,
   verifyAccessToken,
+  verifyTicket,
+  verifyVisitorToken,
 } from '../src/index';
 import { toBase64Url } from '../src/encoding';
 
@@ -97,6 +101,31 @@ describe('access tokens', () => {
     const body = `${b64({ alg: 'EdDSA', kid: 'k1' })}.${b64({ sub: 1 })}`;
     const signature = await crypto.subtle.sign({ name: 'Ed25519' }, key.privateKey, new TextEncoder().encode(body));
     expect(await verifyAccessToken(`${body}.${toBase64Url(new Uint8Array(signature))}`, keys, ISSUER, NOW)).toEqual({ ok: false, reason: 'malformed' });
+  });
+});
+
+describe('realtime tickets', () => {
+  const claims = { kind: 'visitor' as const, sub: 'vis_1', wid: 'work_1', conv: 'conv_1', until: 1, iss: ISSUER };
+
+  it('lasts exactly its short life', async () => {
+    const ticket = await signTicket(key, claims, NOW);
+    expect(await verifyTicket(ticket, keys, ISSUER, NOW + TICKET_TTL_SECONDS - 1)).toMatchObject({ ok: true, claims: { aud: 'realtime', sub: 'vis_1', conv: 'conv_1' } });
+    expect(await verifyTicket(ticket, keys, ISSUER, NOW + TICKET_TTL_SECONDS)).toEqual({ ok: false, reason: 'expired' });
+  });
+
+  it('belongs to one installation', async () => {
+    expect(await verifyTicket(await signTicket(key, claims, NOW), keys, 'inst_B', NOW)).toEqual({ ok: false, reason: 'bad_issuer' });
+  });
+
+  it('needs a conversation for a visitor', async () => {
+    expect(await verifyTicket(await signTicket(key, { ...claims, conv: undefined as unknown as string }, NOW), keys, ISSUER, NOW)).toEqual({ ok: false, reason: 'malformed' });
+  });
+
+  it('is not interchangeable with any other token', async () => {
+    const ticket = await signTicket(key, claims, NOW);
+    expect((await verifyAccessToken(ticket, keys, ISSUER, NOW)).ok).toBe(false);
+    expect((await verifyVisitorToken(ticket, keys, ISSUER, NOW)).ok).toBe(false);
+    expect((await verifyTicket(await signAccessToken(key, input, NOW), keys, ISSUER, NOW)).ok).toBe(false);
   });
 });
 

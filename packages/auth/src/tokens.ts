@@ -182,3 +182,50 @@ export async function verifyVisitorToken(
   if (c.exp + CLOCK_SKEW_SECONDS <= now) return { ok: false, reason: 'expired' };
   return { ok: true, claims: { aud: 'visitor', sub: c.sub, wid: c.wid, site: c.site, iss: c.iss, iat: c.iat, exp: c.exp } };
 }
+
+export const TICKET_TTL_SECONDS = 30;
+
+/** One WebSocket connection. Short enough that it does no harm in a URL, where it may reach logs. */
+export interface TicketClaims {
+  aud: 'realtime';
+  kind: 'agent' | 'visitor';
+  /** A member or a visitor. */
+  sub: string;
+  wid: string;
+  /** For a visitor, the one conversation this socket may watch. */
+  conv?: string;
+  role?: string;
+  /** The page that asked for it. The connection must come from the same one, or from none at all. */
+  org?: string;
+  /** When the socket's authorisation ends, in milliseconds. */
+  until: number;
+  iss: string;
+  iat: number;
+  exp: number;
+}
+
+export async function signTicket(key: SigningKey, input: Omit<TicketClaims, 'aud' | 'iat' | 'exp'>, now: number = Math.floor(Date.now() / 1000)): Promise<string> {
+  const claims: TicketClaims = { ...input, aud: 'realtime', iat: now, exp: now + TICKET_TTL_SECONDS };
+  const body = `${encodeJson({ alg: 'EdDSA', typ: 'JWT', kid: key.kid })}.${encodeJson(claims)}`;
+  const signature = await crypto.subtle.sign(ED25519, key.privateKey, encoder.encode(body));
+  return `${body}.${toBase64Url(new Uint8Array(signature))}`;
+}
+
+/** No clock skew allowance, because the lifetime is so short and the issuer is this installation. */
+export async function verifyTicket(
+  token: string,
+  keys: VerificationKeys,
+  issuer: string,
+  now: number = Math.floor(Date.now() / 1000),
+): Promise<{ ok: true; claims: TicketClaims } | { ok: false; reason: VerifyFailure }> {
+  const signed = await verifySigned(token, keys);
+  if (!signed.ok) return signed;
+  const c = signed.claims;
+  if (c.aud !== 'realtime' || (c.kind !== 'agent' && c.kind !== 'visitor') || typeof c.sub !== 'string' || typeof c.wid !== 'string' || typeof c.until !== 'number' || typeof c.exp !== 'number') {
+    return { ok: false, reason: 'malformed' };
+  }
+  if (c.kind === 'visitor' && typeof c.conv !== 'string') return { ok: false, reason: 'malformed' };
+  if (c.iss !== issuer) return { ok: false, reason: 'bad_issuer' };
+  if (c.exp <= now) return { ok: false, reason: 'expired' };
+  return { ok: true, claims: c as unknown as TicketClaims };
+}
