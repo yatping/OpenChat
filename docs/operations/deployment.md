@@ -65,7 +65,7 @@ pnpm exec wrangler login      # once
 pnpm oc deploy --env acme --owner-email you@example.com --workspace "Support team"
 ```
 
-This needs Workers Paid ([ADR-0009](../architecture/decisions/0009-paid-plan-and-password-hashing.md)). It prints the dashboard URL and a one-hour link for the owner to set a password, shown only once. To send email, onboard a domain, then deploy again with either provider. Cloudflare needs no API key, but it's in beta and documents no idempotency key, so a retry after a lost answer can send twice:
+This needs Workers Paid ([ADR-0009](../architecture/decisions/0009-paid-plan-and-password-hashing.md)). It prints the dashboard URL and a one-hour link for the owner to set a password, shown only once. To send email, onboard a domain, then deploy again with either provider. Cloudflare needs no API key, but it's in beta and documents no idempotency key, so a retry after a lost answer can send twice. Enabling a domain sets its DMARC policy to `reject`, so check first if anything else sends from it:
 
 ```bash
 pnpm oc deploy --env acme --cloudflare-email --email-from no-reply@mail.example.com

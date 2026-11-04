@@ -57,7 +57,7 @@ Built and verified on real Cloudflare on 2026-11-04, except for the items below,
 |---|---|
 | Deploy with one command | **Partly.** `oc deploy` worked in about 80 seconds on an existing Workers Paid account. **Not tried on a brand new account.** `oc preflight` now checks or lists [the prerequisites](../operations/deployment.md#prerequisites), including R2 and the `workers.dev` subdomain, but its failure cases have only run against a fake Wrangler, apart from a bad login |
 | First owner signs in, creates a website, invites a member | Done on a real deployment. The invitation email itself is not delivered without a provider |
-| Reset by email, and CLI recovery without email | **Partly.** CLI recovery is verified on a real deployment. **No email has gone through Resend**, which needs an API key and a verified domain |
+| Reset by email, and CLI recovery without email | Done on real deployments. A reset email sent through Cloudflare Email Service arrived, and its link set a new password. **The Resend driver has still sent no real email**, because that test needs a Resend key |
 | Isolation test enumerates all routes | Done, and shown to fail for a route with no case |
 | Refresh reuse revokes the session | Done on a real deployment |
 
@@ -88,8 +88,8 @@ In progress, one PR per slice. Done so far:
 
 | Slice | State |
 |---|---|
-| Conversations and messages for agents, over REST | Merged. Tested in workerd. Attachments are empty and tags are not in the response yet |
-| Visitor sessions and the widget API | Merged. Tested in workerd, including notes and isolation between visitors. Turnstile and attachments are not in yet |
+| Conversations and messages for agents, over REST | Merged. Tested in workerd and on real D1. Attachments are empty and tags are not in the response yet |
+| Visitor sessions and the widget API | Merged. Tested in workerd and on real D1, including notes and isolation between visitors. Turnstile and attachments are not in yet |
 | Sockets, tickets, outbox dispatch, and the sweep | Not started. Outbox rows are written, but nothing dispatches them yet |
 | Inbox UI, widget UI, attachments, load test | Not started |
 
