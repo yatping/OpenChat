@@ -80,7 +80,7 @@ Visitor sessions, contacts, conversations, messages with Pattern 1, and status a
 - Widget budgets met: loader under 5 KB gzipped, chat bundle under 40 KB gzipped, loaded only after idle or click.
 - Load test against real D1: documented messages per second and p95 latency, 1,000 clients reconnecting after a forced reset, and a cost estimate.
 
-**Security review:** tenant isolation, visitor tokens, attachments, and XSS.
+**Security review:** tenant isolation, visitor tokens, attachments, and XSS. Done: see [the review](../architecture/security-review-m1b.md), which is not independent.
 
 ### M1b status
 
@@ -96,8 +96,8 @@ In progress, one PR per slice. Done so far:
 | Widget UI | Merged. Loader and chat bundle, within budget. Covered by browser tests on a page from another origin, and verified in Chromium on real Cloudflare, [with these results](../architecture/cloudflare-validation.md#widget-on-real-cloudflare-2026-11-04). English only, with translations in Milestone 6. It shows one conversation, the latest. A required email is enforced by the widget, not the server |
 | Attachments | Merged. Files both ways between the widget and the inbox, covered by API and browser tests, and verified on real R2, [with these results](../architecture/cloudflare-validation.md#attachments-on-real-r2-2026-11-04). A visitor can attach only after a conversation exists, one file at a time. The size limit is not yet per workspace. There is no malware scanning, and the iOS app does not exist yet |
 | Turnstile | Merged. Tested in workerd and browsers, and on real Cloudflare with published test keys, [with these results](../architecture/cloudflare-validation.md#turnstile-on-real-cloudflare-2026-11-04). A real site key is untested |
-| Load test | In review. About 45 messages a second per database, 1,000 sockets reconnecting with nothing missing, Smart Placement now the default, and a cost estimate, [with these results and limits](../architecture/cloudflare-validation.md#m1b-load-test-on-real-d1-2026-11-04). A herd from 1,000 real addresses is untested |
-| Security review | Not started |
+| Load test | Merged. About 45 messages a second per database, 1,000 sockets reconnecting with nothing missing, Smart Placement now the default, and a cost estimate, [with these results and limits](../architecture/cloudflare-validation.md#m1b-load-test-on-real-d1-2026-11-04). A herd from 1,000 real addresses is untested |
+| Security review | In review. Four defects fixed, and real deployments attacked from outside, [with these results and gaps](../architecture/security-review-m1b.md). Not independent |
 
 ## M2: iOS app without push (L)
 

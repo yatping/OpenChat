@@ -78,7 +78,7 @@ export type RotateResult =
  */
 export async function rotateRefreshToken(database: Database, presentedHash: string, newHash: string): Promise<RotateResult> {
   const d1 = rawHandle(database);
-  const [rotated, revoked] = await d1.batch([
+  const [rotated, , revoked] = await d1.batch([
     d1
       .prepare(
         `UPDATE auth_sessions
@@ -93,6 +93,15 @@ export async function rotateRefreshToken(database: Database, presentedHash: stri
         RETURNING id AS sessionId, user_id AS userId, client_type AS clientType`,
       )
       .bind(newHash, presentedHash, SESSION_TTL_MS.mobile, SESSION_TTL_MS.dashboard),
+    // Reuse means a token is stolen, so sockets close too. Before the revoke below, while the same condition finds it.
+    d1
+      .prepare(
+        `INSERT INTO outbox (id, workspace_id, topic, aggregate_id, payload_json, created_at)
+         SELECT ?3 || '_' || m.id, m.workspace_id, 'member.access_changed', m.id, json_object('memberId', m.id), ${DB_NOW_MS}
+           FROM workspace_members m
+          WHERE m.user_id IN (SELECT user_id FROM auth_sessions WHERE previous_token_hash = ?1 AND refresh_token_hash <> ?2 AND revoked_at IS NULL)`,
+      )
+      .bind(presentedHash, newHash, crypto.randomUUID()),
     d1
       .prepare(
         `UPDATE auth_sessions SET revoked_at = ${DB_NOW_MS}
@@ -187,6 +196,15 @@ export async function confirmPasswordReset(database: Database, tokenHash: string
     d1.prepare(`UPDATE users SET password_hash = ?3, updated_at = ${DB_NOW_MS} WHERE id = ${userOfAttempt}`).bind(attempt, tokenHash, passwordHash),
     // A reset usually follows a suspected compromise, so every existing session ends.
     d1.prepare(`UPDATE auth_sessions SET revoked_at = ${DB_NOW_MS} WHERE revoked_at IS NULL AND user_id = ${userOfAttempt}`).bind(attempt, tokenHash),
+    // Sessions are not the only way in: an open socket would keep listening until its authorisation ran out.
+    // Swept within about two minutes, like removing a member. Guarded by this attempt, so it runs for one winner.
+    d1
+      .prepare(
+        `INSERT INTO outbox (id, workspace_id, topic, aggregate_id, payload_json, created_at)
+         SELECT ?1 || '_' || id, workspace_id, 'member.access_changed', id, json_object('memberId', id), ${DB_NOW_MS}
+           FROM workspace_members WHERE user_id = ${userOfAttempt}`,
+      )
+      .bind(attempt, tokenHash),
     // Other reset links for this user stop working too.
     d1
       .prepare(`UPDATE auth_tokens SET consumed_at = ${DB_NOW_MS} WHERE purpose = 'password_reset' AND consumed_at IS NULL AND user_id = ${userOfAttempt}`)

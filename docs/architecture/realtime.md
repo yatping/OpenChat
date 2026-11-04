@@ -55,7 +55,7 @@ Client                     Worker                         Durable Object
   | REST catch-up (see below)                                  |
 ```
 
-- **Why a ticket.** Browsers cannot set headers on a WebSocket, and a long-lived token in a URL would end up in logs. A ticket lasts 30 seconds and grants only this connection. Request logging redacts the parameter.
+- **Why a ticket.** Browsers cannot set headers on a WebSocket, and a long-lived token in a URL would end up in logs. A ticket lasts 30 seconds and names one scope. It can be used more than once in that time, so a room also allows only ten sockets per visitor. Our logger never records it, but it is in the URL, so Cloudflare's own request logs may.
 - **Which page.** A ticket records the `Origin` that asked for it, and the connection must carry the same one, or none for a client with no page. Tickets are signed with the same key as access tokens, under their own audience, so neither can stand in for the other.
 - **Room names** include the workspace, `conversation:<workspaceId>:<id>`, so an ID from another tenant reaches an empty room.
 - **Tags:** `member:<id>`, `role:<role>` for hubs, `visitor:<id>` for rooms. Maximum 10 per socket.
@@ -114,7 +114,7 @@ The hub filters by audience before sending. Agents can currently see every conve
 - **Expiry:** `expiresAt` in the attachment is checked on each inbound message and before each send. There is no alarm per socket. Clients send `auth.refresh` with a new ticket before expiry, timed from `authExpiresAt` in `hello`, and receive a new `hello`. The ticket must name the same person, workspace, conversation, and page, or the answer is `error: forbidden` and nothing changes. `auth.expiring` is reserved and not sent, because that would need a timer per socket. Otherwise the socket closes with 4401 at the next event. An expired socket never receives anything.
 - **Revocation:** a role change or removal writes an outbox row (`member.access_changed`), and the sweep guarantees that `hub.revokeMember(memberId)` runs. It closes `member:<id>` sockets with 4403, and clients reconnect with fresh permissions.
 - **Account deletion** writes the same row inside the deletion, and relies on the sweep, so its sockets close within about two minutes.
-- **Signing out or changing a password** does not close sockets. They end at their expiry, at most 15 minutes for an agent.
+- **A password reset, recovery, or refresh token reuse** closes the member's sockets the same way, because each suggests theft. **Signing out** does not. Those sockets end at their expiry, at most 15 minutes for an agent.
 - **A conversation deleted or visitor blocked** will use the same mechanism on the room. Neither exists yet.
 
 ### Read positions

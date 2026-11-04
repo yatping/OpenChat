@@ -74,6 +74,10 @@ export const LIMITS = {
   visitorSessionWebsite: { limit: 3000, windowSeconds: 60 * 60 },
   visitorMessage: { limit: 20, windowSeconds: 60 },
   websiteVisitorMessages: { limit: 600, windowSeconds: 60 },
+  /** Everything a visitor can ask for. Well above a chat, and well below hurting a database with a ceiling of about 45 writes a second. */
+  visitorRequests: { limit: 120, windowSeconds: 60 },
+  /** The writes with no limit of their own. Added to the limit on messages, one website stays under that ceiling. */
+  websiteVisitorWrites: { limit: 1200, windowSeconds: 60 },
   visitorUpload: { limit: 20, windowSeconds: 60 * 60 },
   websiteVisitorUploads: { limit: 500, windowSeconds: 60 * 60 },
 } as const;
