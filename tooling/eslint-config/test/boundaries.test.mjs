@@ -20,6 +20,7 @@ const cases = [
   ['client importing server code', "import { x } from '@openchat/database';\nexport { x };", 'apps/dashboard/src/a.ts', 'no-restricted-imports'],
   ['widget importing a contract value', "import { x } from '@openchat/api-contracts';\nexport { x };", 'apps/widget/src/a.ts', 'no-restricted-imports'],
   ['widget importing zod', "import { z } from 'zod';\nexport { z };", 'apps/widget/src/a.ts', 'no-restricted-imports'],
+  ['an address limit that ignores IPv6 networks', "limitKey('login-ip', ip);", 'packages/core/src/a.ts', 'no-restricted-syntax'],
   ['core importing hono', "import { Hono } from 'hono';\nexport { Hono };", 'packages/core/src/a.ts', 'no-restricted-imports'],
   ['route importing repositories', "import { x } from '@openchat/database';\nexport { x };", 'services/api/src/routes/a.ts', 'no-restricted-imports'],
   ['shared importing node', "import { x } from 'node:crypto';\nexport { x };", 'packages/shared/src/a.ts', 'no-restricted-imports'],

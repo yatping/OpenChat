@@ -21,6 +21,7 @@ export const STRINGS = {
   failed: 'Not sent.',
   retry: 'Try again',
   rateLimited: 'That was a lot of messages. Please wait a moment and try again.',
+  dailyLimit: 'This chat cannot take more messages today. Please try again later.',
   unavailable: 'Chat is having trouble connecting.',
   resolved: 'This conversation was resolved. Write again if you need more help.',
   profileTitleRequired: 'Before we start, how can we reach you?',

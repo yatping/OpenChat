@@ -1507,12 +1507,17 @@
           "turnstileSiteKey": {
             "type": "string",
             "description": "Present when this website requires Turnstile for a new visitor."
+          },
+          "messageMaxChars": {
+            "type": "integer",
+            "description": "The longest message this installation accepts from a visitor. A longer one is refused with `message_too_long`."
           }
         },
         "required": [
           "websiteId",
           "settings",
-          "availability"
+          "availability",
+          "messageMaxChars"
         ]
       },
       "WidgetSettings": {

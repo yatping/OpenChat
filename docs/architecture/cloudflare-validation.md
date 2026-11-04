@@ -364,6 +364,30 @@ Not measured: Worker CPU time ($0.02 per million ms over 30 million included), r
 
 A second throwaway deployment on the same account took about 90 seconds, then was removed. `oc preflight` passed, and with a bad API token it stopped before creating anything. `/api/*` answers carried `no-store` and `nosniff`. Account deletion answered 401 with no token, 400 with no password, 403 with a wrong password, and 409 for the last owner with the right one. A successful deletion has only run in workerd, because this deployment had one user. The check's failure cases for R2, D1, Queues, and several accounts, and the missing `workers.dev` message, have only run against a fake Wrangler.
 
+## Abuse limits on real Cloudflare (2026-11-05)
+
+Run on a temporary deployment, which was then removed. The [abuse limits guide](../operations/abuse-limits.md) explains the limits.
+
+| Check | Result |
+|---|---|
+| 4,001 characters from a visitor, on both routes | 400 `message_too_long` |
+| 4,000 characters from a visitor, 16,000 from an agent | 201 |
+| 80 messages from one IPv4 address in 12 seconds, from 4 visitors, after 1 already sent | 59 accepted, 21 refused with `rate_limited`, so 60 in all |
+| Redeploy with a limit of 3 messages a day and 100 characters | Both applied, and the widget text box moved to 100 |
+| Fourth message that day | 429 `daily_limit_reached`, `Retry-After: 86397` |
+| Agent reply, and a second website, after that | 201 |
+| The widget at the daily limit, in headless Chromium | Showed "This chat cannot take more messages today. Please try again later." |
+| Worker log at the daily limit, through `wrangler tail` | `website_daily_limit_reached`, with workspace and website IDs |
+| A value out of range passed to `oc deploy` | Refused, with the allowed range |
+
+**Not checked on real Cloudflare:**
+
+- IPv6 grouping, because the network used has no IPv6. We have not confirmed the form of the address that `cf-connecting-ip` carries for a real IPv6 visitor. The code accepts every standard form, and uses anything it cannot read as it stands.
+- Going back to a default by redeploying with `default`, which has an automated test only.
+- A full 24 hours passing. The window uses the same `AuthGuard` code as the other limits.
+
+The text box shows the default of 4,000 for a moment after the widget opens, until the bootstrap response arrives. The server enforces the real limit either way.
+
 ## Sources
 
 - [D1 limits](https://developers.cloudflare.com/d1/platform/limits/), [D1 database API](https://developers.cloudflare.com/d1/worker-api/d1-database/), [migrations](https://developers.cloudflare.com/d1/reference/migrations/), [foreign keys](https://developers.cloudflare.com/d1/sql-api/foreign-keys/), [read replication](https://developers.cloudflare.com/d1/best-practices/read-replication/), [Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/)

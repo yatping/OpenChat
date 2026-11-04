@@ -6,3 +6,9 @@ EMAIL_PROVIDER=console
 # Optional. Cloudflare's published test keys, which always pass, to try a website that requires Turnstile locally.
 # TURNSTILE_SITE_KEY=1x00000000000000000000AA
 # TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+
+# Optional abuse limits. See docs/operations/abuse-limits.md for what each means. These are the defaults.
+# LIMIT_MESSAGES_PER_WEBSITE_PER_DAY=20000
+# LIMIT_MESSAGES_PER_IP_PER_MINUTE=60
+# LIMIT_MESSAGE_MAX_CHARS=4000
+# LIMIT_IPV6_PREFIX=64

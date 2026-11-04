@@ -123,7 +123,7 @@ function ProfileForm({ controller, required }: { controller: Controller; require
   );
 }
 
-function Composer({ controller, canAttach }: { controller: Controller; canAttach: boolean }) {
+function Composer({ controller, canAttach, maxChars }: { controller: Controller; canAttach: boolean; maxChars: number }) {
   const [text, setText] = useState('');
   const picker = useRef<HTMLInputElement>(null);
   const submit = () => {
@@ -144,7 +144,7 @@ function Composer({ controller, canAttach }: { controller: Controller; canAttach
         rows={1}
         aria-label={S.compose}
         placeholder={S.placeholder}
-        maxLength={10000}
+        maxLength={maxChars}
         value={text}
         onInput={(event) => {
           setText(event.currentTarget.value);
@@ -278,10 +278,10 @@ export function App({ controller, button, challengeHost }: { controller: Control
       </div>
       <div class="oc-challenge" ref={(element) => { if (element && challengeHost.parentElement !== element) element.appendChild(challengeHost); }} />
       <div class="oc-typing" aria-live="polite">{state.typing ? S.typing(state.typing.displayName) : ''}</div>
-      {state.notice && <p class="oc-note bad" role="alert">{state.notice === 'rate_limited' ? S.rateLimited : state.notice === 'bad_file' ? S.badFile : state.notice === 'challenge' ? S.challengeFailed : S.unavailable}</p>}
+      {state.notice && <p class="oc-note bad" role="alert">{state.notice === 'rate_limited' ? S.rateLimited : state.notice === 'daily_limit' ? S.dailyLimit : state.notice === 'bad_file' ? S.badFile : state.notice === 'challenge' ? S.challengeFailed : S.unavailable}</p>}
       {state.conversation?.status === 'resolved' && <p class="oc-note">{S.resolved}</p>}
       {state.profile === 'offered' && state.messages.some((m) => m.mine) && <ProfileForm controller={controller} required={false} />}
-      {state.profile === 'required' ? <ProfileForm controller={controller} required /> : <Composer controller={controller} canAttach={state.conversation !== null} />}
+      {state.profile === 'required' ? <ProfileForm controller={controller} required /> : <Composer controller={controller} maxChars={state.messageMaxChars} canAttach={state.conversation !== null} />}
     </div>
   );
 }

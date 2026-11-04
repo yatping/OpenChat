@@ -3,6 +3,7 @@
  * IDs back into its config, which would dirty a checkout, so real IDs live in .openchat/<env>/ instead.
  * See docs/operations/deployment.md.
  */
+import { ABUSE_LIMITS, type AbuseLimitName, type AbuseLimits, parseAbuseLimit } from '@openchat/shared';
 import { parse, type ParseError } from 'jsonc-parser';
 
 export interface DeploymentState {
@@ -16,6 +17,8 @@ export interface DeploymentState {
   analyticsEngine?: boolean;
   /** The sending address, for a deployment using Cloudflare Email Service. The binding can send from nothing else. */
   cloudflareEmailFrom?: string;
+  /** Only what the operator chose. Anything left out takes its default in the Worker. */
+  limits?: Partial<AbuseLimits> | undefined;
 }
 
 interface Template {
@@ -33,6 +36,27 @@ interface Template {
 }
 
 const NAME = /^[a-z][a-z0-9-]{0,40}$/;
+
+/**
+ * Applies what `flag` finds to what the deployment already chose, which is kept for later deploys. The word
+ * `default` goes back to the default. A value outside what a setting can take stops the deploy.
+ */
+export function mergeLimitFlags(current: Partial<AbuseLimits> | undefined, flag: (name: string) => string | undefined): Partial<AbuseLimits> {
+  const merged = { ...current };
+  for (const name of Object.keys(ABUSE_LIMITS) as AbuseLimitName[]) {
+    const setting = ABUSE_LIMITS[name];
+    const value = flag(setting.flag);
+    if (value === undefined) continue;
+    if (value === 'default') {
+      delete merged[name];
+      continue;
+    }
+    const parsed = parseAbuseLimit(name, value);
+    if (parsed === null) throw new Error(`--${setting.flag} must be a whole number from ${setting.min} to ${setting.max}, or "default"`);
+    merged[name] = parsed;
+  }
+  return merged;
+}
 
 export function parseTemplate(source: string): Template {
   const errors: ParseError[] = [];
@@ -69,6 +93,8 @@ export function renderConfig(templateSource: string, state: DeploymentState, rel
   } else {
     delete t.analytics_engine_datasets;
   }
+  const limits = Object.entries(state.limits ?? {}).map(([name, value]) => [ABUSE_LIMITS[name as AbuseLimitName].variable, String(value)]);
+  if (limits.length > 0) t.vars = { ...(t.vars as object | undefined), ...Object.fromEntries(limits) };
   if (state.cloudflareEmailFrom) t.send_email = [{ name: 'EMAIL', allowed_sender_addresses: [state.cloudflareEmailFrom] }];
   return t;
 }

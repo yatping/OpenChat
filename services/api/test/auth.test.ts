@@ -1,7 +1,7 @@
 import { createExecutionContext, createMessageBatch, waitOnExecutionContext } from 'cloudflare:test';
 import { env, exports } from 'cloudflare:workers';
 import { hashOpaqueToken, hashPassword, type ScryptParams } from '@openchat/auth';
-import { limitKey, LIMITS, PASSWORD_RESET_JOB } from '@openchat/core';
+import { ipLimitValue, limitKey, LIMITS, PASSWORD_RESET_JOB } from '@openchat/core';
 import type { EmailMessage } from '@openchat/email';
 import type { JobEnvelope } from '@openchat/shared';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -175,12 +175,53 @@ describe('throttling', () => {
     expect((await login(nextEmail())).status).toBe(429);
   });
 
+  it('limits login by IPv6 /64, so that changing address within one network gets nowhere', async () => {
+    const guard = env.AUTH_GUARD.getByName(await limitKey('login-ip', ipLimitValue('2001:db8:aa:bb::1')));
+    for (let i = 0; i < LIMITS.loginIp.limit; i++) await guard.consume(LIMITS.loginIp.limit, LIMITS.loginIp.windowSeconds);
+    ip = '2001:db8:aa:bb:1234:5678:9abc:def0';
+    expect((await login(nextEmail())).status).toBe(429);
+    ip = '2001:db8:aa:cc::1';
+    expect((await login(nextEmail())).status).not.toBe(429);
+  });
+
   it('opens a new window once the old one ends, and an alarm clears idle keys', async () => {
     const stub = env.AUTH_GUARD.getByName(`window-${crypto.randomUUID()}`);
     expect(await stub.consume(1, 60)).toMatchObject({ allowed: true });
     expect(await stub.consume(1, 60)).toMatchObject({ allowed: false });
     await stub.reset();
     expect(await stub.consume(1, 60)).toMatchObject({ allowed: true });
+  });
+});
+
+describe('what counts as one address', () => {
+  it.each([
+    ['203.0.113.9', '203.0.113.9'],
+    ['2001:db8:1:2:3:4:5:6', '2001:db8:1:2::/64'],
+    ['2001:db8:1:2::', '2001:db8:1:2::/64'],
+    ['2001:DB8:1:2::9', '2001:db8:1:2::/64'],
+    ['2001:0db8:0001:0002:ffff:ffff:ffff:ffff', '2001:db8:1:2::/64'],
+    ['2001:db8::1', '2001:db8:0:0::/64'],
+    ['::1', '0:0:0:0::/64'],
+    ['::', '0:0:0:0::/64'],
+    ['fe80::1%en0', 'fe80:0:0:0::/64'],
+    ['::ffff:203.0.113.9', '203.0.113.9'],
+    ['::ffff:cb00:7109', '203.0.113.9'],
+    ['0:0:0:0:0:ffff:203.0.113.9', '203.0.113.9'],
+  ])('%s is %s', (input, expected) => {
+    expect(ipLimitValue(input)).toBe(expected);
+  });
+
+  it.each([
+    [48, '2001:db8:1::/48'],
+    [56, '2001:db8:1:200::/56'],
+    [64, '2001:db8:1:234::/64'],
+    [128, '2001:db8:1:234:5:6:7:8::/128'],
+  ])('at /%i, keeps only that much of an address', (prefix, expected) => {
+    expect(ipLimitValue('2001:db8:1:234:5:6:7:8', prefix)).toBe(expected);
+  });
+
+  it.each(['unknown', '', '1::2::3', '1:2:3', 'gggg::1', '1:2:3:4:5:6:7:8:9'])('uses %j as it stands, since it cannot be read', (input) => {
+    expect(ipLimitValue(input)).toBe(input);
   });
 });
 

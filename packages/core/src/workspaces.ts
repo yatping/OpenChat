@@ -19,7 +19,7 @@ import {
 } from '@openchat/database';
 import type { EmailProvider } from '@openchat/email';
 import { AppError, newId, notFound, toIso, type JobEnvelope } from '@openchat/shared';
-import { enforce, escapeHtml, invalidToken, limitKey, LIMITS, type AuthDeps } from './auth-flows';
+import { enforce, escapeHtml, invalidToken, limitKey, limitKeyForIp, LIMITS, type AuthDeps } from './auth-flows';
 
 export const INVITATION_EMAIL_JOB = 'workspace.invitation_email';
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -134,10 +134,10 @@ export async function sendInvitationEmail(
 }
 
 export async function acceptWorkspaceInvitation(
-  deps: Pick<AuthDeps, 'db' | 'limiter'>,
+  deps: Pick<AuthDeps, 'db' | 'limiter' | 'limits'>,
   input: { token: string; name?: string | undefined; password?: string | undefined; ip: string },
 ): Promise<{ workspaceId: string }> {
-  await enforce(deps.limiter, await limitKey('confirm-ip', input.ip), LIMITS.confirmIp);
+  await enforce(deps.limiter, await limitKeyForIp(deps, 'confirm-ip', input.ip), LIMITS.confirmIp);
   const tokenHash = await hashOpaqueToken(input.token);
   const invitation = await inspectInvitation(deps.db, tokenHash);
   if (!invitation) throw invalidToken();
