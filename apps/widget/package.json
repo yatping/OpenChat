@@ -9,14 +9,19 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "build": "tsc -p tsconfig.json && vite build",
-    "test": "echo \"no tests yet\"",
+    "build": "tsc -p tsconfig.json && vite build && vite build --mode chat",
+    "test": "vitest run",
     "dev": "vite"
   },
   "devDependencies": {
+    "@openchat/api-client": "workspace:*",
     "@openchat/api-contracts": "workspace:*",
     "@openchat/tsconfig": "workspace:*",
     "typescript": "~6.0.3",
-    "vite": "^8.3.5"
+    "vite": "^8.3.5",
+    "vitest": "^5.1.0"
+  },
+  "dependencies": {
+    "preact": "11.1.0"
   }
 }

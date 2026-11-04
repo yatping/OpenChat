@@ -4,3 +4,5 @@ export const AGENT = { email: 'agent@example.com', name: 'Andy Agent', memberId:
 export const WORKSPACE_ID = 'work_e2e';
 export const WEBSITE_KEY = 'key_e2e';
 export const SITE_ORIGIN = 'https://shop.example';
+export const STYLED_WEBSITE_KEY = 'key_e2e_styled';
+export const STYLED_WEBSITE_SETTINGS = { welcomeMessage: 'Welcome to the shop', primaryColor: '#fde047', collectEmail: 'required', showAgentNames: true };

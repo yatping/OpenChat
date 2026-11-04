@@ -1589,6 +1589,14 @@
             "type": "integer",
             "description": "The latest public sequence number."
           },
+          "readSeq": {
+            "type": "integer",
+            "description": "This visitor's own read position."
+          },
+          "agentReadSeq": {
+            "type": "integer",
+            "description": "How far any agent has read, as a public sequence number."
+          },
           "createdAt": {
             "type": "string"
           }
@@ -1597,9 +1605,126 @@
           "id",
           "status",
           "lastSeq",
+          "readSeq",
+          "agentReadSeq",
           "createdAt"
         ],
         "description": "A deliberately reduced view, with no assignee, priority, or internal counters."
+      },
+      "VisitorConversationStarted": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/VisitorConversation"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "conversationId": {
+                    "type": "string"
+                  },
+                  "seq": {
+                    "type": "integer"
+                  },
+                  "clientMessageId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "sender": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "visitor",
+                          "member",
+                          "system"
+                        ]
+                      },
+                      "displayName": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "displayName"
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "text",
+                      "image",
+                      "file",
+                      "system"
+                    ]
+                  },
+                  "content": {
+                    "type": "string"
+                  },
+                  "attachments": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "filename": {
+                          "type": "string"
+                        },
+                        "contentType": {
+                          "type": "string"
+                        },
+                        "size": {
+                          "type": "integer"
+                        },
+                        "url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "filename",
+                        "contentType",
+                        "size",
+                        "url"
+                      ]
+                    }
+                  },
+                  "createdAt": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "conversationId",
+                  "seq",
+                  "clientMessageId",
+                  "sender",
+                  "type",
+                  "content",
+                  "attachments",
+                  "createdAt"
+                ]
+              }
+            },
+            "required": [
+              "message"
+            ]
+          }
+        ],
+        "description": "The conversation, and the message that started it, so that a client knows it is committed without asking again."
       },
       "Conversation": {
         "type": "object",
@@ -2935,7 +3060,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VisitorConversation"
+                  "$ref": "#/components/schemas/VisitorConversationStarted"
                 }
               }
             }
@@ -2945,7 +3070,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VisitorConversation"
+                  "$ref": "#/components/schemas/VisitorConversationStarted"
                 }
               }
             }

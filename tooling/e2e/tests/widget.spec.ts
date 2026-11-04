@@ -1,0 +1,395 @@
+/**
+ * The real widget on a page from another origin, against the real Worker. The page is served by the browser
+ * test itself under the address the website allows, so CORS and the Origin checks all run for real.
+ */
+import { expect, test, type Browser, type BrowserContext, type Page, type WebSocketRoute } from '@playwright/test';
+import { BASE_URL } from '../playwright.config';
+import { OWNER, SITE_ORIGIN, STYLED_WEBSITE_KEY, WEBSITE_KEY } from './fixtures';
+import { nextIp, signIn } from './helpers';
+
+const NONCE = 'test-nonce';
+const HOSTILE_CSS = 'button,div,p,textarea{display:none!important;color:red!important} *{font-size:99px!important}';
+
+function hostHtml(key: string, options: { consent?: boolean; csp?: boolean; latin1?: boolean } = {}) {
+  return `<!doctype html><html lang="en"><head><meta charset="${options.latin1 ? 'iso-8859-1' : 'utf-8'}"><title>Shop</title>
+    ${options.csp ? '' : `<style>${HOSTILE_CSS}</style>`}</head>
+    <body><h1>A customer's shop</h1>
+    <script src="${BASE_URL}/widget/widget.js" data-website-key="${key}" ${options.consent ? 'data-consent="pending"' : ''} ${options.csp ? `nonce="${NONCE}"` : ''} async></script>
+    </body></html>`;
+}
+
+async function visitorContext(browser: Browser, viewport?: { width: number; height: number }) {
+  const context = await browser.newContext({ ...(viewport ? { viewport } : {}), extraHTTPHeaders: { 'cf-connecting-ip': nextIp() } });
+  return context;
+}
+
+async function shop(context: BrowserContext, key = WEBSITE_KEY, options: { consent?: boolean; csp?: boolean; latin1?: boolean; origin?: string } = {}) {
+  const origin = options.origin ?? SITE_ORIGIN;
+  await context.route(`${origin}/**`, (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: hostHtml(key, options),
+      headers: options.csp ? { 'content-security-policy': `default-src 'none'; script-src 'nonce-${NONCE}' ${BASE_URL}; connect-src ${BASE_URL} ${BASE_URL.replace('http', 'ws')}; style-src 'none'; base-uri 'none'` } : {},
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/`);
+  return page;
+}
+
+const launcher = (page: Page) => page.locator('#openchat-widget .oc-launcher');
+const panel = (page: Page) => page.getByRole('dialog', { name: 'Chat' });
+const log = (page: Page) => page.getByRole('log', { name: 'Messages' });
+const compose = (page: Page) => page.getByRole('textbox', { name: 'Your message' });
+
+async function say(page: Page, text: string) {
+  await compose(page).fill(text);
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+}
+
+/** Starts a conversation through the widget, and gives its ID. */
+async function startChat(page: Page, first: string) {
+  await launcher(page).click();
+  const created = page.waitForResponse((r) => r.url().endsWith('/api/v1/widget/conversations') && r.request().method() === 'POST');
+  await say(page, first);
+  const { id } = (await (await created).json()) as { id: string };
+  await expect(log(page).getByText(first)).toBeVisible();
+  return id;
+}
+
+const inboxRow = (agent: Page, conversationId: string) => agent.getByRole('button', { name: new RegExp(`Visitor ${conversationId.slice(-6)}`) });
+
+async function reply(agent: Page, text: string) {
+  await agent.getByLabel('Reply').fill(text);
+  await agent.getByRole('button', { name: 'Send reply' }).click();
+  await expect(agent.getByRole('list', { name: 'Messages' })).toContainText(text);
+}
+
+async function openInbox(browser: Browser) {
+  const context = await browser.newContext();
+  const agent = await context.newPage();
+  await signIn(agent, OWNER);
+  return agent;
+}
+
+/** Stands between the widget and its socket. */
+async function controlSocket(context: BrowserContext) {
+  const state = { hold: false, sockets: [] as WebSocketRoute[], sent: [] as string[] };
+  await context.routeWebSocket(/realtime\/connect/, (socket) => {
+    state.sockets.push(socket);
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      state.sent.push(String(message));
+      server.send(message);
+    });
+    server.onMessage((message) => {
+      if (!state.hold) socket.send(message);
+    });
+  });
+  return state;
+}
+
+const scriptProblems: string[] = [];
+function watch(page: Page) {
+  page.on('console', (message) => {
+    if (/content security policy/i.test(message.text())) scriptProblems.push(message.text());
+  });
+  page.on('pageerror', (error) => scriptProblems.push(error.message));
+}
+test.beforeEach(() => {
+  scriptProblems.length = 0;
+});
+test.afterEach(() => {
+  expect(scriptProblems).toEqual([]);
+});
+
+test('loads the chat bundle only when idle or clicked, and a page view makes no session', async ({ browser }) => {
+  const context = await visitorContext(browser);
+  // Never idle, so that only the click can load it.
+  await context.addInitScript(() => {
+    window.requestIdleCallback = (() => 0) as typeof window.requestIdleCallback;
+  });
+  const requests: string[] = [];
+  context.on('request', (request) => requests.push(request.url()));
+  const page = await shop(context);
+  watch(page);
+  await expect(launcher(page)).toBeVisible();
+  expect(requests.some((url) => url.endsWith('/widget/chat.js'))).toBe(false);
+  expect(requests.some((url) => url.includes('/api/'))).toBe(false);
+
+  await launcher(page).click();
+  await expect(panel(page)).toBeVisible();
+  await expect(compose(page)).toBeFocused();
+  expect(requests.some((url) => url.endsWith('/widget/chat.js'))).toBe(true);
+  expect(requests.some((url) => url.includes('/widget/sessions'))).toBe(false);
+
+  // When the browser does go idle, it loads with nobody clicking, and still no session.
+  const idle = await shop(await visitorContext(browser));
+  await idle.waitForResponse((r) => r.url().includes('/widget/bootstrap'));
+  expect(await idle.evaluate(() => JSON.stringify(localStorage))).toBe('{}');
+  await idle.context().close();
+  await context.close();
+});
+
+test('a visitor and an agent talk in real time, with status, typing, and unread', async ({ browser }) => {
+  const agent = await openInbox(browser);
+  const context = await visitorContext(browser);
+  const page = await shop(context);
+  watch(page);
+  const conversationId = await startChat(page, 'Do you ship to Hong Kong?');
+  await expect(log(page).getByText('Sent', { exact: true })).toBeVisible();
+
+  // Seen, only after an agent actually opens it.
+  await inboxRow(agent, conversationId).click();
+  await expect(agent.getByRole('list', { name: 'Messages' })).toContainText('Do you ship to Hong Kong?');
+  await expect(log(page).getByText('Seen', { exact: true })).toBeVisible();
+
+  // Typing, both ways.
+  await agent.getByLabel('Reply').pressSequentially('Yes');
+  await expect(panel(page).getByText('Typing…')).toBeVisible();
+  await compose(page).pressSequentially('Great');
+  await expect(agent.getByText(/typing/i)).toBeVisible();
+  await compose(page).fill('');
+
+  await reply(agent, 'Yes we do');
+  await expect(log(page).getByText('Yes we do')).toBeVisible();
+  await expect(panel(page).getByText('Typing…')).toBeHidden();
+
+  // A note, sent ahead of a reply down the same path, whose arrival proves that the note was not still coming.
+  await agent.getByRole('button', { name: 'Internal note' }).click();
+  await agent.getByLabel('Internal note').fill('SECRET note');
+  await agent.getByRole('button', { name: 'Add note' }).click();
+  await expect(agent.getByRole('list', { name: 'Messages' })).toContainText('SECRET note');
+  await agent.getByRole('button', { name: 'Reply', exact: true }).click();
+
+  // Unread, on the button, while the panel is closed.
+  await page.getByRole('button', { name: 'Close chat' }).first().click();
+  await expect(launcher(page)).toBeFocused();
+  await reply(agent, 'Delivery takes two days');
+  await expect(launcher(page).locator('.oc-badge')).toHaveText('1');
+  await expect(launcher(page)).toHaveAttribute('aria-label', 'Open chat, 1 unread');
+  await launcher(page).click();
+  await expect(log(page).getByText('Delivery takes two days')).toBeVisible();
+  await expect(launcher(page).locator('.oc-badge')).toBeHidden();
+  await expect(log(page)).not.toContainText('SECRET');
+
+  // A new page: same visitor, the whole history once, and nothing unread.
+  await page.reload();
+  await launcher(page).click();
+  await expect(log(page).getByText('Delivery takes two days')).toHaveCount(1);
+  await expect(log(page).getByText('Do you ship to Hong Kong?')).toHaveCount(1);
+  await expect(log(page)).not.toContainText('SECRET');
+  await expect(launcher(page).locator('.oc-badge')).toBeHidden();
+  await context.close();
+  await agent.context().close();
+});
+
+test('shows content from anyone only as text, even under a hostile page style', async ({ browser }) => {
+  const agent = await openInbox(browser);
+  const context = await visitorContext(browser);
+  const page = await shop(context);
+  watch(page);
+  const attack = '<img src=x onerror="window.__attacked=1"><script>window.__attacked=1</script>';
+  const conversationId = await startChat(page, attack);
+  await inboxRow(agent, conversationId).click();
+  await reply(agent, attack.replace('<img', '<img id=agent'));
+  await expect(log(page).getByText('id=agent')).toBeVisible();
+  expect(await log(page).locator('img, script').count()).toBe(0);
+  expect(await page.evaluate(() => (window as unknown as { __attacked?: number }).__attacked)).toBeUndefined();
+  // The page's stylesheet hides every button and sets 99px text. None of that reaches the shadow root.
+  await expect(launcher(page)).toBeVisible();
+  expect(await compose(page).evaluate((element) => getComputedStyle(element).fontSize)).toBe('16px');
+  await context.close();
+  await agent.context().close();
+});
+
+test('a replayed send makes one message, and Try again keeps its identity', async ({ browser }) => {
+  const agent = await openInbox(browser);
+  const context = await visitorContext(browser);
+  const page = await shop(context);
+  watch(page);
+  const conversationId = await startChat(page, 'First');
+
+  // The server commits it, and the response is lost. The automatic retry is then a replay.
+  const seen: string[] = [];
+  let lose = true;
+  await context.route(/\/conversations\/[^/]+\/messages$/, async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    seen.push((route.request().postDataJSON() as { clientMessageId: string }).clientMessageId);
+    if (lose) {
+      lose = false;
+      await route.fetch();
+      return route.abort();
+    }
+    return route.continue();
+  });
+  await say(page, 'Only once please');
+  await expect.poll(() => seen.length, { timeout: 10_000 }).toBe(2);
+  expect(seen[0]).toBe(seen[1]);
+  await expect(log(page).getByText('Sending…')).toBeHidden();
+  await expect(log(page).getByText('Only once please')).toHaveCount(1);
+  await inboxRow(agent, conversationId).click();
+  await expect(agent.getByRole('list', { name: 'Messages' }).getByText('Only once please')).toHaveCount(1);
+  await context.unroute(/\/conversations\/[^/]+\/messages$/);
+
+  // Refused outright: it shows as failed straight away, and the visitor decides.
+  const tried: string[] = [];
+  let refuse = true;
+  await context.route(/\/conversations\/[^/]+\/messages$/, (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    tried.push((route.request().postDataJSON() as { clientMessageId: string }).clientMessageId);
+    return refuse ? route.fulfill({ status: 400, contentType: 'application/problem+json', body: '{}', headers: { 'access-control-allow-origin': SITE_ORIGIN } }) : route.continue();
+  });
+  await say(page, 'Second try');
+  await expect(log(page).getByText('Not sent.')).toBeVisible();
+  refuse = false;
+  await log(page).getByRole('button', { name: 'Try again' }).click();
+  await expect(log(page).getByText('Not sent.')).toBeHidden();
+  await expect(agent.getByRole('list', { name: 'Messages' }).getByText('Second try')).toHaveCount(1);
+  expect(tried).toHaveLength(2);
+  expect(tried[0]).toBe(tried[1]);
+  await context.close();
+  await agent.context().close();
+});
+
+test('losing the socket mid-exchange loses nothing', async ({ browser }) => {
+  const agent = await openInbox(browser);
+  const context = await visitorContext(browser);
+  const socket = await controlSocket(context);
+  const page = await shop(context);
+  watch(page);
+  const conversationId = await startChat(page, 'Are you there?');
+  await inboxRow(agent, conversationId).click();
+  await expect.poll(() => socket.sockets.length).toBeGreaterThan(0);
+
+  socket.hold = true;
+  await reply(agent, 'Sent while the socket was dead');
+  await expect(log(page).getByText('Sent while the socket was dead')).toBeHidden();
+  socket.hold = false;
+  await socket.sockets[socket.sockets.length - 1]!.close({ code: 1011 });
+  await expect(log(page).getByText('Sent while the socket was dead')).toHaveCount(1, { timeout: 15_000 });
+
+  await reply(agent, 'And after it came back');
+  await expect(log(page).getByText('And after it came back')).toHaveCount(1);
+  await context.close();
+  await agent.context().close();
+});
+
+test('works with sockets blocked, through REST', async ({ browser }) => {
+  const agent = await openInbox(browser);
+  const context = await visitorContext(browser);
+  await context.routeWebSocket(/realtime\/connect/, (socket) => {
+    void socket.close({ code: 1011 });
+  });
+  const page = await shop(context);
+  watch(page);
+  const conversationId = await startChat(page, 'My network blocks sockets');
+  await inboxRow(agent, conversationId).click();
+  await expect(panel(page).getByText('Reconnecting…')).toBeVisible();
+  await reply(agent, 'Polling will find this');
+  await expect(log(page).getByText('Polling will find this')).toBeVisible({ timeout: 50_000 });
+  await say(page, 'And I can still write');
+  await expect(agent.getByRole('list', { name: 'Messages' })).toContainText('And I can still write');
+  await context.close();
+  await agent.context().close();
+});
+
+test('runs under a strict content security policy, styled, with its own nonce', async ({ browser }) => {
+  const context = await visitorContext(browser);
+  const page = await shop(context, WEBSITE_KEY, { csp: true });
+  watch(page);
+  await launcher(page).click();
+  await expect(panel(page)).toBeVisible();
+  expect(await panel(page).evaluate((element) => getComputedStyle(element).position)).toBe('fixed');
+  await say(page, 'Allowed by the policy');
+  await expect(log(page).getByText('Sent', { exact: true })).toBeVisible();
+  await context.close();
+});
+
+test('uses the website settings: colour with readable text, welcome, names, and a required email', async ({ browser }) => {
+  const context = await visitorContext(browser);
+  const page = await shop(context, STYLED_WEBSITE_KEY);
+  watch(page);
+  await expect
+    .poll(() => launcher(page).evaluate((element) => [getComputedStyle(element).backgroundColor, getComputedStyle(element).color].join()))
+    .toBe('rgb(253, 224, 71),rgb(17, 24, 39)');
+  await launcher(page).click();
+  await expect(log(page).getByText('Welcome to the shop')).toBeVisible();
+  await expect(compose(page)).toBeHidden();
+  await expect(panel(page).getByLabel('Name')).toBeFocused();
+
+  await panel(page).getByLabel('Email').fill('visitor@example.com');
+  await panel(page).getByRole('button', { name: 'Start chatting' }).click();
+  await expect(compose(page)).toBeVisible();
+  await page.reload();
+  await launcher(page).click();
+  await expect(compose(page)).toBeVisible();
+  await context.close();
+});
+
+test('reads correctly on a page in another encoding, including what people write', async ({ browser }) => {
+  const agent = await openInbox(browser);
+  const context = await visitorContext(browser);
+  const page = await shop(context, WEBSITE_KEY, { latin1: true });
+  watch(page);
+  const conversationId = await startChat(page, 'Caf\u00e9 \u4f60\u597d');
+  await inboxRow(agent, conversationId).click();
+  await expect(agent.getByRole('list', { name: 'Messages' })).toContainText('Caf\u00e9 \u4f60\u597d');
+  await agent.getByLabel('Reply').pressSequentially('Yes');
+  await expect(panel(page).getByText('Typing\u2026')).toBeVisible();
+  await expect(panel(page).getByRole('button', { name: 'Close chat' }).first()).toHaveText('\u00d7');
+  await context.close();
+  await agent.context().close();
+});
+
+test('removes itself from a page the website does not allow', async ({ browser }) => {
+  const context = await visitorContext(browser);
+  const refused = context.waitForEvent('response', (r) => r.url().includes('/widget/bootstrap'));
+  const page = await shop(context, WEBSITE_KEY, { origin: 'https://elsewhere.example' });
+  // It was there first, so that the assertion below is not just the script not having run yet.
+  expect((await refused).status()).toBe(403);
+  await expect(page.locator('#openchat-widget')).toHaveCount(0);
+  await context.close();
+});
+
+test('holds identity in the session until the page grants consent', async ({ browser }) => {
+  const context = await visitorContext(browser);
+  const page = await shop(context, WEBSITE_KEY, { consent: true });
+  watch(page);
+  await startChat(page, 'No consent yet');
+  const area = (name: 'localStorage' | 'sessionStorage') => page.evaluate((n) => JSON.stringify(window[n]), name);
+  expect(await area('localStorage')).toBe('{}');
+  expect(await area('sessionStorage')).toContain('openchat:');
+  await page.evaluate(() => window.OpenChat!.grantConsent());
+  expect(await area('localStorage')).toContain('refreshToken');
+  expect(await area('sessionStorage')).not.toContain('openchat:');
+  await context.close();
+});
+
+test('fills a phone screen, and closes back to the button', async ({ browser }) => {
+  const context = await visitorContext(browser, { width: 375, height: 667 });
+  const page = await shop(context);
+  watch(page);
+  await launcher(page).click();
+  await expect(panel(page)).toBeVisible();
+  // Polled, because the panel slides in.
+  await expect
+    .poll(async () => {
+      const box = (await panel(page).boundingBox())!;
+      return [box.x, box.y, box.width, box.height].map(Math.round);
+    })
+    .toEqual([0, 0, 375, 667]);
+  const close = panel(page).getByRole('button', { name: 'Close chat' });
+  const box = (await close.boundingBox())!;
+  expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
+  await compose(page).press('Escape');
+  await expect(panel(page)).toBeHidden();
+  await expect(launcher(page)).toBeFocused();
+  await context.close();
+});
+
+declare global {
+  interface Window {
+    OpenChat?: { open(): void; close(): void; grantConsent(): void };
+  }
+}

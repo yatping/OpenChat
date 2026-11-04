@@ -35,6 +35,8 @@ const toConversation = (row: VisitorConversationRow) => ({
   id: row.id,
   status: row.status as 'open' | 'pending' | 'resolved' | 'archived',
   lastSeq: row.lastSeq,
+  readSeq: row.readSeq,
+  agentReadSeq: row.agentReadSeq,
   createdAt: toIso(row.createdAt),
 });
 
@@ -43,7 +45,8 @@ const toMessage = (row: VisitorMessageRow, ctx: VisitorContext) => ({
   id: row.id,
   conversationId: row.conversationId,
   seq: row.seq,
-  clientMessageId: row.clientMessageId,
+  // As on the socket: another person's client ID is no business of a visitor's.
+  clientMessageId: row.senderType === 'visitor' ? row.clientMessageId : null,
   sender: { type: row.senderType, displayName: row.senderType === 'member' && !ctx.showAgentNames ? null : row.senderName },
   type: row.type,
   content: row.content,
@@ -97,8 +100,8 @@ export async function listVisitorConversations(deps: Pick<AuthDeps, 'db'>, ctx: 
 
 export async function createVisitorConversation(deps: Pick<AuthDeps, 'db' | 'limiter'>, ctx: VisitorContext, input: { clientMessageId: string; content: string }) {
   await limitMessage(deps, ctx);
-  const { created, conversation, messageId } = await visitorRepositories(deps.db, ctx).conversations.create(input);
-  return { created, messageId, conversation: toConversation(conversation) };
+  const { created, conversation, message } = await visitorRepositories(deps.db, ctx).conversations.create(input);
+  return { created, messageId: message.id, conversation: { ...toConversation(conversation), message: toMessage(message, ctx) } };
 }
 
 export async function listVisitorMessages(deps: Pick<AuthDeps, 'db'>, ctx: VisitorContext, conversationId: string, input: { afterSeq?: number | undefined; beforeSeq?: number | undefined; limit: number }) {
@@ -117,7 +120,9 @@ export async function sendVisitorMessage(deps: Pick<AuthDeps, 'db' | 'limiter'>,
 }
 
 export async function markVisitorConversationRead(deps: Pick<AuthDeps, 'db'>, ctx: VisitorContext, conversationId: string, input: { deliveredSeq: number; readSeq: number }) {
-  if (!(await visitorRepositories(deps.db, ctx).messages.markRead(conversationId, input))) throw notFound();
+  const position = await visitorRepositories(deps.db, ctx).messages.markRead(conversationId, input);
+  if (!position) throw notFound();
+  return position;
 }
 
 export async function createVisitorTicket(deps: Pick<AuthDeps, 'db' | 'signingKey' | 'installationId'>, ctx: VisitorContext, conversationId: string, origin: string | undefined) {

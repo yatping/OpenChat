@@ -503,18 +503,23 @@ export function repositories(database: Database, ctx: WorkspaceContext) {
       },
 
       /** Positions only move forward, and stop at the last message. False if there is no such conversation. */
-      async markRead(conversationId: string, input: { deliveredSeq: number; readSeq: number }): Promise<boolean> {
-        const result = await d1
+      /** Null when the conversation is not in this workspace. publicReadSeq is the only position a visitor may see. */
+      async markRead(conversationId: string, input: { deliveredSeq: number; readSeq: number }): Promise<{ deliveredSeq: number; readSeq: number; publicReadSeq: number | null } | null> {
+        return d1
           .prepare(
             `INSERT INTO conversation_read_cursors (workspace_id, conversation_id, reader_type, reader_id, delivered_seq, read_seq, updated_at)
              SELECT c.workspace_id, c.id, 'member', ?1, MIN(MAX(?2, ?3), c.last_message_seq), MIN(?3, c.last_message_seq), ${DB_NOW_MS}
                FROM conversations c WHERE c.workspace_id = ?4 AND c.id = ?5
              ON CONFLICT (workspace_id, conversation_id, reader_type, reader_id) DO UPDATE
-               SET delivered_seq = MAX(delivered_seq, excluded.delivered_seq), read_seq = MAX(read_seq, excluded.read_seq), updated_at = excluded.updated_at`,
+               SET delivered_seq = MAX(delivered_seq, excluded.delivered_seq), read_seq = MAX(read_seq, excluded.read_seq), updated_at = excluded.updated_at
+             RETURNING delivered_seq AS deliveredSeq, read_seq AS readSeq,
+               (SELECT m.public_seq FROM messages m
+                 WHERE m.workspace_id = conversation_read_cursors.workspace_id AND m.conversation_id = conversation_read_cursors.conversation_id
+                   AND m.seq <= conversation_read_cursors.read_seq AND m.public_seq IS NOT NULL
+                 ORDER BY m.seq DESC LIMIT 1) AS publicReadSeq`,
           )
           .bind(ctx.memberId, input.deliveredSeq, input.readSeq, w, conversationId)
-          .run();
-        return result.meta.changes === 1;
+          .first<{ deliveredSeq: number; readSeq: number; publicReadSeq: number | null }>();
       },
     },
 

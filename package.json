@@ -10,7 +10,7 @@
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "test:e2e": "pnpm --filter @openchat/dashboard build && pnpm --filter @openchat/e2e test:e2e",
+    "test:e2e": "pnpm --filter @openchat/dashboard --filter @openchat/widget build && pnpm --filter @openchat/e2e test:e2e",
     "test:isolation": "pnpm --filter @openchat/api exec vitest run test/isolation.test.ts",
     "lint": "eslint .",
     "format": "prettier --write .",

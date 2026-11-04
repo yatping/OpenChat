@@ -239,6 +239,23 @@ describe('live delivery', () => {
     expect((await a.next('message.created')).data).toMatchObject({ message: { conversationId: id, seq: 1 } });
   });
 
+  it('tells a visitor how far agents have read in public numbers, and agents how far a visitor has', async () => {
+    const [watcher, guest] = await Promise.all([agentSocket(), visitorSocket()]);
+    await agentSend('reply-before-note');
+    await agentSend('note-before-read', 'internal_note', 'A note');
+    const conversation = await env.DB.prepare(`SELECT last_message_seq AS seq, last_public_seq AS pub FROM conversations WHERE id = ?1`).bind(conversationId).first<{ seq: number; pub: number }>();
+    expect(conversation!.seq).toBe(conversation!.pub + 1);
+    await call('POST', `${W}/conversations/${conversationId}/read`, { token: agent, body: { deliveredSeq: conversation!.seq, readSeq: conversation!.seq } });
+    expect((await guest.next('conversation.read')).data).toEqual({ conversationId, readSeq: conversation!.pub });
+    expect((await watcher.next('conversation.read', (d) => (d.reader as { type: string }).type === 'member')).data).toMatchObject({ readSeq: conversation!.seq });
+
+    await call('POST', `/api/v1/widget/conversations/${conversationId}/read`, { token: visitor, origin: SITE, body: { deliveredSeq: conversation!.pub, readSeq: conversation!.pub } });
+    expect((await watcher.next('conversation.read', (d) => (d.reader as { type: string }).type === 'visitor')).data).toMatchObject({ readSeq: conversation!.pub });
+
+    const list = await json<{ data: { id: string; readSeq: number; agentReadSeq: number }[] }>(await call('GET', '/api/v1/widget/conversations', { token: visitor, origin: SITE }));
+    expect(list.data.find((c) => c.id === conversationId)).toMatchObject({ readSeq: conversation!.pub, agentReadSeq: conversation!.pub });
+  });
+
   it('stays within the workspace', async () => {
     const other = await json<{ accessToken: string }>(await call('POST', '/api/v1/auth/login', { body: { email: 'other@example.com', password: PASSWORD, clientType: 'mobile' } }));
     const ticket = await json<{ url: string }>(await call('POST', '/api/v1/workspaces/work_2/realtime/tickets', { token: other.accessToken }));

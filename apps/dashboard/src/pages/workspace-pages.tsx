@@ -86,7 +86,7 @@ function WebsitesPanel({ membership }: { membership: Membership }) {
       <ul className="space-y-4">
         {websites.data?.data.map((website) => <WebsiteCard key={website.id} website={website} workspaceId={workspaceId} editable={editable} />)}
       </ul>
-      <p className="text-xs text-slate-600 dark:text-slate-400">The chat widget itself arrives in a later release. The snippet will not show anything yet.</p>
+      <p className="text-xs text-slate-600 dark:text-slate-400">Add the snippet to your site, and list the site's address under allowed origins. Sites with a content security policy also need to allow this address for scripts and connections.</p>
       {editable && (
         <form
           className="card space-y-3"

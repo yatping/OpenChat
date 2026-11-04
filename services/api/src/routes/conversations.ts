@@ -2,7 +2,7 @@ import { createAgentTicketRoute, createTagRoute, deleteTagRoute, getContactRoute
 import { createAgentTicket, createTag, deleteTag, getContact, listTags, setConversationTags, updateContact, getConversation, listConversations, listMessages, markConversationRead, sendMessage, updateConversation, workspaceContext } from '@openchat/core';
 import type { Context } from 'hono';
 import { authDeps, type App, type AppEnv } from '../context';
-import { dispatchSoon, socketUrl } from '../dispatch';
+import { dispatchSoon, publishRead, socketUrl } from '../dispatch';
 
 /** Authentication comes from the /api/v1/workspaces/* prefix in routes/workspaces.ts. */
 async function scoped(c: Context<AppEnv>, workspaceId: string) {
@@ -93,7 +93,8 @@ export function registerConversationRoutes(app: App) {
   app.openapi(markConversationReadRoute, async (c) => {
     const { workspaceId, conversationId } = c.req.valid('param');
     const { db, ctx } = await scoped(c, workspaceId);
-    await markConversationRead(db, ctx, conversationId, c.req.valid('json'));
+    const position = await markConversationRead(db, ctx, conversationId, c.req.valid('json'));
+    publishRead(c, { v: 1, kind: 'conversation.read', workspaceId, conversationId, reader: { type: 'member', id: ctx.memberId }, ...position });
     return c.body(null, 204);
   });
 }

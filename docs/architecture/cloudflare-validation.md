@@ -247,6 +247,25 @@ A third, also removed, ran the inbox in headless Chromium: sign-in, a conversati
 
 **Latency here was poor, for a known reason:** this client reached the Worker through LAX, and D1 was in Singapore, at about 170 ms per query. A send answered in a median of 1,095 ms and reached a socket in 1,813 ms, n=12. Queries repeat this distance, so placement matters more than anything in the dispatch path. Smart Placement is still untested, and is part of the M1b load test.
 
+### Widget on real Cloudflare, 2026-11-04
+
+The built widget in headless Chromium, on a page served as `https://shop.example` under a strict policy (`default-src 'none'`, a script nonce, `style-src 'none'`), with an agent in the real dashboard. All 13 checks passed on the final run, and the deployment was removed afterwards.
+
+| Check | Result |
+|---|---|
+| Sockets and sessions before the visitor writes | None |
+| Styles under `style-src 'none'` | Applied, through `adoptedStyleSheets` |
+| Socket, typing, read status, note not delivered, unread count, history after a reload | Passed |
+| `RETURNING` with a correlated subquery, used for read positions | Works on real D1 |
+| First send to "Sent", including a new session | 2.9 to 3.5 s, with the Worker and D1 far apart as in [the earlier results](#m1b-sockets-on-real-cloudflare-2026-11-04) |
+| Agent's reply to the visitor's screen | 0.8 to 1.8 s |
+
+**Found only by this run:** Workers serves scripts as `text/javascript` with no charset, so a script takes the encoding of the page around it. On a page with no UTF-8 declaration, the widget showed `Typingâ€¦`. Bundles are now plain ASCII, enforced by `check-budget`, with a browser test on a Latin-1 page. Local browser tests had missed it because their page declared UTF-8.
+
+Chromium also refuses a public page access to a loopback address, so the local browser tests turn off `LocalNetworkAccessChecks`. That applies only to those tests, not to a deployed widget.
+
+Not measured: a real phone, Safari, or Firefox. Only Chromium ran.
+
 ### Follow-up deployment, 2026-11-04
 
 A second throwaway deployment on the same account took about 90 seconds, then was removed. `oc preflight` passed, and with a bad API token it stopped before creating anything. `/api/*` answers carried `no-store` and `nosniff`. Account deletion answered 401 with no token, 400 with no password, 403 with a wrong password, and 409 for the last owner with the right one. A successful deletion has only run in workerd, because this deployment had one user. The check's failure cases for R2, D1, Queues, and several accounts, and the missing `workers.dev` message, have only run against a fake Wrangler.

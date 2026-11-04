@@ -172,8 +172,10 @@ export async function verifyConnection(deps: Pick<AuthDeps, 'verificationKeys' |
   return verified.claims;
 }
 
-export async function markConversationRead(db: Database, ctx: WorkspaceContext, conversationId: string, input: { deliveredSeq: number; readSeq: number }): Promise<void> {
-  if (!(await repositories(db, ctx).conversations.markRead(conversationId, input))) throw notFound();
+export async function markConversationRead(db: Database, ctx: WorkspaceContext, conversationId: string, input: { deliveredSeq: number; readSeq: number }) {
+  const position = await repositories(db, ctx).conversations.markRead(conversationId, input);
+  if (!position) throw notFound();
+  return position;
 }
 
 const toContact = (row: ContactRow) => ({

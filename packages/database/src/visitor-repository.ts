@@ -33,6 +33,10 @@ export interface VisitorConversationRow {
   status: string;
   lastSeq: number;
   createdAt: number;
+  /** This visitor's own read position. */
+  readSeq: number;
+  /** How far any agent has read, as a public sequence number, so that it says nothing about notes. */
+  agentReadSeq: number;
 }
 
 export interface VisitorMessageRow {
@@ -117,10 +121,20 @@ export function visitorRepositories(database: Database, ctx: VisitorContext) {
   const d1 = rawHandle(database);
   const w = ctx.workspaceId;
 
+  /** Takes the visitor's ID as ?3. */
+  const CONVERSATION_COLUMNS = `c.id, c.status, c.last_public_seq AS lastSeq, c.created_at AS createdAt,
+    COALESCE((SELECT r.read_seq FROM conversation_read_cursors r
+               WHERE r.workspace_id = c.workspace_id AND r.conversation_id = c.id AND r.reader_type = 'visitor' AND r.reader_id = ?3), 0) AS readSeq,
+    COALESCE((SELECT m.public_seq FROM messages m
+               WHERE m.workspace_id = c.workspace_id AND m.conversation_id = c.id AND m.public_seq IS NOT NULL
+                 AND m.seq <= (SELECT MAX(r.read_seq) FROM conversation_read_cursors r
+                                WHERE r.workspace_id = c.workspace_id AND r.conversation_id = c.id AND r.reader_type = 'member')
+               ORDER BY m.seq DESC LIMIT 1), 0) AS agentReadSeq`;
+
   const findOwn = (conversationId: string) =>
     d1
-      .prepare(`SELECT id, status, last_public_seq AS lastSeq, created_at AS createdAt FROM conversations WHERE workspace_id = ?1 AND id = ?2 AND contact_id = ?3`)
-      .bind(w, conversationId, ctx.contactId)
+      .prepare(`SELECT ${CONVERSATION_COLUMNS} FROM conversations c WHERE c.workspace_id = ?1 AND c.id = ?2 AND c.contact_id = ?4`)
+      .bind(w, conversationId, ctx.visitorId, ctx.contactId)
       .first<VisitorConversationRow>();
 
   /** Only their own message, so that a client ID cannot be used to read anything else. */
@@ -136,8 +150,8 @@ export function visitorRepositories(database: Database, ctx: VisitorContext) {
 
       async list(): Promise<VisitorConversationRow[]> {
         const { results } = await d1
-          .prepare(`SELECT id, status, last_public_seq AS lastSeq, created_at AS createdAt FROM conversations WHERE workspace_id = ?1 AND contact_id = ?2 ORDER BY last_message_at DESC LIMIT 50`)
-          .bind(w, ctx.contactId)
+          .prepare(`SELECT ${CONVERSATION_COLUMNS} FROM conversations c WHERE c.workspace_id = ?1 AND c.contact_id = ?2 ORDER BY c.last_message_at DESC LIMIT 50`)
+          .bind(w, ctx.contactId, ctx.visitorId)
           .all<VisitorConversationRow>();
         return results;
       },
@@ -146,7 +160,7 @@ export function visitorRepositories(database: Database, ctx: VisitorContext) {
        * The conversation's ID comes from the visitor and the client ID, so a retry reaches the same row and
        * the message insert becomes a replay. The first statement after the insert only runs for a new message.
        */
-      async create(input: { clientMessageId: string; content: string }): Promise<{ created: boolean; conversation: VisitorConversationRow; messageId: string }> {
+      async create(input: { clientMessageId: string; content: string }): Promise<{ created: boolean; conversation: VisitorConversationRow; message: VisitorMessageRow }> {
         const id = await deterministicId('conversation', `${ctx.visitorId}|${input.clientMessageId}`);
         const messageId = newId('message');
         const [, insert] = await d1.batch([
@@ -174,9 +188,9 @@ export function visitorRepositories(database: Database, ctx: VisitorContext) {
             )
             .bind(newId('outbox'), w, id, messageId),
         ]);
-        const conversation = await findOwn(id);
-        if (!conversation) throw new Error('A conversation was not readable after its batch');
-        return { created: insert?.meta.changes === 1, conversation, messageId };
+        const [conversation, message] = await Promise.all([findOwn(id), findSent(id, input.clientMessageId)]);
+        if (!conversation || !message) throw new Error('A conversation was not readable after its batch');
+        return { created: insert?.meta.changes === 1, conversation, message };
       },
     },
 
@@ -213,18 +227,18 @@ export function visitorRepositories(database: Database, ctx: VisitorContext) {
       },
 
       /** In the visitor's own sequence. Positions only move forward, and stop at the last public message. */
-      async markRead(conversationId: string, input: { deliveredSeq: number; readSeq: number }): Promise<boolean> {
-        const result = await d1
+      async markRead(conversationId: string, input: { deliveredSeq: number; readSeq: number }): Promise<{ deliveredSeq: number; readSeq: number } | null> {
+        return d1
           .prepare(
             `INSERT INTO conversation_read_cursors (workspace_id, conversation_id, reader_type, reader_id, delivered_seq, read_seq, updated_at)
              SELECT c.workspace_id, c.id, 'visitor', ?1, MIN(MAX(?2, ?3), c.last_public_seq), MIN(?3, c.last_public_seq), ${DB_NOW_MS}
                FROM conversations c WHERE c.workspace_id = ?4 AND c.id = ?5 AND c.contact_id = ?6
              ON CONFLICT (workspace_id, conversation_id, reader_type, reader_id) DO UPDATE
-               SET delivered_seq = MAX(delivered_seq, excluded.delivered_seq), read_seq = MAX(read_seq, excluded.read_seq), updated_at = excluded.updated_at`,
+               SET delivered_seq = MAX(delivered_seq, excluded.delivered_seq), read_seq = MAX(read_seq, excluded.read_seq), updated_at = excluded.updated_at
+             RETURNING delivered_seq AS deliveredSeq, read_seq AS readSeq`,
           )
           .bind(ctx.visitorId, input.deliveredSeq, input.readSeq, w, conversationId, ctx.contactId)
-          .run();
-        return result.meta.changes === 1;
+          .first<{ deliveredSeq: number; readSeq: number }>();
       },
     },
 
