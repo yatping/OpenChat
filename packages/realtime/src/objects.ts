@@ -211,8 +211,14 @@ abstract class RealtimeObject extends DurableObject<RealtimeEnv> {
     socket.send(this.helloFrame(attachment));
   }
 
-  override async webSocketClose(socket: WebSocket): Promise<void> {
-    // With compatibility date 2026-04-07 or later the runtime completes the close handshake.
+  override async webSocketClose(socket: WebSocket, code: number): Promise<void> {
+    // Answer the close, or the client waits about 10 seconds and reports 1006. Measured on real Cloudflare, despite
+    // the documented auto-reply. 1005 and 1006 only describe a close, and cannot be sent.
+    try {
+      socket.close(code === 1005 || code === 1006 ? 1000 : code);
+    } catch {
+      // Already complete.
+    }
     await this.afterSocketGone(socket);
   }
 

@@ -442,6 +442,14 @@ describe('frames from clients', () => {
   });
 });
 
+describe('closing', () => {
+  it('answers a close from the client, so that it completes cleanly', async () => {
+    const a = await agentSocket();
+    a.socket.close(1000);
+    expect(await a.closed()).toBe(1000);
+  });
+});
+
 describe('presence', () => {
   // A room left by an earlier test can fire its alarm during this one, so look only at this conversation.
   const mine = (data: Record<string, unknown>) => data.conversationId === conversationId;

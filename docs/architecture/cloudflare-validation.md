@@ -60,7 +60,7 @@ Spike results are in [Phase 0 spike results](#phase-0-spike-results).
 | Soft request limit | 1,000 requests/s per object | Documented |
 | Auto-response | Strings up to 2,048 characters; does not wake the object or bill duration; timestamp available | Documented |
 | Ping frames | Automatic pong without waking, but browsers cannot send ping frames, so an application-level ping is required | Documented |
-| Close frames | Auto-reply with compatibility date 2026-04-07 or later | Documented |
+| Close frames | Auto-reply with compatibility date 2026-04-07 or later | Documented, **but not what we measured**. With no `close()` in `webSocketClose`, a client closing its socket waited about 10 s and reported 1006, on real Cloudflare and in workerd tests. The objects now answer explicitly |
 | What blocks hibernation | Alarms in progress, requests, `setTimeout`/`setInterval`, outbound WebSockets | Documented |
 | Storage | SQLite-backed required on Free. 10 GB per object Paid | Documented |
 | Alarms | One per object; at-least-once; up to 6 retries with backoff from 2 s | Documented |
@@ -235,11 +235,13 @@ A throwaway deployment, since removed, driven by a Node client.
 | Visitor ticket from another `Origin` | Connection refused |
 | Agent sees a note and a visitor does not | Held, with `seq` unbroken and no agent name by default |
 | Idle for 40 s, with pings | Sockets stayed open, and both received the next message. This run did not separately prove the object hibernated; S2 did |
-| Idle with no pings | **Sockets dropped with 1006** at some point within about two minutes, so clients must send the heartbeat. The exact time was not measured |
+| Idle with no pings | **Sockets dropped with 1006**, at about 62 s when measured later, so clients must send the heartbeat. That is before our 90 s stale check could act, and what ends them was not determined |
 | Client disconnects, messages sent meanwhile | All recovered through REST by `afterSeq` |
 | Redeploy during traffic, one send per second | 23 of 23 sent, all received live, no socket closed, no gaps, nothing left pending |
 | Stranded outbox row | The real cron re-delivered it within 17 s of being made stale |
 | Member removed | Close frame reached the client within about 1.3 s, and no later message did. **Node's WebSocket fires `close` about 10 s later**, so do not treat that event's timing as the revocation time |
+
+A second throwaway deployment, also removed, checked the next slice from the same client. Presence, typing in both directions, note typing kept from the visitor, `auth.refresh`, bootstrap availability, and a flood closed with 4429 all held. The real alarm reported a visitor gone 15 s after closing. Agent typing reached the other sockets in about 510 ms. After the objects began answering closes, a client's own close completed with 1000 in 146 to 439 ms, n=3, instead of 1006 after about 10 s.
 
 **Latency here was poor, for a known reason:** this client reached the Worker through LAX, and D1 was in Singapore, at about 170 ms per query. A send answered in a median of 1,095 ms and reached a socket in 1,813 ms, n=12. Queries repeat this distance, so placement matters more than anything in the dispatch path. Smart Placement is still untested, and is part of the M1b load test.
 
