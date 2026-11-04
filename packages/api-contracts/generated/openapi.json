@@ -825,6 +825,9 @@
                   },
                   "isTyping": {
                     "type": "boolean"
+                  },
+                  "internal": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -1350,6 +1353,9 @@
                     "type": "string"
                   },
                   "isTyping": {
+                    "type": "boolean"
+                  },
+                  "internal": {
                     "type": "boolean"
                   }
                 },

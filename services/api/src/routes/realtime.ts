@@ -16,6 +16,10 @@ export function registerRealtimeRoutes(app: App) {
       expiresAt: claims.until,
       connectedAt: Date.now(),
       protocolVersion: REALTIME_PROTOCOL_VERSION,
+      workspaceId: claims.wid,
+      issuer: claims.iss,
+      ...(claims.conv ? { conversationId: claims.conv } : {}),
+      ...(claims.org ? { origin: claims.org } : {}),
     };
     // Only ever set here. The objects have no route of their own, so a client cannot supply this header.
     const headers = { upgrade: 'websocket', [CLAIMS_HEADER]: JSON.stringify(attachment) };

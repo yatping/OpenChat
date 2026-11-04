@@ -1,4 +1,4 @@
-import { evictDurableObject, runInDurableObject } from 'cloudflare:test';
+import { evictDurableObject, runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
 import { afterEach, describe, expect, it } from 'vitest';
 import { VisitorEventSchema } from '@openchat/api-contracts';
@@ -58,7 +58,10 @@ async function connect(stub: DurableObjectStub, attachment: SocketAttachment): P
       });
     },
   };
-  socket.addEventListener('message', (e) => void state.frames.push(e.data as string));
+  // Presence is covered in services/api/test/realtime.test.ts.
+  socket.addEventListener('message', (e) => {
+    if (!(e.data as string).includes('"presence.')) state.frames.push(e.data as string);
+  });
   socket.addEventListener('close', (e) => void (state.closed = { code: e.code }));
   await state.next(); // hello
   return state;
@@ -228,5 +231,38 @@ describe('toVisitorEvent, across every domain event', () => {
     else expect(result).toMatchObject(expected as object);
     expect(JSON.stringify(result)).not.toMatch(/mem_secret|private note|"visibility"|"publicSeq"|"readSeq":9/);
     if (result) expect(VisitorEventSchema.safeParse(result).success).toBe(true);
+  });
+});
+
+describe('stale sockets', () => {
+  const longAgo = () => Date.now() - 120_000;
+
+  it('closes a socket with no heartbeat, and keeps one that has pinged', async () => {
+    const stub = env.WORKSPACE_HUB.getByName('stale');
+    const dead = await connect(stub, claims({ principalId: 'mem_dead', connectedAt: longAgo() }));
+    const alive = await connect(stub, claims({ principalId: 'mem_alive', connectedAt: longAgo() }));
+    alive.socket.send('ping');
+    expect(await alive.next()).toBe('pong');
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    expect(await waitForClose(dead)).toEqual({ code: 1001 });
+    expect(alive.closed).toBeNull();
+  });
+
+  it('keeps checking while sockets remain, and stops when none do', async () => {
+    const stub = env.WORKSPACE_HUB.getByName('stale-rearm');
+    const alive = await connect(stub, claims());
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    expect(await runInDurableObject(stub, (_, state) => state.storage.getAlarm())).not.toBeNull();
+    alive.socket.close(1000);
+    await waitForClose(alive);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    expect(await runInDurableObject(stub, (_, state) => state.storage.getAlarm())).toBeNull();
+  });
+
+  it('sets the alarm on connect', async () => {
+    const stub = env.CONVERSATION_ROOM.getByName('stale-room');
+    await connect(stub, claims({ kind: 'visitor' }));
+    expect(await runInDurableObject(stub, (_, state) => state.storage.getAlarm())).not.toBeNull();
   });
 });

@@ -1,4 +1,4 @@
-import { createExecutionContext, waitOnExecutionContext } from 'cloudflare:test';
+import { createExecutionContext, runDurableObjectAlarm, waitOnExecutionContext } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
 import { hashPassword } from '@openchat/auth';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -65,6 +65,7 @@ async function connect(ticketUrl: string, origin?: string) {
     }
   };
   return {
+    socket,
     frames,
     state,
     next: async (type: string) => {
@@ -335,6 +336,186 @@ describe('losing an account', () => {
     await env.DB.prepare(`UPDATE outbox SET created_at = created_at - 120000 WHERE topic = 'member.access_changed'`).run();
     await handleScheduled({ scheduledTime: Date.now() } as ScheduledController, testEnv);
     expect(await peer.closed()).toBe(4403);
+  });
+});
+
+describe('frames from clients', () => {
+  const send = (s: { socket: WebSocket }, type: string, data: unknown) => s.socket.send(JSON.stringify({ v: 1, type, data }));
+  const peerSocket = async () => {
+    const { accessToken } = await json<{ accessToken: string }>(await call('POST', '/api/v1/auth/login', { body: { email: 'peer@example.com', password: PASSWORD, clientType: 'mobile' } }));
+    const ticket = await json<{ url: string }>(await call('POST', `${W}/realtime/tickets`, { token: accessToken }));
+    const socket = await connect(ticket.url);
+    await socket.next('hello');
+    return socket;
+  };
+
+  it('passes agent typing to other agents and the visitor, with no name', async () => {
+    const [a, peer, v] = [await agentSocket(), await peerSocket(), await visitorSocket()];
+    send(a, 'typing.set', { conversationId, isTyping: true });
+    expect((await peer.next('typing')).data).toEqual({ conversationId, actor: { type: 'member', id: 'mem_a', displayName: null } });
+    expect((await v.next('typing')).data).toEqual({ conversationId, displayName: null });
+    expect(a.frames.some((f) => f.type === 'typing')).toBe(false);
+  });
+
+  it('keeps typing a note from the visitor', async () => {
+    const [a, peer, v] = [await agentSocket(), await peerSocket(), await visitorSocket()];
+    send(a, 'typing.set', { conversationId, isTyping: true, internal: true });
+    await peer.next('typing');
+    // Goes through the same room, so its arrival proves that the note's typing was not on its way.
+    await agentSend('agent-reply-after');
+    await v.next('message.created');
+    expect(v.frames.some((f) => f.type === 'typing')).toBe(false);
+  });
+
+  it('passes visitor typing to agents, only for their own conversation', async () => {
+    const [a, v] = [await agentSocket(), await visitorSocket()];
+    send(v, 'typing.set', { conversationId: 'conv_someone_else', isTyping: true });
+    expect((await v.next('error')).data).toEqual({ code: 'forbidden' });
+    expect(a.frames.some((f) => f.type === 'typing')).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 2100));
+    send(v, 'typing.set', { conversationId, isTyping: true });
+    expect((await a.next('typing')).data).toMatchObject({ conversationId, actor: { type: 'visitor', displayName: null } });
+  });
+
+  it('drops typing that comes too fast, or that says it has stopped', async () => {
+    const [a, peer] = [await agentSocket(), await peerSocket()];
+    send(a, 'typing.set', { conversationId, isTyping: false });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(peer.frames.filter((f) => f.type === 'typing')).toEqual([]);
+    send(a, 'typing.set', { conversationId, isTyping: true });
+    send(a, 'typing.set', { conversationId, isTyping: true });
+    send(a, 'typing.set', { conversationId, isTyping: true });
+    await peer.next('typing');
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(peer.frames.filter((f) => f.type === 'typing')).toEqual([]);
+  });
+
+  it('answers a bad frame, ignores an unknown one, and closes a flood', async () => {
+    const a = await agentSocket();
+    a.socket.send('not json');
+    expect((await a.next('error')).data).toEqual({ code: 'invalid_frame' });
+    send(a, 'typing.set', { conversationId: 5, isTyping: true });
+    expect((await a.next('error')).data).toEqual({ code: 'invalid_frame' });
+    send(a, 'from.the.future', {});
+    for (let n = 0; n < 25; n++) send(a, 'from.the.future', {});
+    expect(await a.closed()).toBe(4429);
+  });
+
+  it('closes a frame too large to be anything legitimate', async () => {
+    const a = await agentSocket();
+    a.socket.send('x'.repeat(9000));
+    expect(await a.closed()).toBe(1009);
+  });
+
+  describe('auth.refresh', () => {
+    const newTicket = async (path: string, token: string, origin?: string) => (await json<{ ticket: string }>(await call('POST', path, origin ? { token, origin } : { token }))).ticket;
+    const agentPath = `${W}/realtime/tickets`;
+
+    it('extends a live socket, and says so', async () => {
+      const a = await agentSocket();
+      send(a, 'auth.refresh', { ticket: await newTicket(agentPath, agent) });
+      const first = new Date(String((await a.next('hello')).data.authExpiresAt)).getTime();
+      expect(first).toBeGreaterThan(Date.now() + 14 * 60_000);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      send(a, 'auth.refresh', { ticket: await newTicket(agentPath, agent) });
+      expect(new Date(String((await a.next('hello')).data.authExpiresAt)).getTime()).toBeGreaterThan(first);
+    });
+
+    it("refuses another person's ticket, or one for another scope, and changes nothing", async () => {
+      const a = await agentSocket();
+      const { accessToken } = await json<{ accessToken: string }>(await call('POST', '/api/v1/auth/login', { body: { email: 'peer@example.com', password: PASSWORD, clientType: 'mobile' } }));
+      send(a, 'auth.refresh', { ticket: await newTicket(agentPath, accessToken) });
+      expect((await a.next('error')).data).toEqual({ code: 'forbidden' });
+      send(a, 'auth.refresh', { ticket: 'not.a.ticket' });
+      expect((await a.next('error')).data).toEqual({ code: 'forbidden' });
+      const v = await visitorSocket();
+      send(v, 'auth.refresh', { ticket: await newTicket(agentPath, agent) });
+      expect((await v.next('error')).data).toEqual({ code: 'forbidden' });
+      send(v, 'auth.refresh', { ticket: await newTicket(`/api/v1/widget/conversations/${conversationId}/realtime/tickets`, visitor) });
+      expect((await v.next('error')).data).toEqual({ code: 'forbidden' });
+      send(v, 'auth.refresh', { ticket: await newTicket(`/api/v1/widget/conversations/${conversationId}/realtime/tickets`, visitor, SITE) });
+      await v.next('hello');
+    });
+  });
+});
+
+describe('presence', () => {
+  it('tells agents who else is here, and when a member goes', async () => {
+    const a = await agentSocket();
+    const { accessToken } = await json<{ accessToken: string }>(await call('POST', '/api/v1/auth/login', { body: { email: 'peer@example.com', password: PASSWORD, clientType: 'mobile' } }));
+    const ticket = await json<{ url: string }>(await call('POST', `${W}/realtime/tickets`, { token: accessToken }));
+    const peer = await connect(ticket.url);
+    expect((await a.next('presence.member')).data).toEqual({ memberId: 'mem_c', online: true });
+    expect((await peer.next('presence.member')).data).toEqual({ memberId: 'mem_a', online: true });
+    peer.socket.close(1000);
+    expect((await a.next('presence.member')).data).toEqual({ memberId: 'mem_c', online: false });
+  });
+
+  it('stays online while a second tab is open', async () => {
+    const a = await agentSocket();
+    const { accessToken } = await json<{ accessToken: string }>(await call('POST', '/api/v1/auth/login', { body: { email: 'peer@example.com', password: PASSWORD, clientType: 'mobile' } }));
+    const open = async () => connect((await json<{ url: string }>(await call('POST', `${W}/realtime/tickets`, { token: accessToken }))).url);
+    const first = await open();
+    await a.next('presence.member');
+    await open();
+    first.socket.close(1000);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(a.frames.filter((f) => f.type === 'presence.member')).toEqual([]);
+  });
+
+  it('tells agents about a visitor once, and leaves going to the alarm', async () => {
+    const a = await agentSocket();
+    const v = await visitorSocket();
+    expect((await a.next('presence.visitor')).data).toEqual({ conversationId, online: true });
+    const second = await visitorSocket();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(a.frames.filter((f) => f.type === 'presence.visitor')).toEqual([]);
+    second.socket.close(1000);
+    v.socket.close(1000);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(a.frames.filter((f) => f.type === 'presence.visitor')).toEqual([]);
+    const room = testEnv.CONVERSATION_ROOM.getByName(`conversation:work_1:${conversationId}`);
+    expect(await runDurableObjectAlarm(room)).toBe(true);
+    expect((await a.next('presence.visitor')).data).toEqual({ conversationId, online: false });
+  });
+
+  it('a visitor who comes straight back was never away', async () => {
+    const a = await agentSocket();
+    const v = await visitorSocket();
+    await a.next('presence.visitor');
+    v.socket.close(1000);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await visitorSocket();
+    const room = testEnv.CONVERSATION_ROOM.getByName(`conversation:work_1:${conversationId}`);
+    await runDurableObjectAlarm(room);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(a.frames.filter((f) => f.type === 'presence.visitor')).toEqual([]);
+  });
+});
+
+describe('availability', () => {
+  const bootstrap = async (key: string) => (await json<{ availability: string }>(await call('GET', `/api/v1/widget/bootstrap?websiteKey=${key}`, { origin: SITE }))).availability;
+  const site = (id: string, key: string, settings: string) =>
+    env.DB.prepare(`INSERT INTO websites (id, workspace_id, name, website_key, allowed_origins_json, settings_json, created_at, updated_at) VALUES (?1, 'work_1', 'Shop', ?2, ?3, ?4, 1, 1)`).bind(id, key, JSON.stringify([SITE]), settings).run();
+  let unique = 0;
+  const key = (name: string) => `key_${name}_${Date.now()}_${++unique}`;
+
+  it('follows connected agents in auto mode', async () => {
+    const [offline, online] = [key('none'), key('some')];
+    await site('site_a', offline, '{}');
+    await site('site_b', online, '{}');
+    expect(await bootstrap(offline)).toBe('offline');
+    await agentSocket();
+    expect(await bootstrap(online)).toBe('online');
+  });
+
+  it('obeys a fixed setting, whoever is connected', async () => {
+    const [on, off] = [key('on'), key('off')];
+    await site('site_a', on, '{"availabilityMode":"online"}');
+    await site('site_b', off, '{"availabilityMode":"offline"}');
+    expect(await bootstrap(on)).toBe('online');
+    await agentSocket();
+    expect(await bootstrap(off)).toBe('offline');
   });
 });
 
