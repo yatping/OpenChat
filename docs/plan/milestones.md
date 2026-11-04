@@ -90,7 +90,7 @@ In progress, one PR per slice. Done so far:
 |---|---|
 | Conversations and messages for agents, over REST | Merged. Tested in workerd and on real D1. Attachments are empty and tags are not in the response yet |
 | Visitor sessions and the widget API | Merged. Tested in workerd and on real D1, including notes and isolation between visitors. Turnstile and attachments are not in yet |
-| Sockets, tickets, outbox dispatch, and the sweep | Merged. Tested in workerd. No typing, presence, or `auth.refresh` yet, so after its expiry a socket receives nothing, closes at the next event, and the client reconnects. Not yet run on real Cloudflare |
+| Sockets, tickets, outbox dispatch, and the sweep | Merged. Tested in workerd. No typing, presence, or `auth.refresh` yet, so after its expiry a socket receives nothing, closes at the next event, and the client reconnects. Verified on real Cloudflare from a Node client, [with these results](../architecture/cloudflare-validation.md#m1b-sockets-on-real-cloudflare-2026-11-04). Not yet from a browser |
 | Typing, presence, availability, frame limits, stale sockets | Not started |
 | Inbox UI, widget UI, attachments, load test | Not started |
 

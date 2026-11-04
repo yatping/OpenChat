@@ -225,6 +225,24 @@ Sending from a Worker through the `send_email` binding delivered a real reset em
 
 27 of 27 outside checks passed against a throwaway deployment: origins, retries reaching the same conversation, notes staying out of a visitor's history with no gap in `seq`, a note's client ID refused, compare-and-set, reopening, and tokens refused across audiences. Eight concurrent replays produced one 201 and seven 200s, with no gap in the sequence. Sending a message took a median of 186 ms and at most 317 ms from one client, n=10, which is too few to rely on. The load test replaces this.
 
+### M1b sockets on real Cloudflare, 2026-11-04
+
+A throwaway deployment, since removed, driven by a Node client.
+
+| Check | Result |
+|---|---|
+| Bad, altered, or wrong-kind tokens at connect | 401. A real ticket without an upgrade gets 426, and a ticket is refused as an access token |
+| Visitor ticket from another `Origin` | Connection refused |
+| Agent sees a note and a visitor does not | Held, with `seq` unbroken and no agent name by default |
+| Idle for 40 s, with pings | Sockets stayed open, and both received the next message. This run did not separately prove the object hibernated; S2 did |
+| Idle with no pings | **Sockets dropped with 1006** at some point within about two minutes, so clients must send the heartbeat. The exact time was not measured |
+| Client disconnects, messages sent meanwhile | All recovered through REST by `afterSeq` |
+| Redeploy during traffic, one send per second | 23 of 23 sent, all received live, no socket closed, no gaps, nothing left pending |
+| Stranded outbox row | The real cron re-delivered it within 17 s of being made stale |
+| Member removed | Close frame reached the client within about 1.3 s, and no later message did. **Node's WebSocket fires `close` about 10 s later**, so do not treat that event's timing as the revocation time |
+
+**Latency here was poor, for a known reason:** this client reached the Worker through LAX, and D1 was in Singapore, at about 170 ms per query. A send answered in a median of 1,095 ms and reached a socket in 1,813 ms, n=12. Queries repeat this distance, so placement matters more than anything in the dispatch path. Smart Placement is still untested, and is part of the M1b load test.
+
 ### Follow-up deployment, 2026-11-04
 
 A second throwaway deployment on the same account took about 90 seconds, then was removed. `oc preflight` passed, and with a bad API token it stopped before creating anything. `/api/*` answers carried `no-store` and `nosniff`. Account deletion answered 401 with no token, 400 with no password, 403 with a wrong password, and 409 for the last owner with the right one. A successful deletion has only run in workerd, because this deployment had one user. The check's failure cases for R2, D1, Queues, and several accounts, and the missing `workers.dev` message, have only run against a fake Wrangler.
