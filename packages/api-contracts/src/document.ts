@@ -19,6 +19,12 @@ import {
   widgetBootstrapRoute,
   connectRealtimeRoute,
   createAgentTicketRoute,
+  createTagRoute,
+  deleteTagRoute,
+  getContactRoute,
+  listTagsRoute,
+  setConversationTagsRoute,
+  updateContactRoute,
   createVisitorTicketRoute,
   getConversationRoute,
   getDiscoveryRoute,
@@ -44,6 +50,12 @@ import {
 
 /** Every route must be listed here so that it reaches the published document. */
 export const ALL_ROUTES = [
+  getContactRoute,
+  updateContactRoute,
+  listTagsRoute,
+  createTagRoute,
+  deleteTagRoute,
+  setConversationTagsRoute,
   createAgentTicketRoute,
   createVisitorTicketRoute,
   connectRealtimeRoute,

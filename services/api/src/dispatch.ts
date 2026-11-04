@@ -42,6 +42,7 @@ async function conversationEvent(db: Database, row: OutboxRow, kind: 'conversati
       assignedMemberId: c.assignedMemberId,
       lastMessageSeq: c.lastMessageSeq,
       ...(c.lastMessageAt === null ? {} : { lastMessageAt: toIso(c.lastMessageAt) }),
+      tags: JSON.parse(c.tagsJson) as { id: string; name: string }[],
       updatedAt: toIso(c.updatedAt),
     },
   };

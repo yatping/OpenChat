@@ -3,7 +3,7 @@
  * repository, which cannot read internal notes. Write rules: docs/architecture/data-model.md.
  */
 import { canAssignConversation, signTicket, TICKET_TTL_SECONDS, verifyTicket, type TicketClaims } from '@openchat/auth';
-import { repositories, type ConversationChange, type ConversationRow, type ConversationStatus, type Database, type StoredMessage, type WorkspaceContext } from '@openchat/database';
+import { repositories, type ContactRow, type ConversationChange, type ConversationRow, type ConversationStatus, type Database, type StoredMessage, type WorkspaceContext } from '@openchat/database';
 import { AppError, notFound, toIso } from '@openchat/shared';
 import type { AuthDeps } from './auth-flows';
 import { requireCapability } from './workspaces';
@@ -14,6 +14,9 @@ const toConversation = (row: ConversationRow) => ({
   id: row.id,
   websiteId: row.websiteId,
   contactId: row.contactId,
+  contactName: row.contactName,
+  contactEmail: row.contactEmail,
+  tags: JSON.parse(row.tagsJson) as { id: string; name: string }[],
   assignedMemberId: row.assignedMemberId,
   status: row.status,
   priority: row.priority,
@@ -171,4 +174,51 @@ export async function verifyConnection(deps: Pick<AuthDeps, 'verificationKeys' |
 
 export async function markConversationRead(db: Database, ctx: WorkspaceContext, conversationId: string, input: { deliveredSeq: number; readSeq: number }): Promise<void> {
   if (!(await repositories(db, ctx).conversations.markRead(conversationId, input))) throw notFound();
+}
+
+const toContact = (row: ContactRow) => ({
+  id: row.id,
+  name: row.name,
+  email: row.email,
+  phone: row.phone,
+  firstSeenAt: toIso(row.firstSeenAt),
+  lastSeenAt: toIso(row.lastSeenAt),
+});
+
+export async function getContact(db: Database, ctx: WorkspaceContext, contactId: string) {
+  requireCapability(ctx, 'conversation.view');
+  const row = await repositories(db, ctx).contacts.get(contactId);
+  if (!row) throw notFound();
+  return toContact(row);
+}
+
+export async function updateContact(db: Database, ctx: WorkspaceContext, contactId: string, change: { name?: string | null | undefined; email?: string | null | undefined; phone?: string | null | undefined }) {
+  requireCapability(ctx, 'conversation.reply');
+  const contacts = repositories(db, ctx).contacts;
+  if (!(await contacts.update(contactId, change))) throw notFound();
+  return toContact((await contacts.get(contactId))!);
+}
+
+export async function listTags(db: Database, ctx: WorkspaceContext) {
+  requireCapability(ctx, 'conversation.view');
+  return { data: await repositories(db, ctx).tags.list() };
+}
+
+export async function createTag(db: Database, ctx: WorkspaceContext, name: string) {
+  requireCapability(ctx, 'conversation.reply');
+  const result = await repositories(db, ctx).tags.create(name);
+  if (!result) throw new AppError(409, 'tag_limit', 'This workspace has too many tags. Delete some first');
+  return result;
+}
+
+export async function deleteTag(db: Database, ctx: WorkspaceContext, tagId: string) {
+  requireCapability(ctx, 'workspace.manage');
+  if (!(await repositories(db, ctx).tags.delete(tagId))) throw notFound();
+}
+
+export async function setConversationTags(db: Database, ctx: WorkspaceContext, conversationId: string, tagIds: string[]) {
+  requireCapability(ctx, 'conversation.reply');
+  const outcome = await repositories(db, ctx).conversations.setTags(conversationId, [...new Set(tagIds)]);
+  if (outcome === 'not_found') throw notFound();
+  if (outcome === 'unknown_tag') throw new AppError(400, 'unknown_tag', 'One of these tags does not exist in this workspace');
 }

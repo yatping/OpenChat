@@ -66,6 +66,7 @@ export const ConversationPatchSchema = z.object({
   assignedMemberId: z.string().nullable().optional(),
   lastMessageSeq: z.number().int().optional(),
   lastMessageAt: Iso.optional(),
+  tags: z.array(z.object({ id: z.string(), name: z.string() })).optional(),
   updatedAt: Iso,
 });
 

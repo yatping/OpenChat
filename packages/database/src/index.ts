@@ -13,7 +13,7 @@ export {
   type ConversationChange,
   type ConversationFilter,
   type ConversationPriority,
-  type ConversationRow,
+  type ConversationRow, type ContactRow, type TagRow,
   type ConversationStatus,
   type InvitationResult,
   type MemberChange,
