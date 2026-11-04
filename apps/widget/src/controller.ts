@@ -14,6 +14,7 @@ const TYPING_SEND_MS = 3000;
 const TYPING_SHOW_MS = 5000;
 const AUTOMATIC_RETRIES = 3;
 const STALE_BOOTSTRAP_MS = 60_000;
+const MAX_FILE_BYTES = 25 * 1024 * 1024;
 
 export type Settings = Bootstrap['settings'];
 
@@ -33,7 +34,7 @@ export interface ChatState {
   typing: { displayName: string | null } | null;
   loadingOlder: boolean;
   profile: 'none' | 'required' | 'offered';
-  notice: 'rate_limited' | 'unavailable' | null;
+  notice: 'rate_limited' | 'unavailable' | 'bad_file' | null;
 }
 
 export interface ControllerDeps {
@@ -79,6 +80,8 @@ export function createController(deps: ControllerDeps) {
   let sendQueue: Promise<void> = Promise.resolve();
   let syncing: Promise<void> | null = null;
   let syncAgain = false;
+  /** Files on their way, by message key, so that Try again neither loses one nor uploads it twice. */
+  const outgoing = new Map<string, { file: File; attachmentId: string | null }>();
 
   const profileNeed = (settings: Settings | null): ChatState['profile'] => {
     const stored = deps.storage.get();
@@ -238,9 +241,16 @@ export function createController(deps: ControllerDeps) {
 
   const deliver = async (message: ChatMessage) => {
     const input = { clientMessageId: message.clientMessageId!, content: message.content };
+    const upload = outgoing.get(message.key);
     for (let attempt = 0; ; attempt++) {
       try {
-        if (state.conversation) {
+        if (upload) {
+          // The widget only offers a file once there is a conversation. It can only be gone after that.
+          if (!state.conversation) throw new ApiError(404, null, null);
+          upload.attachmentId ??= (await deps.api.uploadAttachment(state.conversation.id, upload.file)).id;
+          applyMessages([await deps.api.sendMessage(state.conversation.id, { ...input, attachmentIds: [upload.attachmentId] })]);
+          outgoing.delete(message.key);
+        } else if (state.conversation) {
           applyMessages([await deps.api.sendMessage(state.conversation.id, input)]);
         } else {
           // The same client ID reaches the same conversation, so a retry after a lost response cannot start a second.
@@ -253,6 +263,11 @@ export function createController(deps: ControllerDeps) {
         if (state.notice) update({ notice: null });
         return;
       } catch (error) {
+        if (upload && error instanceof ApiError && !isTransient(error) && error.status !== 429) {
+          markMessage(message.key, { status: 'failed' });
+          update({ notice: 'bad_file' });
+          return;
+        }
         if (error instanceof ApiError && error.status === 404 && state.conversation) {
           // The conversation is gone, or this is a new identity. The words go into a new one.
           realtime?.stop();
@@ -336,6 +351,21 @@ export function createController(deps: ControllerDeps) {
       update({ messages: [...state.messages, message] });
       return enqueue(message);
     },
+
+    /** Offered only once there is a conversation, which also means that a page view cannot be used to store files. */
+    sendFile(file: File) {
+      if (!state.conversation) return Promise.resolve();
+      if (file.size > MAX_FILE_BYTES || file.size === 0) {
+        update({ notice: 'bad_file' });
+        return Promise.resolve();
+      }
+      const message = pendingMessage(newClientMessageId(deps.crypto ?? crypto), '', file.name);
+      outgoing.set(message.key, { file, attachmentId: null });
+      update({ messages: [...state.messages, message], notice: null });
+      return enqueue(message);
+    },
+
+    fetchAttachment: (url: string) => deps.api.fetchAttachment(url),
 
     /** The same client ID, so a message that did arrive is not sent twice. */
     retry(key: string) {

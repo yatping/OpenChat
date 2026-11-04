@@ -43,7 +43,8 @@ export function toVisitorEvent(event: DomainEvent, options: { showAgentNames?: b
             sender: { type: message.sender.type, displayName: message.sender.type === 'member' && !options.showAgentNames ? null : message.sender.displayName },
             type: message.type,
             content: message.content,
-            attachments: message.attachments,
+            // Field by field, and with the visitor's own route: an agent's URL means nothing to them.
+            attachments: message.attachments.map((file) => ({ id: file.id, filename: file.filename, contentType: file.contentType, size: file.size, url: `/api/v1/widget/attachments/${file.id}` })),
             createdAt: message.createdAt,
           },
         },

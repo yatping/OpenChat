@@ -11,18 +11,40 @@ export interface MessageStatementsInput {
   content: string;
   /** Set for a visitor, so that the insert only applies to a conversation of theirs. */
   ownerContactId?: string;
+  /** Unique. Files this sender uploaded to this conversation, and not yet on a message. */
+  attachmentIds?: string[];
 }
+
+/** Older than this and the sweep may be deleting it, so that a message can no longer claim it. */
+export const ATTACHMENT_CLAIM_MS = 23 * 60 * 60 * 1000;
+
+/** The files on a message, as JSON, for a query with messages as m. */
+export const ATTACHMENTS_JSON = `(SELECT COALESCE(json_group_array(json_object('id', a.id, 'filename', a.filename, 'contentType', a.content_type, 'size', a.size)), '[]')
+       FROM attachments a WHERE a.workspace_id = m.workspace_id AND a.message_id = m.id AND a.status = 'ready')`;
+
+export interface AttachmentJson {
+  id: string;
+  filename: string;
+  contentType: string;
+  size: number;
+}
+
 
 /**
  * Pattern 1 from docs/architecture/data-model.md: an idempotent insert. Later statements are guarded by the
  * fresh message ID, which exists only if the insert took effect, so a replay or a wrong owner changes
  * nothing. The insert is always first, so that callers can read whether it happened. A visitor's message
- * reopens a conversation, because someone has to see it.
+ * reopens a conversation, because someone has to see it. The insert also requires every named file to be
+ * claimable, in SQL: a wrong ID means no message, rather than a message that lost its file.
  */
 export function messageStatements(d1: D1Database, input: MessageStatementsInput): D1PreparedStatement[] {
   const { id, workspaceId: w, conversationId: c } = input;
   const visibility = input.type === 'internal_note' ? 'internal' : 'public';
   const inserted = `EXISTS (SELECT 1 FROM messages m WHERE m.id = ?1)`;
+  const attachmentIds = JSON.stringify(input.attachmentIds ?? []);
+  const claimable = `a.workspace_id = c.workspace_id AND a.conversation_id = c.id AND a.message_id IS NULL AND a.status = 'ready'
+                 AND a.uploaded_by_type = ?4 AND a.uploaded_by_id = ?5 AND a.created_at > ${DB_NOW_MS} - ${ATTACHMENT_CLAIM_MS}
+                 AND a.id IN (SELECT value FROM json_each(?11))`;
   return [
     d1
       .prepare(
@@ -30,11 +52,23 @@ export function messageStatements(d1: D1Database, input: MessageStatementsInput)
                                sender_type, sender_id, message_type, visibility, content, created_at)
          SELECT ?1, c.workspace_id, c.id, c.last_message_seq + 1,
                 CASE WHEN ?2 = 'public' THEN c.last_public_seq + 1 END,
-                ?3, ?4, ?5, ?6, ?2, ?7, ${DB_NOW_MS}
+                ?3, ?4, ?5,
+                CASE WHEN ?6 <> 'text' OR json_array_length(?11) = 0 THEN ?6
+                     WHEN NOT EXISTS (SELECT 1 FROM attachments a WHERE ${claimable} AND a.content_type NOT LIKE 'image/%') THEN 'image'
+                     ELSE 'file' END,
+                ?2, ?7, ${DB_NOW_MS}
            FROM conversations c WHERE c.workspace_id = ?8 AND c.id = ?9 AND (?10 IS NULL OR c.contact_id = ?10)
+            AND (SELECT COUNT(*) FROM attachments a WHERE ${claimable}) = json_array_length(?11)
          ON CONFLICT (workspace_id, conversation_id, client_message_id) DO NOTHING`,
       )
-      .bind(id, visibility, input.clientMessageId, input.sender.type, input.sender.id, input.type, input.content, w, c, input.ownerContactId ?? null),
+      .bind(id, visibility, input.clientMessageId, input.sender.type, input.sender.id, input.type, input.content, w, c, input.ownerContactId ?? null, attachmentIds),
+    d1
+      .prepare(
+        `UPDATE attachments SET message_id = ?1
+          WHERE workspace_id = ?2 AND conversation_id = ?3 AND message_id IS NULL
+            AND id IN (SELECT value FROM json_each(?4)) AND ${inserted}`,
+      )
+      .bind(id, w, c, attachmentIds),
     d1
       .prepare(
         `INSERT INTO conversation_events (id, workspace_id, conversation_id, event_type, actor_type, actor_id, created_at)

@@ -75,7 +75,7 @@ RFC 9457 problem details with a stable machine-readable `code`:
 | 403 | Authenticated workspace member lacking permission |
 | 404 | Not found, **including resources in another workspace** |
 | 409 | Version conflict, or state conflict |
-| 413, 415 | Attachment too large, or a disallowed type |
+| 411, 413, 415 | Attachment with no declared length, too large, or a disallowed type |
 | 429 | Rate limited, with `Retry-After` |
 | 503 | D1 overloaded or dependency unavailable, with `Retry-After` |
 

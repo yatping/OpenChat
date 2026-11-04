@@ -1,7 +1,8 @@
-import { createAgentTicketRoute, createTagRoute, deleteTagRoute, getContactRoute, listTagsRoute, setConversationTagsRoute, updateContactRoute, getConversationRoute, listConversationsRoute, listMessagesRoute, markConversationReadRoute, sendMessageRoute, updateConversationRoute } from '@openchat/api-contracts';
-import { createAgentTicket, createTag, deleteTag, getContact, listTags, setConversationTags, updateContact, getConversation, listConversations, listMessages, markConversationRead, sendMessage, updateConversation, workspaceContext } from '@openchat/core';
+import { downloadAttachmentRoute, uploadAttachmentRoute, createAgentTicketRoute, createTagRoute, deleteTagRoute, getContactRoute, listTagsRoute, setConversationTagsRoute, updateContactRoute, getConversationRoute, listConversationsRoute, listMessagesRoute, markConversationReadRoute, sendMessageRoute, updateConversationRoute } from '@openchat/api-contracts';
+import { agentAttachment, beginAgentUpload, createAgentTicket, createTag, deleteTag, getContact, listTags, setConversationTags, updateContact, getConversation, listConversations, listMessages, markConversationRead, sendMessage, updateConversation, workspaceContext } from '@openchat/core';
 import type { Context } from 'hono';
 import { authDeps, type App, type AppEnv } from '../context';
+import { receiveUpload, sendFile } from '../attachments';
 import { dispatchSoon, publishRead, socketUrl } from '../dispatch';
 
 /** Authentication comes from the /api/v1/workspaces/* prefix in routes/workspaces.ts. */
@@ -89,6 +90,18 @@ export function registerConversationRoutes(app: App) {
     const { ticket, expiresAt } = await createAgentTicket(deps, ctx, c.req.header('origin'));
     return c.json({ ticket, expiresAt, url: socketUrl(c, ticket) }, 201);
   });
+
+  app.openapi(uploadAttachmentRoute, async (c) => {
+    const { workspaceId, conversationId } = c.req.valid('param');
+    const { db, ctx } = await scoped(c, workspaceId);
+    return c.json(await receiveUpload(c, conversationId, c.req.valid('query').filename, (input) => beginAgentUpload(db, ctx, input)), 201);
+  });
+
+  app.openapi(downloadAttachmentRoute, (async (c: Context<AppEnv>) => {
+    const { workspaceId, attachmentId } = c.req.param() as { workspaceId: string; attachmentId: string };
+    const { db, ctx } = await scoped(c, workspaceId);
+    return sendFile(c, await agentAttachment(db, ctx, attachmentId));
+  }) as never);
 
   app.openapi(markConversationReadRoute, async (c) => {
     const { workspaceId, conversationId } = c.req.valid('param');

@@ -5,7 +5,8 @@
  */
 import { deterministicId, newId } from '@openchat/shared';
 import { DB_NOW_MS, rawHandle, type Database } from './internal/handle';
-import { messageStatements } from './internal/message-statements';
+import { ATTACHMENTS_JSON, messageStatements } from './internal/message-statements';
+import { ATTACHMENT_SELECT, attachmentKey, type AttachmentRow, type NewAttachment } from './repositories';
 
 declare const visitorBrand: unique symbol;
 
@@ -49,16 +50,19 @@ export interface VisitorMessageRow {
   type: 'text' | 'image' | 'file' | 'system';
   content: string;
   createdAt: number;
+  attachmentsJson: string;
 }
 
 export type VisitorSendResult =
   | { outcome: 'created' | 'replayed'; message: VisitorMessageRow }
   | { outcome: 'not_found' }
   /** The client ID is taken by a message this visitor did not send, which must not be returned. */
-  | { outcome: 'conflict' };
+  | { outcome: 'conflict' }
+  /** A named file is not one this visitor can put on a message. */
+  | { outcome: 'invalid_attachments' };
 
 /** Public rows only, in the visitor's own sequence, for conversations of this contact. ?1 is the contact. */
-const MESSAGE_SELECT = `SELECT m.id, m.conversation_id AS conversationId, m.public_seq AS seq,
+const MESSAGE_SELECT = `SELECT m.id, ${ATTACHMENTS_JSON} AS attachmentsJson, m.conversation_id AS conversationId, m.public_seq AS seq,
     CASE WHEN m.sender_type = 'visitor' THEN m.client_message_id END AS clientMessageId,
     m.sender_type AS senderType, m.message_type AS type, m.content, m.created_at AS createdAt, COALESCE(u.name, ct.name) AS senderName
   FROM messages m
@@ -194,8 +198,42 @@ export function visitorRepositories(database: Database, ctx: VisitorContext) {
       },
     },
 
+    attachments: {
+      /** False unless this is a conversation of theirs. Pending until its bytes are stored. */
+      async begin(input: NewAttachment): Promise<boolean> {
+        const result = await d1
+          .prepare(
+            `INSERT INTO attachments (id, workspace_id, conversation_id, storage_key, filename, content_type, size, status, uploaded_by_type, uploaded_by_id, created_at)
+             SELECT ?1, workspace_id, id, ?2, ?3, ?4, ?5, 'pending', 'visitor', ?6, ${DB_NOW_MS} FROM conversations WHERE workspace_id = ?7 AND id = ?8 AND contact_id = ?9`,
+          )
+          .bind(input.id, attachmentKey(w, input.conversationId, input.id), input.filename, input.contentType, input.size, ctx.visitorId, w, input.conversationId, ctx.contactId)
+          .run();
+        return result.meta.changes === 1;
+      },
+
+      async finish(id: string): Promise<void> {
+        await d1.prepare(`UPDATE attachments SET status = 'ready' WHERE workspace_id = ?1 AND id = ?2 AND uploaded_by_type = 'visitor' AND uploaded_by_id = ?3`).bind(w, id, ctx.visitorId).run();
+      },
+
+      async abandon(id: string): Promise<void> {
+        await d1.prepare(`DELETE FROM attachments WHERE workspace_id = ?1 AND id = ?2 AND message_id IS NULL AND uploaded_by_type = 'visitor' AND uploaded_by_id = ?3`).bind(w, id, ctx.visitorId).run();
+      },
+
+      /** A file on a public message in a conversation of theirs. A note's file, or one an agent has not sent yet, does not exist here. */
+      get(id: string): Promise<AttachmentRow | null> {
+        return d1
+          .prepare(
+            `${ATTACHMENT_SELECT} WHERE workspace_id = ?1 AND id = ?2 AND status = 'ready' AND EXISTS (
+               SELECT 1 FROM messages m JOIN conversations c ON c.workspace_id = m.workspace_id AND c.id = m.conversation_id
+                WHERE m.workspace_id = attachments.workspace_id AND m.id = attachments.message_id AND m.visibility = 'public' AND c.contact_id = ?3)`,
+          )
+          .bind(w, id, ctx.contactId)
+          .first<AttachmentRow>();
+      },
+    },
+
     messages: {
-      async send(conversationId: string, input: { clientMessageId: string; content: string }): Promise<VisitorSendResult> {
+      async send(conversationId: string, input: { clientMessageId: string; content: string; attachmentIds?: string[] }): Promise<VisitorSendResult> {
         const [insert] = await d1.batch(
           messageStatements(d1, {
             id: newId('message'),
@@ -206,11 +244,15 @@ export function visitorRepositories(database: Database, ctx: VisitorContext) {
             type: 'text',
             content: input.content,
             ownerContactId: ctx.contactId,
+            ...(input.attachmentIds ? { attachmentIds: input.attachmentIds } : {}),
           }),
         );
         const message = await findSent(conversationId, input.clientMessageId);
         if (message) return { outcome: insert?.meta.changes === 1 ? 'created' : 'replayed', message };
-        return (await findOwn(conversationId)) ? { outcome: 'conflict' } : { outcome: 'not_found' };
+        if (!(await findOwn(conversationId))) return { outcome: 'not_found' };
+        // A taken client ID comes first: what is sent with it may never have been this visitor's.
+        const taken = await d1.prepare(`SELECT 1 AS found FROM messages WHERE workspace_id = ?1 AND conversation_id = ?2 AND client_message_id = ?3`).bind(w, conversationId, input.clientMessageId).first();
+        return taken || !input.attachmentIds?.length ? { outcome: 'conflict' } : { outcome: 'invalid_attachments' };
       },
 
       /** Oldest first. An unknown or foreign conversation simply has no rows. */

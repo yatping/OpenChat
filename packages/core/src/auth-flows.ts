@@ -66,6 +66,8 @@ export const LIMITS = {
   visitorSessionWebsite: { limit: 3000, windowSeconds: 60 * 60 },
   visitorMessage: { limit: 20, windowSeconds: 60 },
   websiteVisitorMessages: { limit: 600, windowSeconds: 60 },
+  visitorUpload: { limit: 20, windowSeconds: 60 * 60 },
+  websiteVisitorUploads: { limit: 500, windowSeconds: 60 * 60 },
 } as const;
 
 export const PASSWORD_RESET_JOB = 'auth.password_reset_email';

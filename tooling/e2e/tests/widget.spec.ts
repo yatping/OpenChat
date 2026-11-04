@@ -342,6 +342,85 @@ test('reads correctly on a page in another encoding, including what people write
   await agent.context().close();
 });
 
+const PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIApD5fRAAAAABJRU5ErkJggg==', 'base64');
+
+test('files go both ways, and a note\'s file never reaches the visitor', async ({ browser }) => {
+  const agent = await openInbox(browser);
+  const context = await visitorContext(browser);
+  const page = await shop(context);
+  watch(page);
+  const thread = agent.getByRole('list', { name: 'Messages' });
+
+  // Nothing to attach to before there is a conversation: a page view cannot be used to store files.
+  await launcher(page).click();
+  await expect(panel(page).getByRole('button', { name: 'Attach a file' })).toHaveCount(0);
+  const conversationId = await (async () => {
+    const created = page.waitForResponse((r) => r.url().endsWith('/api/v1/widget/conversations') && r.request().method() === 'POST');
+    await say(page, 'Here is the problem');
+    return ((await (await created).json()) as { id: string }).id;
+  })();
+  await inboxRow(agent, conversationId).click();
+
+  await panel(page).getByLabel('File to attach').setInputFiles({ name: 'screen.png', mimeType: 'image/png', buffer: PIXEL });
+  await expect(thread.getByRole('img', { name: 'screen.png' })).toBeVisible();
+  await expect.poll(() => thread.getByRole('img', { name: 'screen.png' }).evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(1);
+  const saved = agent.waitForEvent('download');
+  await thread.getByRole('button', { name: /Download screen\.png/ }).click();
+  expect((await saved).suggestedFilename()).toBe('screen.png');
+  await expect(log(page).getByRole('img', { name: 'screen.png' })).toBeVisible();
+
+  // A file the server refuses shows why, and sends nothing.
+  await panel(page).getByLabel('File to attach').setInputFiles({ name: 'page.html', mimeType: 'text/html', buffer: Buffer.from('<script>alert(1)</script>') });
+  await expect(panel(page).getByRole('alert')).toContainText('cannot be sent');
+  await expect(log(page).getByText('Not sent.')).toBeVisible();
+
+  // From the agent, with words, and alone on a note.
+  await agent.getByLabel('File to attach').setInputFiles({ name: 'invoice.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.7 test') });
+  await expect(agent.getByRole('list', { name: 'Files to send' })).toContainText('invoice.pdf');
+  await agent.getByLabel('Reply').fill('Your invoice');
+  await agent.getByRole('button', { name: 'Send reply' }).click();
+  await expect(log(page).getByText('Your invoice')).toBeVisible();
+  const download = page.waitForEvent('download');
+  await log(page).getByRole('button', { name: /Download invoice\.pdf/ }).click();
+  expect((await download).suggestedFilename()).toBe('invoice.pdf');
+
+  await agent.getByRole('button', { name: 'Internal note' }).click();
+  await agent.getByLabel('File to attach').setInputFiles({ name: 'SECRET.png', mimeType: 'image/png', buffer: PIXEL });
+  await expect(agent.getByRole('list', { name: 'Files to send' })).toContainText('SECRET.png');
+  await agent.getByRole('button', { name: 'Add note' }).click();
+  await expect(thread.getByRole('img', { name: 'SECRET.png' })).toBeVisible();
+  await agent.getByRole('button', { name: 'Reply', exact: true }).click();
+  await reply(agent, 'After the note');
+  await expect(log(page).getByText('After the note')).toBeVisible();
+  await expect(log(page)).not.toContainText('SECRET');
+
+  await page.reload();
+  await launcher(page).click();
+  await expect(log(page).getByRole('img', { name: 'screen.png' })).toBeVisible();
+  await expect(log(page)).not.toContainText('SECRET');
+  await context.close();
+  await agent.context().close();
+});
+
+test('a page that refuses blob pictures still gets the download', async ({ browser }) => {
+  const agent = await openInbox(browser);
+  const context = await visitorContext(browser);
+  const page = await shop(context, WEBSITE_KEY, { csp: true });
+  // The refused picture is the point of this test, so its report is expected.
+  const conversationId = await startChat(page, 'A strict page');
+  await inboxRow(agent, conversationId).click();
+  await agent.getByLabel('File to attach').setInputFiles({ name: 'photo.png', mimeType: 'image/png', buffer: PIXEL });
+  await expect(agent.getByRole('list', { name: 'Files to send' })).toContainText('photo.png');
+  await agent.getByRole('button', { name: 'Send reply' }).click();
+  await expect(log(page).getByRole('button', { name: /Download photo\.png/ })).toBeVisible();
+  await expect(log(page).getByRole('img', { name: 'photo.png' })).toHaveCount(0);
+  const saved = page.waitForEvent('download');
+  await log(page).getByRole('button', { name: /Download photo\.png/ }).click();
+  expect((await saved).suggestedFilename()).toBe('photo.png');
+  await context.close();
+  await agent.context().close();
+});
+
 test('removes itself from a page the website does not allow', async ({ browser }) => {
   const context = await visitorContext(browser);
   const refused = context.waitForEvent('response', (r) => r.url().includes('/widget/bootstrap'));

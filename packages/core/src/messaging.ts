@@ -3,8 +3,9 @@
  * repository, which cannot read internal notes. Write rules: docs/architecture/data-model.md.
  */
 import { canAssignConversation, signTicket, TICKET_TTL_SECONDS, verifyTicket, type TicketClaims } from '@openchat/auth';
-import { repositories, type ContactRow, type ConversationChange, type ConversationRow, type ConversationStatus, type Database, type StoredMessage, type WorkspaceContext } from '@openchat/database';
+import { repositories, type AttachmentJson, type ContactRow, type ConversationChange, type ConversationRow, type ConversationStatus, type Database, type StoredMessage, type WorkspaceContext } from '@openchat/database';
 import { AppError, notFound, toIso } from '@openchat/shared';
+import { toAttachment } from './attachments';
 import type { AuthDeps } from './auth-flows';
 import { requireCapability } from './workspaces';
 
@@ -29,6 +30,8 @@ const toConversation = (row: ConversationRow) => ({
   updatedAt: toIso(row.updatedAt),
 });
 
+const invalidAttachments = () => new AppError(400, 'invalid_attachments', 'A file on this message was not uploaded by you to this conversation, or has already been sent');
+
 export const toMessage = (row: StoredMessage) => ({
   id: row.id,
   conversationId: row.conversationId,
@@ -39,7 +42,7 @@ export const toMessage = (row: StoredMessage) => ({
   type: row.type,
   visibility: row.visibility,
   content: row.content,
-  attachments: [],
+  attachments: (JSON.parse(row.attachmentsJson) as AttachmentJson[]).map((file) => toAttachment(file, `/api/v1/workspaces/${row.workspaceId}/attachments/${file.id}`)),
   createdAt: toIso(row.createdAt),
   metadata: {},
 });
@@ -142,10 +145,11 @@ export async function listMessages(db: Database, ctx: WorkspaceContext, conversa
   return { data: (await repos.messages.list(conversationId, input)).map(toMessage) };
 }
 
-export async function sendMessage(db: Database, ctx: WorkspaceContext, conversationId: string, input: { clientMessageId: string; type: 'text' | 'internal_note'; content: string }) {
+export async function sendMessage(db: Database, ctx: WorkspaceContext, conversationId: string, input: { clientMessageId: string; type: 'text' | 'internal_note'; content: string; attachmentIds?: string[] | undefined }) {
   requireCapability(ctx, input.type === 'internal_note' ? 'conversation.note' : 'conversation.reply');
-  const result = await repositories(db, ctx).messages.send({ conversationId, clientMessageId: input.clientMessageId, sender: { type: 'member', id: ctx.memberId }, type: input.type, content: input.content });
+  const result = await repositories(db, ctx).messages.send({ conversationId, clientMessageId: input.clientMessageId, sender: { type: 'member', id: ctx.memberId }, type: input.type, content: input.content, ...(input.attachmentIds?.length ? { attachmentIds: [...new Set(input.attachmentIds)] } : {}) });
   if (result.outcome === 'not_found') throw notFound();
+  if (result.outcome === 'invalid_attachments') throw invalidAttachments();
   return { created: result.outcome === 'created', message: toMessage(result.message) };
 }
 

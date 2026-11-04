@@ -21,6 +21,7 @@ import type {
   listWebsitesRoute,
   loginRoute,
   sendMessageRoute,
+  AttachmentSchema,
   updateConversationRoute,
   updateMemberRoute,
   updateWebsiteRoute,
@@ -53,6 +54,7 @@ export type ConversationPage = Json200<typeof listConversationsRoute>;
 export type ConversationUpdate = BodyOf<typeof updateConversationRoute>;
 export type Message = Json200<typeof listMessagesRoute>['data'][number];
 export type MessageInput = BodyOf<typeof sendMessageRoute>;
+export type Attachment = z.infer<typeof AttachmentSchema>;
 export type RealtimeTicket = Json201<typeof createAgentTicketRoute>;
 export type Tag = Json201<typeof createTagRoute>;
 export type Contact = Json200<typeof getContactRoute>;
@@ -85,23 +87,30 @@ export function createClient(options: ClientOptions) {
   const doFetch = options.fetch ?? globalThis.fetch.bind(globalThis);
   const baseUrl = options.baseUrl.replace(/\/+$/, '');
 
-  async function send(method: string, path: string, body: unknown): Promise<Response> {
+  async function send(method: string, path: string, body: unknown, file?: { data: Blob; type: string }): Promise<Response> {
     const headers = new Headers({ accept: 'application/json' });
     const token = await options.getAccessToken?.();
     if (token) headers.set('authorization', `Bearer ${token}`);
     if (body !== undefined) headers.set('content-type', 'application/json');
-    return doFetch(`${baseUrl}${path}`, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    if (file) headers.set('content-type', file.type);
+    const payload = file ? { body: file.data } : body === undefined ? {} : { body: JSON.stringify(body) };
+    return doFetch(`${baseUrl}${path}`, { method, headers, ...payload });
   }
 
-  async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    let response = await send(method, path, body);
+  async function checked(method: string, path: string, body?: unknown, file?: { data: Blob; type: string }): Promise<Response> {
+    let response = await send(method, path, body, file);
     if (response.status === 401 && options.onUnauthorized && (await options.onUnauthorized())) {
-      response = await send(method, path, body);
+      response = await send(method, path, body, file);
     }
     if (!response.ok) {
       const problem = (await response.json().catch(() => null)) as { code?: string; title?: string; requestId?: string } | null;
       throw new ApiError(response.status, problem?.code ?? 'unknown', problem?.title ?? 'Request failed', problem?.requestId);
     }
+    return response;
+  }
+
+  async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const response = await checked(method, path, body);
     if (response.status === 202 || response.status === 204) return undefined as T;
     return (await response.json()) as T;
   }
@@ -143,6 +152,11 @@ export function createClient(options: ClientOptions) {
     updateConversation: (workspaceId: string, id: string, input: ConversationUpdate) => request<Conversation>('PATCH', conversation(workspaceId, id), input),
     listMessages: (workspaceId: string, id: string, input: { afterSeq?: number | undefined; beforeSeq?: number | undefined } = {}) =>
       get<{ data: Message[] }>(`${conversation(workspaceId, id)}/messages${query({ ...input, limit: 50 })}`),
+    /** The file's own type decides whether it is allowed. A browser reports none for some files, which are refused. */
+    uploadAttachment: async (workspaceId: string, id: string, file: File): Promise<Attachment> =>
+      (await (await checked('POST', `${conversation(workspaceId, id)}/attachments?filename=${encodeURIComponent(file.name)}`, undefined, { data: file, type: file.type || 'application/octet-stream' })).json()) as Attachment,
+    /** `url` is the path from an attachment. It needs the token, so a file is fetched, not linked. */
+    downloadAttachment: async (url: string): Promise<Blob> => (await checked('GET', url)).blob(),
     sendMessage: (workspaceId: string, id: string, input: MessageInput) => request<Message>('POST', `${conversation(workspaceId, id)}/messages`, input),
     markConversationRead: (workspaceId: string, id: string, seq: number) => request<void>('POST', `${conversation(workspaceId, id)}/read`, { deliveredSeq: seq, readSeq: seq }),
     getContact: (workspaceId: string, id: string) => get<Contact>(`${workspace(workspaceId)}/contacts/${encodeURIComponent(id)}`),

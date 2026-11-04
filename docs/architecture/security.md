@@ -89,12 +89,13 @@ Uploads stream through the Worker to R2 ([ADR-0008](decisions/0008-attachment-tr
 
 | Control | Detail |
 |---|---|
-| Type check | Allowlist by declared type *and* magic bytes, read from the first chunk |
+| Type check | Allowlist by declared type *and* first bytes: PNG, JPEG, GIF, WebP, PDF, ZIP, DOCX, XLSX, PPTX, plain text, and CSV. Text has no signature, so it must have no NUL byte and must not start with `<` |
 | Blocked types | HTML, SVG, XML, and script types, in either direction |
-| Size | 25 MB by default, configurable per workspace, and below the Cloudflare request limit of 100 MB |
-| Download | `GET /attachments/{id}` with normal auth, or a signed token valid for 5 minutes for `<img>` use |
-| Response headers | `Content-Disposition: attachment` (inline only for an allowlist of raster images), `X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox; default-src 'none'`, `Cache-Control: private` |
-| Orphans | Unattached uploads deleted after 24 hours |
+| Size | 25 MB, below the Cloudflare request limit of 100 MB. Not yet configurable per workspace. The declared length is enforced by the stream |
+| Claiming | A message can name only files its sender uploaded to that conversation, in the last 23 hours, not yet on a message. Checked in SQL in the insert, so a bad ID means no message. Visitors can upload only into an existing conversation, 20 files an hour, and 500 an hour per website |
+| Download | Normal auth only, with the token in a header, so that no file has a URL that works on its own. Clients fetch a file and show it from a `blob:` URL. A visitor gets only files on public messages in their own conversations |
+| Response headers | `Content-Disposition: attachment` (inline only for an allowlist of raster images), `X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox; default-src 'none'`, `Cache-Control: no-store` |
+| Orphans | Unattached uploads deleted after 24 hours, hourly, 200 at a time. A message cannot claim one past 23 hours, so a send cannot race the sweep |
 | Bucket | Private. No public access or custom domain on it |
 | Malware scanning | Future integration through a hook in `attachment.process` |
 

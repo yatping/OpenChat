@@ -13,6 +13,7 @@ import {
   type VisitorContext,
   type VisitorConversationRow,
   type VisitorMessageRow,
+  type AttachmentJson,
 } from '@openchat/database';
 import { AppError, notFound, toIso } from '@openchat/shared';
 import { enforce, limitKey, LIMITS, type AuthDeps } from './auth-flows';
@@ -50,7 +51,7 @@ const toMessage = (row: VisitorMessageRow, ctx: VisitorContext) => ({
   sender: { type: row.senderType, displayName: row.senderType === 'member' && !ctx.showAgentNames ? null : row.senderName },
   type: row.type,
   content: row.content,
-  attachments: [],
+  attachments: (JSON.parse(row.attachmentsJson) as AttachmentJson[]).map((file) => ({ id: file.id, filename: file.filename, contentType: file.contentType, size: file.size, url: `/api/v1/widget/attachments/${file.id}` })),
   createdAt: toIso(row.createdAt),
 });
 
@@ -111,10 +112,12 @@ export async function listVisitorMessages(deps: Pick<AuthDeps, 'db'>, ctx: Visit
   return { data: (await repos.messages.list(conversationId, input)).map((row) => toMessage(row, ctx)) };
 }
 
-export async function sendVisitorMessage(deps: Pick<AuthDeps, 'db' | 'limiter'>, ctx: VisitorContext, conversationId: string, input: { clientMessageId: string; content: string }) {
+export async function sendVisitorMessage(deps: Pick<AuthDeps, 'db' | 'limiter'>, ctx: VisitorContext, conversationId: string, input: { clientMessageId: string; content: string; attachmentIds?: string[] | undefined }) {
   await limitMessage(deps, ctx);
-  const result = await visitorRepositories(deps.db, ctx).messages.send(conversationId, input);
+  const { attachmentIds, ...rest } = input;
+  const result = await visitorRepositories(deps.db, ctx).messages.send(conversationId, { ...rest, ...(attachmentIds?.length ? { attachmentIds: [...new Set(attachmentIds)] } : {}) });
   if (result.outcome === 'not_found') throw notFound();
+  if (result.outcome === 'invalid_attachments') throw new AppError(400, 'invalid_attachments', 'A file on this message was not uploaded by you to this conversation, or has already been sent');
   if (result.outcome === 'conflict') throw new AppError(409, 'client_message_id_taken', 'Send this message again with a new clientMessageId');
   return { created: result.outcome === 'created', message: toMessage(result.message, ctx) };
 }

@@ -511,8 +511,9 @@ export const sendMessageRoute = createRoute({
         z.strictObject({
           clientMessageId: z.string().min(8).max(64),
           type: z.enum(['text', 'internal_note']),
-          content: z.string().trim().min(1).max(16000),
-        }),
+          content: z.string().trim().max(16000),
+          attachmentIds: z.array(z.string().max(64)).max(10).optional().openapi({ description: 'Files uploaded to this conversation by this member. Content may be empty if there is at least one.' }),
+        }).refine((body) => body.content.length > 0 || (body.attachmentIds?.length ?? 0) > 0, { message: 'Write something or attach a file' }),
       ),
     },
   },
@@ -650,7 +651,7 @@ export const sendVisitorMessageRoute = createRoute({
   operationId: 'sendVisitorMessage',
   summary: 'Send a message. Rate limited per visitor and per website.',
   security: visitor,
-  request: { params: visitorConversationParams, body: { required: true, ...json(z.strictObject({ clientMessageId: ClientMessageId, content: VisitorContent })) } },
+  request: { params: visitorConversationParams, body: { required: true, ...json(z.strictObject({ clientMessageId: ClientMessageId, content: z.string().trim().max(16000), attachmentIds: z.array(z.string().max(64)).max(5).optional() }).refine((body) => body.content.length > 0 || (body.attachmentIds?.length ?? 0) > 0, { message: 'Write something or attach a file' })) } },
   responses: {
     201: { description: 'Committed', ...json(VisitorWireMessageSchema) },
     200: { description: 'A replay of an existing clientMessageId', ...json(VisitorWireMessageSchema) },
@@ -808,4 +809,55 @@ export const setConversationTagsRoute = createRoute({
   security: bearer,
   request: { params: conversationParams, body: { required: true, ...json(z.strictObject({ tagIds: z.array(z.string().max(64)).max(50) })) } },
   responses: { 204: { description: 'Updated' }, default: problemResponse },
+});
+
+const BinaryBody = { required: true, content: { 'application/octet-stream': { schema: z.string().openapi({ type: 'string', format: 'binary' }) } } } as const;
+const BinaryFile = { description: 'The file, with safe headers', content: { 'application/octet-stream': { schema: z.string().openapi({ type: 'string', format: 'binary' }) } } } as const;
+const FilenameQuery = z.object({ filename: z.string().min(1).max(1024) });
+const UPLOAD_NOTE = 'The body is the file, as a stream, with its type in Content-Type and its size in Content-Length. Name its ID on a later message. A file that no message claims within a day is deleted.';
+
+export const uploadAttachmentRoute = createRoute({
+  method: 'post',
+  path: '/api/v1/workspaces/{workspaceId}/conversations/{conversationId}/attachments',
+  tags: ['attachments'],
+  operationId: 'uploadAttachment',
+  summary: 'Upload a file',
+  description: UPLOAD_NOTE,
+  security: bearer,
+  request: { params: conversationParams, query: FilenameQuery, body: BinaryBody },
+  responses: { 201: { description: 'Stored', ...json(AttachmentSchema) }, default: problemResponse },
+});
+
+export const downloadAttachmentRoute = createRoute({
+  method: 'get',
+  path: '/api/v1/workspaces/{workspaceId}/attachments/{attachmentId}',
+  tags: ['attachments'],
+  operationId: 'downloadAttachment',
+  summary: 'Download a file',
+  security: bearer,
+  request: { params: z.object({ workspaceId: z.string(), attachmentId: z.string() }) },
+  responses: { 200: BinaryFile, default: problemResponse },
+});
+
+export const uploadVisitorAttachmentRoute = createRoute({
+  method: 'post',
+  path: '/api/v1/widget/conversations/{conversationId}/attachments',
+  tags: ['widget'],
+  operationId: 'uploadVisitorAttachment',
+  summary: 'Upload a file to a conversation of this visitor',
+  description: UPLOAD_NOTE,
+  security: visitor,
+  request: { params: visitorConversationParams, query: FilenameQuery, body: BinaryBody },
+  responses: { 201: { description: 'Stored', ...json(AttachmentSchema) }, default: problemResponse },
+});
+
+export const downloadVisitorAttachmentRoute = createRoute({
+  method: 'get',
+  path: '/api/v1/widget/attachments/{attachmentId}',
+  tags: ['widget'],
+  operationId: 'downloadVisitorAttachment',
+  summary: 'Download a file on a public message in a conversation of this visitor',
+  security: visitor,
+  request: { params: z.object({ attachmentId: z.string() }) },
+  responses: { 200: BinaryFile, default: problemResponse },
 });

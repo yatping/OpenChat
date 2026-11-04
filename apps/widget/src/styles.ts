@@ -24,6 +24,11 @@ export const CHAT_CSS = `
 .oc-state.bad{color:var(--oc-error)}
 .oc-link{border:0;background:none;padding:0;color:inherit;font:inherit;text-decoration:underline;cursor:pointer}
 .oc-older{align-self:center;color:var(--oc-muted);font-size:12px;min-height:32px}
+.oc-file{margin-top:4px;font-size:12px;overflow-wrap:anywhere}
+.oc-image{display:block;max-width:100%;max-height:220px;margin-bottom:4px;border-radius:8px}
+.oc-attach{width:40px;height:40px;flex:none;padding:8px;border:1px solid var(--oc-line);border-radius:8px;background:none;color:inherit;cursor:pointer}
+.oc-attach svg{display:block;width:100%;height:100%;fill:currentColor}
+.oc-attach:focus-visible{outline:2px solid var(--oc-primary);outline-offset:1px}
 .oc-typing{min-height:18px;padding:0 14px;font-size:12px;color:var(--oc-muted)}
 .oc-note{margin:0;padding:8px 14px;font-size:12px;color:var(--oc-muted);border-top:1px solid var(--oc-line)}
 .oc-note.bad{color:var(--oc-error)}

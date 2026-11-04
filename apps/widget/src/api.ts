@@ -38,13 +38,14 @@ export interface ApiDeps {
 }
 
 const TIMEOUT_MS = 15_000;
+const UPLOAD_TIMEOUT_MS = 5 * 60_000;
 /** Earlier than expiry, so that a token does not run out on its way to the server. */
 const EXPIRY_MARGIN_MS = 30_000;
 
 export function createApi(deps: ApiDeps) {
-  const request = async (method: string, path: string, token: string | null, body?: unknown): Promise<Response> => {
+  const request = async (method: string, path: string, token: string | null, body?: unknown, file?: File): Promise<Response> => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), file ? UPLOAD_TIMEOUT_MS : TIMEOUT_MS);
     try {
       // Called through the global, so that a host page wrapping fetch still gets a correct `this`.
       const send = deps.fetch ?? fetch;
@@ -56,8 +57,9 @@ export function createApi(deps: ApiDeps) {
         headers: {
           ...(token ? { authorization: `Bearer ${token}` } : {}),
           ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+          ...(file ? { 'content-type': file.type || 'application/octet-stream' } : {}),
         },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        ...(file ? { body: file } : body === undefined ? {} : { body: JSON.stringify(body) }),
       });
     } finally {
       clearTimeout(timer);
@@ -92,9 +94,9 @@ export function createApi(deps: ApiDeps) {
     return session && session.expiresAt - EXPIRY_MARGIN_MS > Date.now() ? session.accessToken : (await startSession()).accessToken;
   };
 
-  const authed = async (method: string, path: string, body?: unknown): Promise<Response> => {
-    let response = await request(method, path, await token(), body);
-    if (response.status === 401) response = await request(method, path, (await startSession()).accessToken, body);
+  const authed = async (method: string, path: string, body?: unknown, file?: File): Promise<Response> => {
+    let response = await request(method, path, await token(), body, file);
+    if (response.status === 401) response = await request(method, path, (await startSession()).accessToken, body, file);
     if (!response.ok) throw await failure(response);
     return response;
   };
@@ -118,7 +120,14 @@ export function createApi(deps: ApiDeps) {
     async createConversation(input: { clientMessageId: string; content: string }): Promise<VisitorConversation & { message: VisitorMessage }> {
       return (await (await authed('POST', '/api/v1/widget/conversations', input)).json()) as VisitorConversation & { message: VisitorMessage };
     },
-    async sendMessage(conversationId: string, input: { clientMessageId: string; content: string }): Promise<VisitorMessage> {
+    async uploadAttachment(conversationId: string, file: File): Promise<{ id: string }> {
+      return (await (await authed('POST', `${conversationPath(conversationId)}/attachments?filename=${encodeURIComponent(file.name)}`, undefined, file)).json()) as { id: string };
+    },
+    /** `url` is the path from an attachment. It needs the token, so a file is fetched, not linked. */
+    async fetchAttachment(url: string): Promise<Blob> {
+      return (await authed('GET', url)).blob();
+    },
+    async sendMessage(conversationId: string, input: { clientMessageId: string; content: string; attachmentIds?: string[] }): Promise<VisitorMessage> {
       return (await (await authed('POST', `${conversationPath(conversationId)}/messages`, input)).json()) as VisitorMessage;
     },
     async listMessages(conversationId: string, query: { afterSeq?: number; beforeSeq?: number; limit: number }): Promise<VisitorMessage[]> {
