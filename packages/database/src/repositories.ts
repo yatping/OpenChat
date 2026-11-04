@@ -62,6 +62,44 @@ export interface StoredMessage {
   visibility: 'public' | 'internal';
   content: string;
   createdAt: number;
+  /** The member's or contact's current name. Null if there is none, or the member has since left. */
+  senderName: string | null;
+}
+
+export type ConversationStatus = 'open' | 'pending' | 'resolved' | 'archived';
+export type ConversationPriority = 'low' | 'normal' | 'high' | 'urgent';
+
+export interface ConversationRow {
+  id: string;
+  websiteId: string;
+  contactId: string;
+  assignedMemberId: string | null;
+  status: ConversationStatus;
+  priority: ConversationPriority;
+  subject: string | null;
+  version: number;
+  lastMessageSeq: number;
+  lastPublicSeq: number;
+  lastMessageAt: number | null;
+  /** The calling member's own read position. */
+  lastReadSeq: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ConversationChange {
+  /** Null unassigns. Undefined leaves the assignee alone. */
+  assignedMemberId?: string | null | undefined;
+  status?: ConversationStatus | undefined;
+  priority?: ConversationPriority | undefined;
+}
+
+/** A member ID, or null for conversations nobody is assigned to. */
+export interface ConversationFilter {
+  status: ConversationStatus;
+  assignee?: string | null | undefined;
+  before?: { lastMessageAt: number; id: string } | undefined;
+  limit: number;
 }
 
 export type SendResult =
@@ -69,11 +107,29 @@ export type SendResult =
   | { outcome: 'replayed'; message: StoredMessage }
   | { outcome: 'not_found' };
 
-export type AssignResult = { outcome: 'updated'; version: number } | { outcome: 'conflict'; currentVersion: number } | { outcome: 'not_found' };
+export type AssignResult =
+  | { outcome: 'updated'; version: number }
+  | { outcome: 'conflict'; currentVersion: number }
+  | { outcome: 'invalid_assignee' }
+  | { outcome: 'not_found' };
 
-const MESSAGE_COLUMNS = `id, conversation_id AS conversationId, seq, public_seq AS publicSeq,
-  client_message_id AS clientMessageId, sender_type AS senderType, sender_id AS senderId,
-  message_type AS type, visibility, content, created_at AS createdAt`;
+/** Names come by primary key, so that this stays cheap on the hot path. Agents only: it includes internal notes. */
+const MESSAGE_SELECT = `SELECT m.id, m.conversation_id AS conversationId, m.seq, m.public_seq AS publicSeq,
+    m.client_message_id AS clientMessageId, m.sender_type AS senderType, m.sender_id AS senderId,
+    m.message_type AS type, m.visibility, m.content, m.created_at AS createdAt, COALESCE(u.name, ct.name) AS senderName
+  FROM messages m
+  LEFT JOIN workspace_members sm ON m.sender_type = 'member' AND sm.workspace_id = m.workspace_id AND sm.id = m.sender_id
+  LEFT JOIN users u ON u.id = sm.user_id
+  LEFT JOIN visitors sv ON m.sender_type = 'visitor' AND sv.workspace_id = m.workspace_id AND sv.id = m.sender_id
+  LEFT JOIN contacts ct ON ct.workspace_id = sv.workspace_id AND ct.id = sv.contact_id`;
+
+/** ?1 is the calling member, for their read position. */
+const CONVERSATION_SELECT = `SELECT c.id, c.website_id AS websiteId, c.contact_id AS contactId, c.assigned_member_id AS assignedMemberId,
+    c.status, c.priority, c.subject, c.version, c.last_message_seq AS lastMessageSeq, c.last_public_seq AS lastPublicSeq,
+    c.last_message_at AS lastMessageAt, COALESCE(r.read_seq, 0) AS lastReadSeq, c.created_at AS createdAt, c.updated_at AS updatedAt
+  FROM conversations c
+  LEFT JOIN conversation_read_cursors r ON r.workspace_id = c.workspace_id AND r.conversation_id = c.id
+    AND r.reader_type = 'member' AND r.reader_id = ?1`;
 
 export function repositories(database: Database, ctx: WorkspaceContext) {
   const d1 = rawHandle(database);
@@ -238,60 +294,88 @@ export function repositories(database: Database, ctx: WorkspaceContext) {
     },
 
     conversations: {
-      async get(conversationId: string) {
-        return d1
-          .prepare(
-            `SELECT id, status, assigned_member_id AS assignedMemberId, version,
-                    last_message_seq AS lastMessageSeq, last_public_seq AS lastPublicSeq, updated_at AS updatedAt
-               FROM conversations WHERE workspace_id = ?1 AND id = ?2`,
-          )
-          .bind(w, conversationId)
-          .first<{
-            id: string;
-            status: string;
-            assignedMemberId: string | null;
-            version: number;
-            lastMessageSeq: number;
-            lastPublicSeq: number;
-            updatedAt: number;
-          }>();
+      get(conversationId: string): Promise<ConversationRow | null> {
+        return d1.prepare(`${CONVERSATION_SELECT} WHERE c.workspace_id = ?2 AND c.id = ?3`).bind(ctx.memberId, w, conversationId).first<ConversationRow>();
       },
 
       /**
-       * Pattern 2: compare-and-set with a follow-up statement. The follow-ups are guarded by a value
-       * unique to this request. Guarding on version = expected + 1 is wrong: if another writer already
-       * advanced the version, a stale request would match it and write a false event.
+       * An inbox view, newest first, using the inbox and assignee indexes. Every conversation starts with a
+       * message in the same batch, so last_message_at is set and the row comparison is safe.
        */
-      async assign(conversationId: string, memberId: string | null, expectedVersion: number): Promise<AssignResult> {
+      async list(filter: ConversationFilter): Promise<ConversationRow[]> {
+        const assignee = filter.assignee === undefined ? '' : filter.assignee === null ? 'AND c.assigned_member_id IS NULL' : 'AND c.assigned_member_id = ?4';
+        const before = filter.before ? 'AND (c.last_message_at, c.id) < (?5, ?6)' : '';
+        const { results } = await d1
+          .prepare(`${CONVERSATION_SELECT} WHERE c.workspace_id = ?2 AND c.status = ?3 ${assignee} ${before} ORDER BY c.last_message_at DESC, c.id DESC LIMIT ?7`)
+          .bind(ctx.memberId, w, filter.status, filter.assignee ?? null, filter.before?.lastMessageAt ?? null, filter.before?.id ?? null, filter.limit)
+          .all<ConversationRow>();
+        return results;
+      },
+
+      /**
+       * Pattern 2: compare-and-set with follow-up statements, guarded by a value unique to this request.
+       * Guarding on version = expected + 1 is wrong: if another writer already advanced the version, a stale
+       * request would match it and write a false event. The assignee is checked here, so that someone removed
+       * since the request was authorised cannot be assigned.
+       */
+      async update(conversationId: string, change: ConversationChange, expectedVersion: number): Promise<AssignResult> {
         const mutation = newId('mutation');
-        const eventId = newId('event');
-        const outboxId = newId('outbox');
+        const assigning = change.assignedMemberId !== undefined;
+        const assignee = change.assignedMemberId ?? null;
+        const event = (type: string, applies: boolean, field: string, value: string | null) =>
+          d1
+            .prepare(
+              `INSERT INTO conversation_events (id, workspace_id, conversation_id, event_type, actor_type, actor_id, metadata_json, created_at)
+               SELECT ?1, workspace_id, id, ?2, 'member', ?3, json_object(?4, ?5), ${DB_NOW_MS}
+                 FROM conversations WHERE workspace_id = ?6 AND id = ?7 AND last_mutation_id = ?8 AND ?9`,
+            )
+            .bind(newId('event'), type, ctx.memberId, field, value, w, conversationId, mutation, applies ? 1 : 0);
         const [update] = await d1.batch([
           d1
             .prepare(
               `UPDATE conversations
-                  SET assigned_member_id = ?1, version = version + 1, last_mutation_id = ?2, updated_at = ${DB_NOW_MS}
-                WHERE workspace_id = ?3 AND id = ?4 AND version = ?5`,
+                  SET assigned_member_id = CASE WHEN ?1 THEN ?2 ELSE assigned_member_id END,
+                      status = COALESCE(?3, status), priority = COALESCE(?4, priority),
+                      version = version + 1, last_mutation_id = ?5, updated_at = ${DB_NOW_MS}
+                WHERE workspace_id = ?6 AND id = ?7 AND version = ?8
+                  AND (NOT ?1 OR ?2 IS NULL OR EXISTS (SELECT 1 FROM workspace_members t
+                        WHERE t.workspace_id = conversations.workspace_id AND t.id = ?2 AND t.status = 'active'))`,
             )
-            .bind(memberId, mutation, w, conversationId, expectedVersion),
-          d1
-            .prepare(
-              `INSERT INTO conversation_events (id, workspace_id, conversation_id, event_type, actor_type, actor_id, metadata_json, created_at)
-               SELECT ?1, workspace_id, id, 'assigned', 'member', ?2, json_object('assignedMemberId', ?3), ${DB_NOW_MS}
-                 FROM conversations WHERE workspace_id = ?4 AND id = ?5 AND last_mutation_id = ?6`,
-            )
-            .bind(eventId, ctx.memberId, memberId, w, conversationId, mutation),
+            .bind(assigning ? 1 : 0, assignee, change.status ?? null, change.priority ?? null, mutation, w, conversationId, expectedVersion),
+          event('assigned', assigning, 'assignedMemberId', assignee),
+          event('status_changed', change.status !== undefined, 'status', change.status ?? null),
+          event('priority_changed', change.priority !== undefined, 'priority', change.priority ?? null),
           d1
             .prepare(
               `INSERT INTO outbox (id, workspace_id, topic, aggregate_id, payload_json, created_at)
                SELECT ?1, workspace_id, 'conversation.updated', id, json_object('conversationId', id, 'version', version), ${DB_NOW_MS}
                  FROM conversations WHERE workspace_id = ?2 AND id = ?3 AND last_mutation_id = ?4`,
             )
-            .bind(outboxId, w, conversationId, mutation),
+            .bind(newId('outbox'), w, conversationId, mutation),
         ]);
         if (update?.meta.changes === 1) return { outcome: 'updated', version: expectedVersion + 1 };
         const current = await this.get(conversationId);
-        return current ? { outcome: 'conflict', currentVersion: current.version } : { outcome: 'not_found' };
+        if (!current) return { outcome: 'not_found' };
+        return current.version === expectedVersion ? { outcome: 'invalid_assignee' } : { outcome: 'conflict', currentVersion: current.version };
+      },
+
+      assign(conversationId: string, memberId: string | null, expectedVersion: number): Promise<AssignResult> {
+        return this.update(conversationId, { assignedMemberId: memberId }, expectedVersion);
+      },
+
+      /** Positions only move forward, and stop at the last message. False if there is no such conversation. */
+      async markRead(conversationId: string, input: { deliveredSeq: number; readSeq: number }): Promise<boolean> {
+        const result = await d1
+          .prepare(
+            `INSERT INTO conversation_read_cursors (workspace_id, conversation_id, reader_type, reader_id, delivered_seq, read_seq, updated_at)
+             SELECT c.workspace_id, c.id, 'member', ?1, MIN(MAX(?2, ?3), c.last_message_seq), MIN(?3, c.last_message_seq), ${DB_NOW_MS}
+               FROM conversations c WHERE c.workspace_id = ?4 AND c.id = ?5
+             ON CONFLICT (workspace_id, conversation_id, reader_type, reader_id) DO UPDATE
+               SET delivered_seq = MAX(delivered_seq, excluded.delivered_seq), read_seq = MAX(read_seq, excluded.read_seq), updated_at = excluded.updated_at`,
+          )
+          .bind(ctx.memberId, input.deliveredSeq, input.readSeq, w, conversationId)
+          .run();
+        return result.meta.changes === 1;
       },
     },
 
@@ -323,11 +407,13 @@ export function repositories(database: Database, ctx: WorkspaceContext) {
                   SET last_message_seq = last_message_seq + 1,
                       last_public_seq = last_public_seq + CASE WHEN ?1 = 'public' THEN 1 ELSE 0 END,
                       last_message_at = ${DB_NOW_MS},
+                      last_visitor_message_at = CASE WHEN ?5 = 'visitor' THEN ${DB_NOW_MS} ELSE last_visitor_message_at END,
+                      last_agent_message_at = CASE WHEN ?5 = 'member' THEN ${DB_NOW_MS} ELSE last_agent_message_at END,
                       version = version + 1,
                       updated_at = ${DB_NOW_MS}
                 WHERE workspace_id = ?2 AND id = ?3 AND EXISTS (SELECT 1 FROM messages m WHERE m.id = ?4)`,
             )
-            .bind(visibility, w, c, id),
+            .bind(visibility, w, c, id, input.sender.type),
           d1
             .prepare(
               `INSERT INTO outbox (id, workspace_id, topic, aggregate_id, payload_json, created_at)
@@ -341,8 +427,7 @@ export function repositories(database: Database, ctx: WorkspaceContext) {
         const created = insert?.meta.changes === 1;
         const message = await d1
           .prepare(
-            `SELECT ${MESSAGE_COLUMNS} FROM messages
-              WHERE workspace_id = ?1 AND conversation_id = ?2 AND client_message_id = ?3`,
+            `${MESSAGE_SELECT} WHERE m.workspace_id = ?1 AND m.conversation_id = ?2 AND m.client_message_id = ?3`,
           )
           .bind(w, c, input.clientMessageId)
           .first<StoredMessage>();
@@ -350,16 +435,20 @@ export function repositories(database: Database, ctx: WorkspaceContext) {
         return { outcome: created ? 'created' : 'replayed', message };
       },
 
-      /** Everything, including internal notes. For agents only. */
-      async listAfter(conversationId: string, afterSeq: number, limit = 50): Promise<StoredMessage[]> {
+      /** Everything, including internal notes. For agents only. Oldest first, whichever direction was asked for. */
+      async list(conversationId: string, input: { afterSeq?: number | undefined; beforeSeq?: number | undefined; limit: number }): Promise<StoredMessage[]> {
+        const backward = input.beforeSeq !== undefined;
         const { results } = await d1
           .prepare(
-            `SELECT ${MESSAGE_COLUMNS} FROM messages
-              WHERE workspace_id = ?1 AND conversation_id = ?2 AND seq > ?3 ORDER BY seq LIMIT ?4`,
+            `${MESSAGE_SELECT} WHERE m.workspace_id = ?1 AND m.conversation_id = ?2 AND ${backward ? 'm.seq < ?3 ORDER BY m.seq DESC' : 'm.seq > ?3 ORDER BY m.seq'} LIMIT ?4`,
           )
-          .bind(w, conversationId, afterSeq, Math.min(limit, 100))
+          .bind(w, conversationId, backward ? input.beforeSeq : (input.afterSeq ?? 0), Math.min(input.limit, 100))
           .all<StoredMessage>();
-        return results;
+        return backward ? results.reverse() : results;
+      },
+
+      listAfter(conversationId: string, afterSeq: number, limit = 50): Promise<StoredMessage[]> {
+        return this.list(conversationId, { afterSeq, limit });
       },
     },
   };

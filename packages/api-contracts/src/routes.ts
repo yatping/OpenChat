@@ -1,5 +1,6 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { page, PaginationQuery, problemResponse } from './common';
+import { ConversationPrioritySchema, ConversationStatusSchema } from './realtime';
 
 export const HealthSchema = z.object({ status: z.literal('ok') }).openapi('Health');
 
@@ -368,4 +369,164 @@ export const updateWebsiteRoute = createRoute({
     body: { required: true, ...json(z.strictObject({ name: SafeName.optional(), allowedOrigins: websiteFields.allowedOrigins.optional(), settings: websiteFields.settings })) },
   },
   responses: { 200: { description: 'Updated', ...json(WebsiteSchema) }, default: problemResponse },
+});
+
+// ---------- Conversations and messages, for agents ----------
+
+const conversationParams = workspaceParams.extend({ conversationId: z.string() });
+
+
+export const ConversationSchema = z
+  .object({
+    id: z.string(),
+    websiteId: z.string(),
+    contactId: z.string(),
+    assignedMemberId: z.string().nullable(),
+    status: ConversationStatusSchema,
+    priority: ConversationPrioritySchema,
+    subject: z.string().nullable(),
+    version: z.number().int(),
+    lastMessageSeq: z.number().int(),
+    lastMessageAt: z.string().nullable(),
+    lastReadSeq: z.number().int().openapi({ description: "The caller's read position, for unread counts." }),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  })
+  .openapi('Conversation');
+
+export const AttachmentSchema = z
+  .object({ id: z.string(), filename: z.string(), contentType: z.string(), size: z.number().int(), status: z.enum(['pending', 'ready', 'rejected']), url: z.string() })
+  .openapi('Attachment');
+
+export const MessageSchema = z
+  .object({
+    id: z.string(),
+    conversationId: z.string(),
+    seq: z.number().int(),
+    publicSeq: z.number().int().nullable().openapi({ description: 'Null for internal notes.' }),
+    clientMessageId: z.string().nullable(),
+    sender: z.object({ type: z.enum(['visitor', 'member', 'system']), id: z.string().nullable(), displayName: z.string().nullable() }),
+    type: z.enum(['text', 'image', 'file', 'system', 'internal_note']),
+    visibility: z.enum(['public', 'internal']),
+    content: z.string(),
+    attachments: z.array(AttachmentSchema),
+    createdAt: z.string(),
+    metadata: z.record(z.string(), z.unknown()),
+  })
+  .openapi('Message');
+
+const SeqQuery = z.coerce.number().int().min(0);
+
+export const listConversationsRoute = createRoute({
+  method: 'get',
+  path: '/api/v1/workspaces/{workspaceId}/conversations',
+  tags: ['conversations'],
+  operationId: 'listConversations',
+  summary: 'An inbox view, most recent first',
+  security: bearer,
+  request: {
+    params: workspaceParams,
+    query: PaginationQuery.extend({
+      status: ConversationStatusSchema.default('open'),
+      assignee: z.string().max(64).optional().openapi({ description: 'A member ID, `me`, or `none`.' }),
+    }),
+  },
+  responses: { 200: { description: 'Conversations', ...json(page(ConversationSchema)) }, default: problemResponse },
+});
+
+export const getConversationRoute = createRoute({
+  method: 'get',
+  path: '/api/v1/workspaces/{workspaceId}/conversations/{conversationId}',
+  tags: ['conversations'],
+  operationId: 'getConversation',
+  summary: 'Get a conversation',
+  security: bearer,
+  request: { params: conversationParams },
+  responses: { 200: { description: 'Conversation', ...json(ConversationSchema) }, default: problemResponse },
+});
+
+export const updateConversationRoute = createRoute({
+  method: 'patch',
+  path: '/api/v1/workspaces/{workspaceId}/conversations/{conversationId}',
+  tags: ['conversations'],
+  operationId: 'updateConversation',
+  summary: 'Assign, transfer, resolve, reopen, archive, or reprioritise',
+  description: 'Compare-and-set on `expectedVersion`. A stale version answers 409 with the current version.',
+  security: bearer,
+  request: {
+    params: conversationParams,
+    body: {
+      required: true,
+      ...json(
+        z
+          .strictObject({
+            expectedVersion: z.number().int().min(1),
+            assignedMemberId: z.string().max(64).nullable().optional(),
+            status: ConversationStatusSchema.optional(),
+            priority: ConversationPrioritySchema.optional(),
+          })
+          .refine((b) => b.assignedMemberId !== undefined || b.status !== undefined || b.priority !== undefined, 'Nothing to change'),
+      ),
+    },
+  },
+  responses: { 200: { description: 'Updated', ...json(ConversationSchema) }, default: problemResponse },
+});
+
+export const listMessagesRoute = createRoute({
+  method: 'get',
+  path: '/api/v1/workspaces/{workspaceId}/conversations/{conversationId}/messages',
+  tags: ['conversations'],
+  operationId: 'listMessages',
+  summary: 'Messages, including internal notes, oldest first',
+  security: bearer,
+  request: {
+    params: conversationParams,
+    query: z.object({
+      afterSeq: SeqQuery.optional().openapi({ description: 'Forward from this sequence number, for catch-up.' }),
+      beforeSeq: SeqQuery.optional().openapi({ description: 'Backward from this sequence number, for history.' }),
+      limit: z.coerce.number().int().min(1).max(100).default(50),
+    }),
+  },
+  responses: { 200: { description: 'Messages', ...json(z.object({ data: z.array(MessageSchema) })) }, default: problemResponse },
+});
+
+export const sendMessageRoute = createRoute({
+  method: 'post',
+  path: '/api/v1/workspaces/{workspaceId}/conversations/{conversationId}/messages',
+  tags: ['conversations'],
+  operationId: 'sendMessage',
+  summary: 'Send a reply or an internal note',
+  security: bearer,
+  request: {
+    params: conversationParams,
+    body: {
+      required: true,
+      ...json(
+        z.strictObject({
+          clientMessageId: z.string().min(8).max(64),
+          type: z.enum(['text', 'internal_note']),
+          content: z.string().trim().min(1).max(16000),
+        }),
+      ),
+    },
+  },
+  responses: {
+    201: { description: 'Committed', ...json(MessageSchema) },
+    200: { description: 'A replay of an existing clientMessageId. Returns the original.', ...json(MessageSchema) },
+    default: problemResponse,
+  },
+});
+
+export const markConversationReadRoute = createRoute({
+  method: 'post',
+  path: '/api/v1/workspaces/{workspaceId}/conversations/{conversationId}/read',
+  tags: ['conversations'],
+  operationId: 'markConversationRead',
+  summary: "Move the caller's delivered and read positions forward",
+  security: bearer,
+  request: {
+    params: conversationParams,
+    body: { required: true, ...json(z.strictObject({ deliveredSeq: z.number().int().min(0), readSeq: z.number().int().min(0) })) },
+  },
+  responses: { 204: { description: 'Recorded' }, default: problemResponse },
 });

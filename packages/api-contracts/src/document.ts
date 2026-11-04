@@ -9,8 +9,14 @@ import {
   createWebsiteRoute,
   createWorkspaceRoute,
   deleteMeRoute,
+  getConversationRoute,
   getDiscoveryRoute,
   getWorkspaceRoute,
+  listConversationsRoute,
+  listMessagesRoute,
+  markConversationReadRoute,
+  sendMessageRoute,
+  updateConversationRoute,
   listMembersRoute,
   listWebsitesRoute,
   removeMemberRoute,
@@ -27,6 +33,12 @@ import {
 
 /** Every route must be listed here so that it reaches the published document. */
 export const ALL_ROUTES = [
+  listConversationsRoute,
+  getConversationRoute,
+  updateConversationRoute,
+  listMessagesRoute,
+  sendMessageRoute,
+  markConversationReadRoute,
   getHealthRoute,
   getDiscoveryRoute,
   loginRoute,
