@@ -77,6 +77,8 @@ INSERT INTO outbox (id, workspace_id, topic, aggregate_id, payload_json, created
 - Because D1 executes one batch at a time, `seq` cannot collide. The unique index is a second safeguard.
 - **Two sequences.** Agents use `seq`, covering everything. Visitors see `public_seq` under the name `seq`. Internal notes do not consume it, because gaps would let a visitor count private notes and would break gap detection in the widget.
 
+A visitor's first message also creates the conversation, in the same batch. The conversation's ID is derived from the visitor and the `clientMessageId`, so a retry reaches the same row and becomes a replay. Those IDs are not time-sorted, which matters less here than a retry never creating a second conversation.
+
 ### Pattern 2: compare-and-set with a follow-up statement
 
 ```sql

@@ -38,6 +38,12 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT"
+      },
+      "visitorAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "A visitor token from POST /api/v1/widget/sessions."
       }
     },
     "schemas": {
@@ -1361,6 +1367,119 @@
           }
         ]
       },
+      "WidgetBootstrap": {
+        "type": "object",
+        "properties": {
+          "websiteId": {
+            "type": "string"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/WidgetSettings"
+          },
+          "availability": {
+            "type": "string",
+            "enum": [
+              "online",
+              "offline"
+            ]
+          }
+        },
+        "required": [
+          "websiteId",
+          "settings",
+          "availability"
+        ]
+      },
+      "WidgetSettings": {
+        "type": "object",
+        "properties": {
+          "welcomeMessage": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "primaryColor": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "availabilityMode": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "online",
+              "offline"
+            ]
+          },
+          "collectEmail": {
+            "type": "string",
+            "enum": [
+              "never",
+              "optional",
+              "required"
+            ]
+          },
+          "requireTurnstile": {
+            "type": "boolean"
+          },
+          "showAgentNames": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "VisitorSession": {
+        "type": "object",
+        "properties": {
+          "visitorId": {
+            "type": "string"
+          },
+          "accessToken": {
+            "type": "string"
+          },
+          "accessTokenExpiresAt": {
+            "type": "string"
+          },
+          "refreshToken": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "visitorId",
+          "accessToken",
+          "accessTokenExpiresAt",
+          "refreshToken"
+        ]
+      },
+      "VisitorConversation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "pending",
+              "resolved",
+              "archived"
+            ]
+          },
+          "lastSeq": {
+            "type": "integer",
+            "description": "The latest public sequence number."
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "lastSeq",
+          "createdAt"
+        ],
+        "description": "A deliberately reduced view, with no assignee, priority, or internal counters."
+      },
       "Conversation": {
         "type": "object",
         "properties": {
@@ -1896,47 +2015,811 @@
           "allowedOrigins",
           "settings"
         ]
-      },
-      "WidgetSettings": {
-        "type": "object",
-        "properties": {
-          "welcomeMessage": {
-            "type": "string",
-            "maxLength": 500
-          },
-          "primaryColor": {
-            "type": "string",
-            "pattern": "^#[0-9a-fA-F]{6}$"
-          },
-          "availabilityMode": {
-            "type": "string",
-            "enum": [
-              "auto",
-              "online",
-              "offline"
-            ]
-          },
-          "collectEmail": {
-            "type": "string",
-            "enum": [
-              "never",
-              "optional",
-              "required"
-            ]
-          },
-          "requireTurnstile": {
-            "type": "boolean"
-          },
-          "showAgentNames": {
-            "type": "boolean"
-          }
-        },
-        "additionalProperties": false
       }
     },
     "parameters": {}
   },
   "paths": {
+    "/api/v1/widget/bootstrap": {
+      "get": {
+        "tags": [
+          "widget"
+        ],
+        "operationId": "widgetBootstrap",
+        "summary": "Public configuration. Cached for 30 seconds. The Origin must be allowed for the website.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "required": true,
+            "name": "websiteKey",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Widget configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WidgetBootstrap"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/widget/sessions": {
+      "post": {
+        "tags": [
+          "widget"
+        ],
+        "operationId": "createVisitorSession",
+        "summary": "Create or resume an anonymous visitor session. The Origin must be allowed for the website.",
+        "description": "A refresh token that is unknown or belongs to another website starts a new visitor, with no history.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "websiteKey": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "refreshToken": {
+                    "type": "string",
+                    "maxLength": 256
+                  }
+                },
+                "required": [
+                  "websiteKey"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Visitor session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisitorSession"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/widget/me": {
+      "patch": {
+        "tags": [
+          "widget"
+        ],
+        "operationId": "updateVisitorProfile",
+        "summary": "Provide a name, email, and follow-up consent",
+        "description": "An email is unverified, and never merges with an existing contact automatically.",
+        "security": [
+          {
+            "visitorAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^\\P{Cc}*$/u"
+                  },
+                  "email": {
+                    "type": "string",
+                    "maxLength": 254,
+                    "format": "email"
+                  },
+                  "followUpConsent": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Updated"
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/widget/conversations": {
+      "get": {
+        "tags": [
+          "widget"
+        ],
+        "operationId": "listVisitorConversations",
+        "summary": "The visitor's own conversations",
+        "security": [
+          {
+            "visitorAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conversations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/VisitorConversation"
+                      }
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "widget"
+        ],
+        "operationId": "createVisitorConversation",
+        "summary": "Start a conversation with a first message",
+        "security": [
+          {
+            "visitorAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "clientMessageId": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 64
+                  },
+                  "content": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 16000
+                  }
+                },
+                "required": [
+                  "clientMessageId",
+                  "content"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A replay of an existing clientMessageId. Returns the same conversation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisitorConversation"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisitorConversation"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/widget/conversations/{conversationId}/messages": {
+      "get": {
+        "tags": [
+          "widget"
+        ],
+        "operationId": "listVisitorMessages",
+        "summary": "Public messages only, oldest first. Here seq is the public sequence.",
+        "security": [
+          {
+            "visitorAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "conversationId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "required": false,
+            "name": "afterSeq",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "required": false,
+            "name": "beforeSeq",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Messages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "conversationId": {
+                            "type": "string"
+                          },
+                          "seq": {
+                            "type": "integer"
+                          },
+                          "clientMessageId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "sender": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "visitor",
+                                  "member",
+                                  "system"
+                                ]
+                              },
+                              "displayName": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "displayName"
+                            ]
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "text",
+                              "image",
+                              "file",
+                              "system"
+                            ]
+                          },
+                          "content": {
+                            "type": "string"
+                          },
+                          "attachments": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "filename": {
+                                  "type": "string"
+                                },
+                                "contentType": {
+                                  "type": "string"
+                                },
+                                "size": {
+                                  "type": "integer"
+                                },
+                                "url": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "filename",
+                                "contentType",
+                                "size",
+                                "url"
+                              ]
+                            }
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "conversationId",
+                          "seq",
+                          "clientMessageId",
+                          "sender",
+                          "type",
+                          "content",
+                          "attachments",
+                          "createdAt"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "widget"
+        ],
+        "operationId": "sendVisitorMessage",
+        "summary": "Send a message. Rate limited per visitor and per website.",
+        "security": [
+          {
+            "visitorAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "conversationId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "clientMessageId": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 64
+                  },
+                  "content": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 16000
+                  }
+                },
+                "required": [
+                  "clientMessageId",
+                  "content"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A replay of an existing clientMessageId",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "conversationId": {
+                      "type": "string"
+                    },
+                    "seq": {
+                      "type": "integer"
+                    },
+                    "clientMessageId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sender": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "visitor",
+                            "member",
+                            "system"
+                          ]
+                        },
+                        "displayName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "displayName"
+                      ]
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "text",
+                        "image",
+                        "file",
+                        "system"
+                      ]
+                    },
+                    "content": {
+                      "type": "string"
+                    },
+                    "attachments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "filename": {
+                            "type": "string"
+                          },
+                          "contentType": {
+                            "type": "string"
+                          },
+                          "size": {
+                            "type": "integer"
+                          },
+                          "url": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "filename",
+                          "contentType",
+                          "size",
+                          "url"
+                        ]
+                      }
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "conversationId",
+                    "seq",
+                    "clientMessageId",
+                    "sender",
+                    "type",
+                    "content",
+                    "attachments",
+                    "createdAt"
+                  ]
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Committed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "conversationId": {
+                      "type": "string"
+                    },
+                    "seq": {
+                      "type": "integer"
+                    },
+                    "clientMessageId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sender": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "visitor",
+                            "member",
+                            "system"
+                          ]
+                        },
+                        "displayName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "displayName"
+                      ]
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "text",
+                        "image",
+                        "file",
+                        "system"
+                      ]
+                    },
+                    "content": {
+                      "type": "string"
+                    },
+                    "attachments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "filename": {
+                            "type": "string"
+                          },
+                          "contentType": {
+                            "type": "string"
+                          },
+                          "size": {
+                            "type": "integer"
+                          },
+                          "url": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "filename",
+                          "contentType",
+                          "size",
+                          "url"
+                        ]
+                      }
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "conversationId",
+                    "seq",
+                    "clientMessageId",
+                    "sender",
+                    "type",
+                    "content",
+                    "attachments",
+                    "createdAt"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/widget/conversations/{conversationId}/read": {
+      "post": {
+        "tags": [
+          "widget"
+        ],
+        "operationId": "markVisitorConversationRead",
+        "summary": "Move the visitor's delivered and read positions forward, in public sequence numbers",
+        "security": [
+          {
+            "visitorAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "conversationId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "deliveredSeq": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "readSeq": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "deliveredSeq",
+                  "readSeq"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Recorded"
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/workspaces/{workspaceId}/conversations": {
       "get": {
         "tags": [

@@ -1,6 +1,6 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { page, PaginationQuery, problemResponse } from './common';
-import { ConversationPrioritySchema, ConversationStatusSchema } from './realtime';
+import { ConversationPrioritySchema, ConversationStatusSchema, VisitorWireMessageSchema } from './realtime';
 
 export const HealthSchema = z.object({ status: z.literal('ok') }).openapi('Health');
 
@@ -528,5 +528,133 @@ export const markConversationReadRoute = createRoute({
     params: conversationParams,
     body: { required: true, ...json(z.strictObject({ deliveredSeq: z.number().int().min(0), readSeq: z.number().int().min(0) })) },
   },
+  responses: { 204: { description: 'Recorded' }, default: problemResponse },
+});
+
+// ---------- The widget, for visitors ----------
+
+const visitor = [{ visitorAuth: [] }];
+const ClientMessageId = z.string().min(8).max(64);
+const VisitorContent = z.string().trim().min(1).max(16000);
+const visitorConversationParams = z.object({ conversationId: z.string() });
+
+export const WidgetBootstrapSchema = z
+  .object({ websiteId: z.string(), settings: WidgetSettingsSchema, availability: z.enum(['online', 'offline']) })
+  .openapi('WidgetBootstrap');
+
+export const VisitorSessionSchema = z
+  .object({ visitorId: z.string(), accessToken: z.string(), accessTokenExpiresAt: z.string(), refreshToken: z.string() })
+  .openapi('VisitorSession');
+
+export const VisitorConversationSchema = z
+  .object({ id: z.string(), status: ConversationStatusSchema, lastSeq: z.number().int().openapi({ description: 'The latest public sequence number.' }), createdAt: z.string() })
+  .openapi('VisitorConversation', { description: 'A deliberately reduced view, with no assignee, priority, or internal counters.' });
+
+export const widgetBootstrapRoute = createRoute({
+  method: 'get',
+  path: '/api/v1/widget/bootstrap',
+  tags: ['widget'],
+  operationId: 'widgetBootstrap',
+  summary: 'Public configuration. Cached for 30 seconds. The Origin must be allowed for the website.',
+  security: [],
+  request: { query: z.object({ websiteKey: z.string().max(128) }) },
+  responses: { 200: { description: 'Widget configuration', ...json(WidgetBootstrapSchema) }, default: problemResponse },
+});
+
+export const createVisitorSessionRoute = createRoute({
+  method: 'post',
+  path: '/api/v1/widget/sessions',
+  tags: ['widget'],
+  operationId: 'createVisitorSession',
+  summary: 'Create or resume an anonymous visitor session. The Origin must be allowed for the website.',
+  description: 'A refresh token that is unknown or belongs to another website starts a new visitor, with no history.',
+  security: [],
+  request: { body: { required: true, ...json(z.strictObject({ websiteKey: z.string().max(128), refreshToken: z.string().max(256).optional() })) } },
+  responses: { 200: { description: 'Visitor session', ...json(VisitorSessionSchema) }, default: problemResponse },
+});
+
+export const updateVisitorProfileRoute = createRoute({
+  method: 'patch',
+  path: '/api/v1/widget/me',
+  tags: ['widget'],
+  operationId: 'updateVisitorProfile',
+  summary: 'Provide a name, email, and follow-up consent',
+  description: 'An email is unverified, and never merges with an existing contact automatically.',
+  security: visitor,
+  request: {
+    body: {
+      required: true,
+      ...json(
+        z
+          .strictObject({ name: SafeName.optional(), email: z.email().max(254).optional(), followUpConsent: z.boolean().optional() })
+          .refine((b) => b.name !== undefined || b.email !== undefined || b.followUpConsent !== undefined, 'Nothing to change'),
+      ),
+    },
+  },
+  responses: { 204: { description: 'Updated' }, default: problemResponse },
+});
+
+export const listVisitorConversationsRoute = createRoute({
+  method: 'get',
+  path: '/api/v1/widget/conversations',
+  tags: ['widget'],
+  operationId: 'listVisitorConversations',
+  summary: "The visitor's own conversations",
+  security: visitor,
+  responses: { 200: { description: 'Conversations', ...json(z.object({ data: z.array(VisitorConversationSchema) })) }, default: problemResponse },
+});
+
+export const createVisitorConversationRoute = createRoute({
+  method: 'post',
+  path: '/api/v1/widget/conversations',
+  tags: ['widget'],
+  operationId: 'createVisitorConversation',
+  summary: 'Start a conversation with a first message',
+  security: visitor,
+  request: { body: { required: true, ...json(z.strictObject({ clientMessageId: ClientMessageId, content: VisitorContent })) } },
+  responses: {
+    201: { description: 'Created', ...json(VisitorConversationSchema) },
+    200: { description: 'A replay of an existing clientMessageId. Returns the same conversation.', ...json(VisitorConversationSchema) },
+    default: problemResponse,
+  },
+});
+
+export const listVisitorMessagesRoute = createRoute({
+  method: 'get',
+  path: '/api/v1/widget/conversations/{conversationId}/messages',
+  tags: ['widget'],
+  operationId: 'listVisitorMessages',
+  summary: 'Public messages only, oldest first. Here seq is the public sequence.',
+  security: visitor,
+  request: {
+    params: visitorConversationParams,
+    query: z.object({ afterSeq: SeqQuery.optional(), beforeSeq: SeqQuery.optional(), limit: z.coerce.number().int().min(1).max(100).default(50) }),
+  },
+  responses: { 200: { description: 'Messages', ...json(z.object({ data: z.array(VisitorWireMessageSchema) })) }, default: problemResponse },
+});
+
+export const sendVisitorMessageRoute = createRoute({
+  method: 'post',
+  path: '/api/v1/widget/conversations/{conversationId}/messages',
+  tags: ['widget'],
+  operationId: 'sendVisitorMessage',
+  summary: 'Send a message. Rate limited per visitor and per website.',
+  security: visitor,
+  request: { params: visitorConversationParams, body: { required: true, ...json(z.strictObject({ clientMessageId: ClientMessageId, content: VisitorContent })) } },
+  responses: {
+    201: { description: 'Committed', ...json(VisitorWireMessageSchema) },
+    200: { description: 'A replay of an existing clientMessageId', ...json(VisitorWireMessageSchema) },
+    default: problemResponse,
+  },
+});
+
+export const markVisitorConversationReadRoute = createRoute({
+  method: 'post',
+  path: '/api/v1/widget/conversations/{conversationId}/read',
+  tags: ['widget'],
+  operationId: 'markVisitorConversationRead',
+  summary: "Move the visitor's delivered and read positions forward, in public sequence numbers",
+  security: visitor,
+  request: { params: visitorConversationParams, body: { required: true, ...json(z.strictObject({ deliveredSeq: z.number().int().min(0), readSeq: z.number().int().min(0) })) } },
   responses: { 204: { description: 'Recorded' }, default: problemResponse },
 });

@@ -66,3 +66,12 @@ export function newId(kind: IdKind, now?: number): string {
 export function isId(kind: IdKind, value: unknown): value is string {
   return typeof value === 'string' && new RegExp(`^${ID_PREFIXES[kind]}_[${ALPHABET}]{26}$`).test(value);
 }
+
+/**
+ * The same ID for the same input, so that a retried create cannot make a second row. Not time-sorted, so
+ * use it only where that matters less than the retry, and include the owner in `material`.
+ */
+export async function deterministicId(kind: IdKind, material: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(material));
+  return `${ID_PREFIXES[kind]}_${encodeBase32(new Uint8Array(digest).slice(0, 16))}`;
+}

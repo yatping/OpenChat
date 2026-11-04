@@ -1,6 +1,7 @@
 export { openDatabase, type Database } from './internal/handle';
 export * from './auth-repository';
 export * from './workspace-repository';
+export * from './visitor-repository';
 export { authorizeWorkspaceMember, type Role, type WorkspaceContext } from './context';
 export {
   claimJob,

@@ -6,6 +6,7 @@ import { AppError, createLogger, newId, toProblem } from '@openchat/shared';
 import type { AppEnv } from './context';
 import { registerAuthRoutes } from './routes/auth';
 import { registerConversationRoutes } from './routes/conversations';
+import { registerWidgetRoutes } from './routes/widget';
 import { registerWorkspaceRoutes } from './routes/workspaces';
 
 export function createApp() {
@@ -81,6 +82,7 @@ export function createApp() {
   registerAuthRoutes(app);
   registerWorkspaceRoutes(app);
   registerConversationRoutes(app);
+  registerWidgetRoutes(app);
 
   app.get('/api/v1/openapi.json', (c) => c.json(openapi));
 

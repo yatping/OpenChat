@@ -89,7 +89,7 @@ In progress, one PR per slice. Done so far:
 | Slice | State |
 |---|---|
 | Conversations and messages for agents, over REST | Merged. Tested in workerd. Attachments are empty and tags are not in the response yet |
-| Visitor sessions and the widget API | Next |
+| Visitor sessions and the widget API | Merged. Tested in workerd, including notes and isolation between visitors. Turnstile and attachments are not in yet |
 | Sockets, tickets, outbox dispatch, and the sweep | Not started. Outbox rows are written, but nothing dispatches them yet |
 | Inbox UI, widget UI, attachments, load test | Not started |
 
