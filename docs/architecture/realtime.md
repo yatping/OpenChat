@@ -89,7 +89,7 @@ Presence is advisory. It is derived from `getWebSockets()` when asked.
 
 - **Agent:** online if a socket with their tag exists.
 - **Visitor:** a room tells its hub on the first connect and last disconnect. Disconnects are debounced with a 15-second alarm so that page navigation does not flicker.
-- **Stale sockets:** a dead TCP connection may not produce a prompt close. While sockets are present, an alarm closes those whose `getWebSocketAutoResponseTimestamp` is older than 90 seconds: every 60 seconds in hubs, every 5 minutes in rooms, and none when empty.
+- **Stale sockets:** a dead TCP connection may not produce a prompt close. This alarm is tested in workerd only: on real Cloudflare a socket with no heartbeat was gone at about 62 s, before the alarm could act. While sockets are present, an alarm closes those whose `getWebSocketAutoResponseTimestamp` is older than 90 seconds: every 60 seconds in hubs, every 5 minutes in rooms, and none when empty.
 
 Per spec §8.2, **disconnect is never treated as abandonment**. Follow-up decisions use message timestamps.
 
