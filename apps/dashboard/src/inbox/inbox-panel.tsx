@@ -245,6 +245,58 @@ function ConversationList(props: { workspaceId: string; memberId: string; select
   );
 }
 
+const PREVIEW_LIMIT_BYTES = 5 * 1024 * 1024;
+
+function saveBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+const formatSize = (bytes: number) => (bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`);
+
+function AttachmentView({ file }: { file: Message['attachments'][number] }) {
+  const [preview, setPreview] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  const previewable = file.contentType.startsWith('image/') && file.size <= PREVIEW_LIMIT_BYTES;
+  useEffect(() => {
+    if (!previewable) return;
+    let url: string | null = null;
+    let gone = false;
+    api
+      .downloadAttachment(file.url)
+      .then((blob) => {
+        if (gone) return;
+        url = URL.createObjectURL(blob);
+        setPreview(url);
+      })
+      .catch(() => undefined);
+    return () => {
+      gone = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [file.url, previewable]);
+  return (
+    <div className="mt-1">
+      {preview && <img className="mb-1 max-h-60 max-w-full rounded" src={preview} alt={file.filename} />}
+      <button
+        type="button"
+        className="break-all underline"
+        onClick={() => {
+          setFailed(false);
+          api.downloadAttachment(file.url).then((blob) => saveBlob(blob, file.filename)).catch(() => setFailed(true));
+        }}
+      >
+        Download {file.filename} ({formatSize(file.size)})
+      </button>
+      {failed && <span role="alert"> That did not download. Try again.</span>}
+    </div>
+  );
+}
+
 function MessageBubble({ message }: { message: Message }) {
   const note = message.visibility === 'internal';
   const fromTeam = message.sender.type === 'member';
@@ -255,7 +307,8 @@ function MessageBubble({ message }: { message: Message }) {
         <div className="mb-1 text-xs opacity-80">
           {note ? `Internal note from ${sender}. The visitor cannot see this.` : sender} · <time dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time>
         </div>
-        <div className="break-words whitespace-pre-wrap">{message.content}</div>
+        {message.content && <div className="break-words whitespace-pre-wrap">{message.content}</div>}
+        {message.attachments.map((file) => <AttachmentView key={file.id} file={file} />)}
       </div>
     </li>
   );
@@ -268,26 +321,44 @@ function Composer(props: { workspaceId: string; conversationId: string; drafts: 
   const [mode, setMode] = useState<'text' | 'internal_note'>('text');
   const lastTyping = useRef(0);
   // Kept across failures, so that a retry of the same words cannot send them twice.
-  const attempt = useRef<{ id: string; content: string; type: string } | null>(null);
+  const attempt = useRef<{ id: string; content: string; type: string; files: string } | null>(null);
+  const [files, setFiles] = useState<{ id: string; filename: string }[]>([]);
+  const [uploading, setUploading] = useState(0);
+  const [uploadError, setUploadError] = useState<unknown>(null);
+  const picker = useRef<HTMLInputElement>(null);
+  const upload = (picked: File[]) => {
+    setUploadError(null);
+    setUploading((count) => count + picked.length);
+    for (const file of picked) {
+      api
+        .uploadAttachment(workspaceId, conversationId, file)
+        .then((stored) => setFiles((known) => [...known, { id: stored.id, filename: stored.filename }]))
+        .catch((error: unknown) => setUploadError(error))
+        .finally(() => setUploading((count) => count - 1));
+    }
+  };
   const setDraft = (value: string) => {
     drafts.set(conversationId, value);
     setDraftState(value);
   };
   const send = useMutation({
-    mutationFn: (input: { id: string; content: string; type: 'text' | 'internal_note' }) => api.sendMessage(workspaceId, conversationId, { clientMessageId: input.id, type: input.type, content: input.content }),
+    mutationFn: (input: { id: string; content: string; type: 'text' | 'internal_note'; attachmentIds: string[] }) => api.sendMessage(workspaceId, conversationId, { clientMessageId: input.id, type: input.type, content: input.content, ...(input.attachmentIds.length > 0 ? { attachmentIds: input.attachmentIds } : {}) }),
     onSuccess: (message) => {
       attempt.current = null;
       client.setQueryData<Message[]>(threadKey(workspaceId, conversationId), (known) => mergeMessages(known ?? [], [message]));
       // This send moved the conversation's version, and the socket may be down.
       void client.invalidateQueries({ queryKey: detailKey(workspaceId, conversationId) });
       setDraft('');
+      setFiles([]);
     },
   });
   const submit = () => {
     const content = draft.trim();
-    if (!content || send.isPending) return;
-    if (attempt.current?.content !== content || attempt.current.type !== mode) attempt.current = { id: crypto.randomUUID(), content, type: mode };
-    send.mutate({ id: attempt.current.id, content, type: mode });
+    if ((!content && files.length === 0) || send.isPending || uploading > 0) return;
+    const attachmentIds = files.map((file) => file.id);
+    const fileKey = attachmentIds.join();
+    if (attempt.current?.content !== content || attempt.current.type !== mode || attempt.current.files !== fileKey) attempt.current = { id: crypto.randomUUID(), content, type: mode, files: fileKey };
+    send.mutate({ id: attempt.current.id, content, type: mode, attachmentIds });
   };
   const note = mode === 'internal_note';
   return (
@@ -325,7 +396,33 @@ function Composer(props: { workspaceId: string; conversationId: string; drafts: 
         }}
       />
       {send.error ? <p className="error" role="alert">Not sent. {errorMessage(send.error)} Your words are still here.</p> : null}
-      <button className="button" disabled={send.isPending || !draft.trim()}>{note ? 'Add note' : 'Send reply'}</button>
+      {uploadError ? <p className="error" role="alert">That file was not added. {errorMessage(uploadError)}</p> : null}
+      {(files.length > 0 || uploading > 0) && (
+        <ul className="flex flex-wrap gap-2 text-xs" aria-label="Files to send">
+          {files.map((file) => (
+            <li key={file.id} className="flex items-center gap-1 rounded bg-slate-100 px-2 py-1 dark:bg-slate-800">
+              <span className="break-all">{file.filename}</span>
+              <button type="button" aria-label={`Remove ${file.filename}`} onClick={() => setFiles((known) => known.filter((other) => other.id !== file.id))}>×</button>
+            </li>
+          ))}
+          {uploading > 0 && <li className="px-2 py-1" role="status">Uploading…</li>}
+        </ul>
+      )}
+      <div className="flex gap-2">
+        <button className="button" disabled={send.isPending || uploading > 0 || (!draft.trim() && files.length === 0)}>{note ? 'Add note' : 'Send reply'}</button>
+        <button type="button" className="button-quiet" onClick={() => picker.current?.click()}>Attach a file</button>
+        <input
+          ref={picker}
+          type="file"
+          multiple
+          hidden
+          aria-label="File to attach"
+          onChange={(event) => {
+            upload([...(event.target.files ?? [])]);
+            event.target.value = '';
+          }}
+        />
+      </div>
     </form>
   );
 }

@@ -24,6 +24,10 @@ type Unscoped = { kind: 'public' | 'self'; reason: string };
 type VisitorScoped = { kind: 'visitor'; body?: Record<string, unknown>; ownerStatus: number };
 type Case = Scoped | Unscoped | VisitorScoped;
 
+/** Stands for a file in the cases below: the harness sends these bytes as the body. */
+const UPLOAD = { __file: true };
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+
 /** Keyed by operationId. Adding a route without an entry here fails the first test below. */
 const CASES: Record<string, Case> = {
   getHealth: { kind: 'public', reason: 'Status only' },
@@ -70,6 +74,10 @@ const CASES: Record<string, Case> = {
   listMessages: { kind: 'workspace', ownerStatus: 200 },
   sendMessage: { kind: 'workspace', body: { clientMessageId: 'isolation-1', type: 'text', content: 'Taken over' }, ownerStatus: 201 },
   markConversationRead: { kind: 'workspace', body: { deliveredSeq: 0, readSeq: 0 }, ownerStatus: 204 },
+  uploadAttachment: { kind: 'workspace', body: UPLOAD, ownerStatus: 201 },
+  downloadAttachment: { kind: 'workspace', ownerStatus: 200 },
+  uploadVisitorAttachment: { kind: 'visitor', body: UPLOAD, ownerStatus: 201 },
+  downloadVisitorAttachment: { kind: 'visitor', ownerStatus: 200 },
 };
 
 /** Served by the app, but not part of the versioned contract. */
@@ -136,8 +144,8 @@ const testEnv = { ...env, EMAIL_QUEUE: { send: async (_job: JobEnvelope) => unde
 
 /** Resources in each workspace, by the name of the path parameter that holds them. */
 const RESOURCES: Record<'a' | 'b', Record<string, string>> = {
-  a: { workspaceId: 'work_a', memberId: 'mem_a_agent', websiteId: 'site_a', conversationId: 'conv_a', contactId: 'cont_a', tagId: 'tag_a' },
-  b: { workspaceId: 'work_b', memberId: 'mem_b_agent', websiteId: 'site_b', conversationId: 'conv_b', contactId: 'cont_b', tagId: 'tag_b' },
+  a: { workspaceId: 'work_a', memberId: 'mem_a_agent', websiteId: 'site_a', conversationId: 'conv_a', contactId: 'cont_a', tagId: 'tag_a', attachmentId: 'att_a' },
+  b: { workspaceId: 'work_b', memberId: 'mem_b_agent', websiteId: 'site_b', conversationId: 'conv_b', contactId: 'cont_b', tagId: 'tag_b', attachmentId: 'att_b' },
 };
 
 function urlFor(path: string, ...sources: Record<string, string>[]): string {
@@ -151,16 +159,17 @@ let requests = 0;
 /** Waits for dispatch after the response, which writes to the outbox and would otherwise disturb a later snapshot. */
 const request = async (method: string, path: string, token: string | null, body?: Record<string, unknown>) => {
   const ctx = createExecutionContext();
+  const upload = body === UPLOAD;
   const response = await worker.fetch(
-    new Request(`${ORIGIN}${path}`, {
+    new Request(`${ORIGIN}${path}${upload ? '?filename=a.png' : ''}`, {
       method,
       headers: {
         // Its own address each time, so that sign-in limits never decide a result here.
         'cf-connecting-ip': `192.0.2.${++requests}`,
         ...(token ? { authorization: `Bearer ${token}` } : {}),
-        ...(body ? { 'content-type': 'application/json' } : {}),
+        ...(upload ? { 'content-type': 'image/png', 'content-length': String(PNG.length) } : body ? { 'content-type': 'application/json' } : {}),
       },
-      ...(body ? { body: JSON.stringify(body) } : {}),
+      ...(upload ? { body: PNG } : body ? { body: JSON.stringify(body) } : {}),
     }),
     testEnv,
     ctx,
@@ -169,7 +178,7 @@ const request = async (method: string, path: string, token: string | null, body?
   return response;
 };
 
-const TABLES = ['workspaces', 'workspace_members', 'websites', 'invitations', 'audit_log', 'outbox', 'conversation_read_cursors', 'conversation_events', 'messages', 'conversations', 'tags', 'conversation_tags', 'contacts', 'visitors'];
+const TABLES = ['workspaces', 'workspace_members', 'websites', 'invitations', 'audit_log', 'outbox', 'conversation_read_cursors', 'conversation_events', 'messages', 'conversations', 'tags', 'conversation_tags', 'contacts', 'visitors', 'attachments'];
 
 /** Every row belonging to workspace A. A refused request must leave this exactly as it was. */
 async function snapshotOfA(): Promise<string> {
@@ -198,9 +207,12 @@ async function seed() {
       env.DB.prepare(`INSERT INTO tags (id, workspace_id, name, created_at) VALUES (?1, ?2, 'existing', 1)`).bind(`tag_${w}`, `work_${w}`),
       env.DB.prepare(`INSERT INTO contacts (id, workspace_id, first_seen_at, last_seen_at, created_at, updated_at) VALUES (?1, ?2, 1, 1, 1, 1)`).bind(`cont_${w}`, `work_${w}`),
       env.DB.prepare(`INSERT INTO conversations (id, workspace_id, website_id, contact_id, last_message_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, 1, 1, 1)`).bind(`conv_${w}`, `work_${w}`, `site_${w}`, `cont_${w}`),
+      env.DB.prepare(`INSERT INTO attachments (id, workspace_id, conversation_id, storage_key, filename, content_type, size, status, uploaded_by_type, uploaded_by_id, created_at) VALUES (?1, ?2, ?3, ?4, 'a.png', 'image/png', 11, 'ready', 'member', ?5, 1)`).bind(`att_${w}`, `work_${w}`, `conv_${w}`, `w/work_${w}/c/conv_${w}/att_${w}`, `mem_${w}_agent`),
     ]),
   ]);
 }
+
+const seedFiles = () => Promise.all(['a', 'b'].map((w) => testEnv.ATTACHMENTS.put(`w/work_${w}/c/conv_${w}/att_${w}`, PNG)));
 
 async function signIn(email: string) {
   const response = await request('POST', '/api/v1/auth/login', null, { email, password: PASSWORD, clientType: 'mobile' });
@@ -231,7 +243,8 @@ describe('between visitors', () => {
 
   let owner = '';
   let conversationId = '';
-  const paths = (path: string) => path.replace('{conversationId}', conversationId);
+  let attachmentId = '';
+  const paths = (path: string) => path.replace('{conversationId}', conversationId).replace('{attachmentId}', attachmentId);
 
   beforeAll(async () => {
     passwordHash = await hashPassword(PASSWORD);
@@ -243,6 +256,10 @@ describe('between visitors', () => {
     owner = await visitorToken('site_a', SITE);
     const created = await request('POST', '/api/v1/widget/conversations', owner, { clientMessageId: 'isolation-0', content: 'Mine' });
     conversationId = ((await created.json()) as { id: string }).id;
+    const stored = await request('POST', `/api/v1/widget/conversations/${conversationId}/attachments`, owner, UPLOAD);
+    attachmentId = ((await stored.json()) as { id: string }).id;
+    const claimed = await request('POST', `/api/v1/widget/conversations/${conversationId}/messages`, owner, { clientMessageId: 'isolation-file', content: '', attachmentIds: [attachmentId] });
+    expect(claimed.status).toBe(201);
   });
 
   it.each(visitorRoutes)('$id works for the visitor who owns it', async ({ method, path, id }) => {
@@ -257,7 +274,7 @@ describe('between visitors', () => {
     expect(await snapshotOfA()).toBe(before);
   });
 
-  const conversationRoutes = visitorRoutes.filter((r) => r.path.includes('{conversationId}'));
+  const conversationRoutes = visitorRoutes.filter((r) => r.path.includes('{conversationId}') || r.path.includes('{attachmentId}'));
 
   it.each(conversationRoutes)('$id answers 404 to another visitor of the same website', async ({ method, path, id }) => {
     const other = await visitorToken('site_a', SITE);
@@ -291,6 +308,7 @@ describe('across tenants', () => {
 
   beforeEach(async () => {
     await seed();
+    await seedFiles();
     tokens.ownerA = await signIn('owner-a@example.com');
     tokens.ownerB = await signIn('owner-b@example.com');
   });

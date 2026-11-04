@@ -13,12 +13,69 @@ function useChat(controller: Controller): ChatState {
   return state;
 }
 
-function Message({ message, state, onRetry }: { message: ChatMessage; state: string | null; onRetry: () => void }) {
+const PREVIEW_LIMIT_BYTES = 5 * 1024 * 1024;
+
+const formatSize = (bytes: number) => (bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`);
+
+/**
+ * A page's CSP may refuse a blob: picture. Then the picture goes away and the download stays. The link is put in
+ * the panel, so that the host page's listeners do not see the click.
+ */
+function Attachment({ file, controller }: { file: ChatMessage['attachments'][number]; controller: Controller }) {
+  const [preview, setPreview] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  const self = useRef<HTMLDivElement>(null);
+  const previewable = file.contentType.startsWith('image/') && file.size <= PREVIEW_LIMIT_BYTES;
+  useEffect(() => {
+    if (!previewable) return undefined;
+    let url: string | null = null;
+    let gone = false;
+    controller
+      .fetchAttachment(file.url)
+      .then((blob) => {
+        if (gone) return;
+        url = URL.createObjectURL(blob);
+        setPreview(url);
+      })
+      .catch(() => undefined);
+    return () => {
+      gone = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [controller, file.url, previewable]);
+  const download = () => {
+    setFailed(false);
+    controller
+      .fetchAttachment(file.url)
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = file.filename;
+        self.current?.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      })
+      .catch(() => setFailed(true));
+  };
+  return (
+    <div class="oc-file" ref={self}>
+      {preview && <img class="oc-image" src={preview} alt={file.filename} onError={() => setPreview(null)} />}
+      <button type="button" class="oc-link" onClick={download}>{S.download(file.filename, formatSize(file.size))}</button>
+      {failed && <span class="oc-state bad" role="alert"> {S.downloadFailed}</span>}
+    </div>
+  );
+}
+
+function Message({ message, state, onRetry, controller }: { message: ChatMessage; state: string | null; onRetry: () => void; controller: Controller }) {
   const kind = message.system ? 'system' : message.mine ? 'mine' : 'theirs';
   return (
     <div class={`oc-msg ${kind} ${message.status}`}>
       {kind === 'theirs' && <p class="oc-who">{message.senderName ?? S.team}</p>}
-      <div class="oc-bubble" dir="auto">{message.content}</div>
+      {message.content && <div class="oc-bubble" dir="auto">{message.content}</div>}
+      {message.pendingFile && <div class="oc-file oc-state" dir="auto">{message.pendingFile}</div>}
+      {message.attachments.map((file) => <Attachment key={file.id} file={file} controller={controller} />)}
       {message.status === 'failed' ? (
         <span class="oc-state bad">
           {S.failed} <button type="button" class="oc-link" onClick={onRetry}>{S.retry}</button>
@@ -66,8 +123,9 @@ function ProfileForm({ controller, required }: { controller: Controller; require
   );
 }
 
-function Composer({ controller }: { controller: Controller }) {
+function Composer({ controller, canAttach }: { controller: Controller; canAttach: boolean }) {
   const [text, setText] = useState('');
+  const picker = useRef<HTMLInputElement>(null);
   const submit = () => {
     if (!text.trim()) return;
     void controller.send(text);
@@ -100,6 +158,24 @@ function Composer({ controller }: { controller: Controller }) {
           }
         }}
       />
+      {canAttach && (
+        <>
+          <button type="button" class="oc-attach" aria-label={S.attach} onClick={() => picker.current?.click()}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.5 6v11.5a4.5 4.5 0 0 1-9 0V5a3 3 0 0 1 6 0v10.5a1.5 1.5 0 0 1-3 0V6H9v9.5a3 3 0 0 0 6 0V5a4.5 4.5 0 0 0-9 0v12.5a6 6 0 0 0 12 0V6z" /></svg>
+          </button>
+          <input
+            ref={picker}
+            type="file"
+            hidden
+            aria-label={S.fileToAttach}
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0];
+              if (file) void controller.sendFile(file);
+              event.currentTarget.value = '';
+            }}
+          />
+        </>
+      )}
       <button class="oc-send" disabled={!text.trim()}>{S.send}</button>
     </form>
   );
@@ -197,14 +273,14 @@ export function App({ controller, button }: { controller: Controller; button: HT
           </div>
         )}
         {state.messages.map((message) => (
-          <Message key={message.key} message={message} state={stateOf(message)} onRetry={() => void controller.retry(message.key)} />
+          <Message key={message.key} message={message} state={stateOf(message)} onRetry={() => void controller.retry(message.key)} controller={controller} />
         ))}
       </div>
       <div class="oc-typing" aria-live="polite">{state.typing ? S.typing(state.typing.displayName) : ''}</div>
-      {state.notice && <p class="oc-note bad" role="alert">{state.notice === 'rate_limited' ? S.rateLimited : S.unavailable}</p>}
+      {state.notice && <p class="oc-note bad" role="alert">{state.notice === 'rate_limited' ? S.rateLimited : state.notice === 'bad_file' ? S.badFile : S.unavailable}</p>}
       {state.conversation?.status === 'resolved' && <p class="oc-note">{S.resolved}</p>}
       {state.profile === 'offered' && state.messages.some((m) => m.mine) && <ProfileForm controller={controller} required={false} />}
-      {state.profile === 'required' ? <ProfileForm controller={controller} required /> : <Composer controller={controller} />}
+      {state.profile === 'required' ? <ProfileForm controller={controller} required /> : <Composer controller={controller} canAttach={state.conversation !== null} />}
     </div>
   );
 }

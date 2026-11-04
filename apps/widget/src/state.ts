@@ -13,6 +13,9 @@ export interface ChatMessage {
   content: string;
   createdAt: string | null;
   status: 'sending' | 'failed' | 'sent';
+  attachments: VisitorMessage['attachments'];
+  /** The name of a file on its way, until the server has it. */
+  pendingFile: string | null;
 }
 
 export const fromServer = (message: VisitorMessage): ChatMessage => ({
@@ -27,9 +30,11 @@ export const fromServer = (message: VisitorMessage): ChatMessage => ({
   content: message.content,
   createdAt: message.createdAt,
   status: 'sent',
+  attachments: message.attachments,
+  pendingFile: null,
 });
 
-export const pendingMessage = (clientMessageId: string, content: string): ChatMessage => ({
+export const pendingMessage = (clientMessageId: string, content: string, pendingFile: string | null = null): ChatMessage => ({
   key: clientMessageId,
   id: null,
   seq: null,
@@ -40,6 +45,8 @@ export const pendingMessage = (clientMessageId: string, content: string): ChatMe
   content,
   createdAt: null,
   status: 'sending',
+  attachments: [],
+  pendingFile,
 });
 
 /** Committed messages in order, then what is still on its way. A socket, a response, and a catch-up can each bring the same message. */

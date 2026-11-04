@@ -22,5 +22,9 @@ export {
   type SendMessageInput,
   type SendResult,
   type StoredMessage,
+  type AttachmentRow,
+  type NewAttachment,
+  attachmentKey,
   type WebsiteRow,
 } from './repositories';
+export type { AttachmentJson } from './internal/message-statements';

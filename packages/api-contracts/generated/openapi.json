@@ -1726,6 +1726,42 @@
         ],
         "description": "The conversation, and the message that started it, so that a client knows it is committed without asking again."
       },
+      "Attachment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "ready",
+              "rejected"
+            ]
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "filename",
+          "contentType",
+          "size",
+          "status",
+          "url"
+        ]
+      },
       "Conversation": {
         "type": "object",
         "properties": {
@@ -1931,42 +1967,6 @@
           "attachments",
           "createdAt",
           "metadata"
-        ]
-      },
-      "Attachment": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "filename": {
-            "type": "string"
-          },
-          "contentType": {
-            "type": "string"
-          },
-          "size": {
-            "type": "integer"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "pending",
-              "ready",
-              "rejected"
-            ]
-          },
-          "url": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "filename",
-          "contentType",
-          "size",
-          "status",
-          "url"
         ]
       },
       "Health": {
@@ -3088,6 +3088,252 @@
         }
       }
     },
+    "/api/v1/workspaces/{workspaceId}/conversations/{conversationId}/attachments": {
+      "post": {
+        "tags": [
+          "attachments"
+        ],
+        "operationId": "uploadAttachment",
+        "summary": "Upload a file",
+        "description": "The body is the file, as a stream, with its type in Content-Type and its size in Content-Length. Name its ID on a later message. A file that no message claims within a day is deleted.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "conversationId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "required": true,
+            "name": "filename",
+            "in": "query"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Attachment"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/attachments/{attachmentId}": {
+      "get": {
+        "tags": [
+          "attachments"
+        ],
+        "operationId": "downloadAttachment",
+        "summary": "Download a file",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "attachmentId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The file, with safe headers",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/widget/conversations/{conversationId}/attachments": {
+      "post": {
+        "tags": [
+          "widget"
+        ],
+        "operationId": "uploadVisitorAttachment",
+        "summary": "Upload a file to a conversation of this visitor",
+        "description": "The body is the file, as a stream, with its type in Content-Type and its size in Content-Length. Name its ID on a later message. A file that no message claims within a day is deleted.",
+        "security": [
+          {
+            "visitorAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "conversationId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "required": true,
+            "name": "filename",
+            "in": "query"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Attachment"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/widget/attachments/{attachmentId}": {
+      "get": {
+        "tags": [
+          "widget"
+        ],
+        "operationId": "downloadVisitorAttachment",
+        "summary": "Download a file on a public message in a conversation of this visitor",
+        "security": [
+          {
+            "visitorAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "attachmentId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The file, with safe headers",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/widget/conversations/{conversationId}/messages": {
       "get": {
         "tags": [
@@ -3310,8 +3556,15 @@
                   },
                   "content": {
                     "type": "string",
-                    "minLength": 1,
                     "maxLength": 16000
+                  },
+                  "attachmentIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 64
+                    },
+                    "maxItems": 5
                   }
                 },
                 "required": [
@@ -4043,8 +4296,16 @@
                   },
                   "content": {
                     "type": "string",
-                    "minLength": 1,
                     "maxLength": 16000
+                  },
+                  "attachmentIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 64
+                    },
+                    "maxItems": 10,
+                    "description": "Files uploaded to this conversation by this member. Content may be empty if there is at least one."
                   }
                 },
                 "required": [

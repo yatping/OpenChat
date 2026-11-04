@@ -1,4 +1,6 @@
 import {
+  downloadVisitorAttachmentRoute,
+  uploadVisitorAttachmentRoute,
   createVisitorConversationRoute,
   createVisitorSessionRoute,
   createVisitorTicketRoute,
@@ -10,6 +12,8 @@ import {
   widgetBootstrapRoute,
 } from '@openchat/api-contracts';
 import {
+  beginVisitorUpload,
+  visitorAttachment,
   assertVisitorOrigin,
   authenticateVisitor,
   createVisitorConversation,
@@ -27,6 +31,7 @@ import { AppError, notFound } from '@openchat/shared';
 import type { Context, MiddlewareHandler } from 'hono';
 import { hubName } from '@openchat/realtime';
 import { authDeps, type App, type AppEnv } from '../context';
+import { receiveUpload, sendFile } from '../attachments';
 import { dispatchSoon, publishRead, socketUrl } from '../dispatch';
 
 type WidgetEnv = { Bindings: AppEnv['Bindings']; Variables: AppEnv['Variables'] & { visitor: VisitorContext } };
@@ -102,7 +107,7 @@ async function loadBootstrap(c: Context<AppEnv>, websiteKey: string): Promise<Ca
 
 export function registerWidgetRoutes(app: App) {
   app.use('/api/v1/widget/*', cors);
-  for (const path of [updateVisitorProfileRoute.path, listVisitorConversationsRoute.path, '/api/v1/widget/conversations/*']) {
+  for (const path of [updateVisitorProfileRoute.path, listVisitorConversationsRoute.path, '/api/v1/widget/conversations/*', '/api/v1/widget/attachments/*']) {
     app.use(path, requireVisitor as unknown as MiddlewareHandler<AppEnv>);
   }
   const visitorOf = (c: Context<AppEnv>) => (c as unknown as Context<WidgetEnv>).get('visitor');
@@ -145,6 +150,13 @@ export function registerWidgetRoutes(app: App) {
     const { ticket, expiresAt } = await createVisitorTicket(await authDeps(c.env), visitorOf(c), c.req.valid('param').conversationId, c.req.header('origin'));
     return c.json({ ticket, expiresAt, url: socketUrl(c, ticket) }, 201);
   });
+
+  app.openapi(uploadVisitorAttachmentRoute, async (c) => {
+    const deps = await authDeps(c.env);
+    return c.json(await receiveUpload(c, c.req.valid('param').conversationId, c.req.valid('query').filename, (input) => beginVisitorUpload(deps, visitorOf(c), input)), 201);
+  });
+
+  app.openapi(downloadVisitorAttachmentRoute, (async (c: Context<AppEnv>) => sendFile(c, await visitorAttachment(await authDeps(c.env), visitorOf(c), c.req.param('attachmentId')!))) as never);
 
   app.openapi(markVisitorConversationReadRoute, async (c) => {
     const visitor = visitorOf(c);

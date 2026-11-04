@@ -83,3 +83,16 @@ export function conversationForDispatch(database: Database, workspaceId: string,
       tagsJson: string;
     }>();
 }
+
+/** Never put on a message. A message can no longer claim one this old, so that deleting it cannot race a send. */
+export async function staleAttachments(database: Database, olderThanMs: number, limit: number): Promise<{ id: string; storageKey: string }[]> {
+  const { results } = await rawHandle(database)
+    .prepare(`SELECT id, storage_key AS storageKey FROM attachments WHERE message_id IS NULL AND created_at < ${DB_NOW_MS} - ?1 ORDER BY created_at LIMIT ?2`)
+    .bind(olderThanMs, limit)
+    .all<{ id: string; storageKey: string }>();
+  return results;
+}
+
+export async function deleteUnclaimedAttachment(database: Database, id: string): Promise<void> {
+  await rawHandle(database).prepare(`DELETE FROM attachments WHERE id = ?1 AND message_id IS NULL`).bind(id).run();
+}

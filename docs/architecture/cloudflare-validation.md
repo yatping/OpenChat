@@ -266,6 +266,23 @@ Chromium also refuses a public page access to a loopback address, so the local b
 
 Not measured: a real phone, Safari, or Firefox. Only Chromium ran.
 
+### Attachments on real R2, 2026-11-04
+
+Through the real API and in headless Chromium, on a throwaway deployment since removed. 16 of 17 checks passed. The other reported a 401 in the dashboard's console, which is its session refresh before anyone has signed in. Nothing failed after sign-in. That check was stricter than earlier runs, and the behaviour is not new.
+
+| Check | Result |
+|---|---|
+| `FixedLengthStream` to R2 from a request body | Works. A 20 MB file came back byte for byte |
+| 20 MB through the Worker, from one client | 7.1 s up, 1.9 s down. One sample, not a benchmark |
+| Over 25 MB, HTML, HTML named as a picture | Refused with 413, 415, and 415 |
+| Another visitor, no token, a note's file | 404, 401, and 404 |
+| A `blob:` picture in the real dashboard, past its CSP | Shown |
+| A visitor downloading across origins | Works |
+
+Not tested on real Cloudflare: the hourly orphan sweep, and a body shorter than its declared length. Both pass in workerd. The cost per transfer in ADR-0008 is for the load test.
+
+**A bucket with files in it cannot be deleted.** `wrangler r2 bucket delete` refuses, and Wrangler has no command to empty one, so removing a deployment that has received files needs a small Worker to delete them first. This matters to the uninstall story, which does not cover it yet.
+
 ### Follow-up deployment, 2026-11-04
 
 A second throwaway deployment on the same account took about 90 seconds, then was removed. `oc preflight` passed, and with a bad API token it stopped before creating anything. `/api/*` answers carried `no-store` and `nosniff`. Account deletion answered 401 with no token, 400 with no password, 403 with a wrong password, and 409 for the last owner with the right one. A successful deletion has only run in workerd, because this deployment had one user. The check's failure cases for R2, D1, Queues, and several accounts, and the missing `workers.dev` message, have only run against a fake Wrangler.

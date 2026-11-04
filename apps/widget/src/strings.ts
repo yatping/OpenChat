@@ -31,4 +31,9 @@ export const STRINGS = {
   start: 'Start chatting',
   notNow: 'Not now',
   profileFailed: 'That did not save. Please try again.',
+  attach: 'Attach a file',
+  fileToAttach: 'File to attach',
+  download: (name: string, size: string) => `Download ${name} (${size})`,
+  downloadFailed: 'That did not download. Try again.',
+  badFile: 'That file cannot be sent. Pictures, PDFs, Office documents, ZIP, text, and CSV are fine, up to 25 MB.',
 };

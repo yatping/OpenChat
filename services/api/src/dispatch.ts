@@ -6,6 +6,8 @@
 import { toMessage } from '@openchat/core';
 import {
   conversationForDispatch,
+  deleteUnclaimedAttachment,
+  staleAttachments,
   markOutboxDispatched,
   messageForDispatch,
   openDatabase,
@@ -26,6 +28,8 @@ const SWEEP_AGE_MS = 60_000;
 const SWEEP_LIMIT = 200;
 const PURGE_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 const PURGE_LIMIT = 1000;
+const ORPHAN_AGE_MS = 24 * 60 * 60 * 1000;
+const ORPHAN_LIMIT = 200;
 
 async function conversationEvent(db: Database, row: OutboxRow, kind: 'conversation.created' | 'conversation.updated'): Promise<DomainEvent | null> {
   const c = await conversationForDispatch(db, row.workspaceId, row.aggregateId);
@@ -119,10 +123,21 @@ export function publishRead(c: Context<AppEnv>, event: Extract<DomainEvent, { ki
   );
 }
 
+/** Storage first: if the row went first and this died, nothing would ever find the file again. */
+async function sweepAttachments(env: Env, db: Database): Promise<void> {
+  for (const file of await staleAttachments(db, ORPHAN_AGE_MS, ORPHAN_LIMIT)) {
+    await env.ATTACHMENTS.delete(file.storageKey);
+    await deleteUnclaimedAttachment(db, file.id);
+  }
+}
+
 export async function sweepOutbox(env: Env, scheduledTime: number): Promise<void> {
   const db = openDatabase(env.DB);
   await dispatchRows(env, db, await staleOutbox(db, SWEEP_AGE_MS, SWEEP_LIMIT));
-  if (new Date(scheduledTime).getUTCMinutes() === 0) await purgeDispatchedOutbox(db, PURGE_AGE_MS, PURGE_LIMIT);
+  if (new Date(scheduledTime).getUTCMinutes() === 0) {
+    await purgeDispatchedOutbox(db, PURGE_AGE_MS, PURGE_LIMIT);
+    await sweepAttachments(env, db);
+  }
 }
 
 export function socketUrl(c: Context<AppEnv>, ticket: string): string {

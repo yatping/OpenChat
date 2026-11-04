@@ -29,3 +29,4 @@ export * from './auth-flows';
 export * from './workspaces';
 export * from './messaging';
 export * from './widget';
+export * from './attachments';

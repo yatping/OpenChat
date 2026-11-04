@@ -119,7 +119,7 @@ describe('message sending (Pattern 1)', () => {
     const version = (await repositories(db, ctx).conversations.get('c1'))!.version;
     const replay = await send(ctx, 'a');
     expect(replay.outcome).toBe('replayed');
-    if (first.outcome === 'not_found' || replay.outcome === 'not_found') throw new Error('unexpected');
+    if (!('message' in first) || !('message' in replay)) throw new Error('unexpected');
     expect(replay.message.id).toBe(first.message.id);
     expect(await count('messages')).toBe(1);
     expect(await count('outbox')).toBe(1);

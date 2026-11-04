@@ -6,7 +6,7 @@ import { newId } from '@openchat/shared';
 import type { Role, WorkspaceContext } from './context';
 import type { WorkspaceRow } from './workspace-repository';
 import { DB_NOW_MS, rawHandle, type Database } from './internal/handle';
-import { messageStatements } from './internal/message-statements';
+import { ATTACHMENTS_JSON, messageStatements } from './internal/message-statements';
 
 export interface WebsiteRow {
   id: string;
@@ -50,10 +50,14 @@ export interface SendMessageInput {
   sender: { type: 'visitor' | 'member' | 'system'; id: string | null };
   type: SendableType;
   content: string;
+  attachmentIds?: string[];
 }
 
 export interface StoredMessage {
   id: string;
+  workspaceId: string;
+  /** JSON from ATTACHMENTS_JSON. */
+  attachmentsJson: string;
   conversationId: string;
   seq: number;
   publicSeq: number | null;
@@ -67,6 +71,26 @@ export interface StoredMessage {
   /** The member's or contact's current name. Null if there is none, or the member has since left. */
   senderName: string | null;
 }
+
+export interface NewAttachment {
+  id: string;
+  conversationId: string;
+  filename: string;
+  contentType: string;
+  size: number;
+}
+
+export interface AttachmentRow {
+  id: string;
+  storageKey: string;
+  filename: string;
+  contentType: string;
+  size: number;
+}
+
+export const ATTACHMENT_SELECT = `SELECT id, storage_key AS storageKey, filename, content_type AS contentType, size FROM attachments`;
+/** Under the workspace, so that storage has the same boundary as the database. */
+export const attachmentKey = (workspaceId: string, conversationId: string, id: string) => `w/${workspaceId}/c/${conversationId}/${id}`;
 
 export type ConversationStatus = 'open' | 'pending' | 'resolved' | 'archived';
 export type ConversationPriority = 'low' | 'normal' | 'high' | 'urgent';
@@ -125,7 +149,8 @@ export interface ConversationFilter {
 export type SendResult =
   | { outcome: 'created'; message: StoredMessage }
   | { outcome: 'replayed'; message: StoredMessage }
-  | { outcome: 'not_found' };
+  | { outcome: 'not_found' }
+  | { outcome: 'invalid_attachments' };
 
 export type AssignResult =
   | { outcome: 'updated'; version: number }
@@ -134,7 +159,7 @@ export type AssignResult =
   | { outcome: 'not_found' };
 
 /** Names come by primary key, so that this stays cheap on the hot path. Agents only: it includes internal notes. */
-export const MESSAGE_SELECT = `SELECT m.id, m.conversation_id AS conversationId, m.seq, m.public_seq AS publicSeq,
+export const MESSAGE_SELECT = `SELECT m.id, m.workspace_id AS workspaceId, ${ATTACHMENTS_JSON} AS attachmentsJson, m.conversation_id AS conversationId, m.seq, m.public_seq AS publicSeq,
     m.client_message_id AS clientMessageId, m.sender_type AS senderType, m.sender_id AS senderId,
     m.message_type AS type, m.visibility, m.content, m.created_at AS createdAt, COALESCE(u.name, ct.name) AS senderName
   FROM messages m
@@ -523,6 +548,33 @@ export function repositories(database: Database, ctx: WorkspaceContext) {
       },
     },
 
+    attachments: {
+      /** Null when there is no such conversation here. Pending until its bytes are stored. */
+      async begin(input: NewAttachment): Promise<boolean> {
+        const result = await d1
+          .prepare(
+            `INSERT INTO attachments (id, workspace_id, conversation_id, storage_key, filename, content_type, size, status, uploaded_by_type, uploaded_by_id, created_at)
+             SELECT ?1, workspace_id, id, ?2, ?3, ?4, ?5, 'pending', 'member', ?6, ${DB_NOW_MS} FROM conversations WHERE workspace_id = ?7 AND id = ?8`,
+          )
+          .bind(input.id, attachmentKey(w, input.conversationId, input.id), input.filename, input.contentType, input.size, ctx.memberId, w, input.conversationId)
+          .run();
+        return result.meta.changes === 1;
+      },
+
+      async finish(id: string): Promise<void> {
+        await d1.prepare(`UPDATE attachments SET status = 'ready' WHERE workspace_id = ?1 AND id = ?2`).bind(w, id).run();
+      },
+
+      async abandon(id: string): Promise<void> {
+        await d1.prepare(`DELETE FROM attachments WHERE workspace_id = ?1 AND id = ?2 AND message_id IS NULL`).bind(w, id).run();
+      },
+
+      /** Any file in this workspace, including those on notes. For agents only. */
+      get(id: string): Promise<AttachmentRow | null> {
+        return d1.prepare(`${ATTACHMENT_SELECT} WHERE workspace_id = ?1 AND id = ?2 AND status = 'ready'`).bind(w, id).first<AttachmentRow>();
+      },
+    },
+
     messages: {
       /**
        * Pattern 1: idempotent insert. Later statements are guarded by the fresh message ID, which
@@ -540,8 +592,13 @@ export function repositories(database: Database, ctx: WorkspaceContext) {
           )
           .bind(w, c, input.clientMessageId)
           .first<StoredMessage>();
-        if (!message) return { outcome: 'not_found' };
-        return { outcome: created ? 'created' : 'replayed', message };
+        if (message) return { outcome: created ? 'created' : 'replayed', message };
+        // Refused for its files, or there is no such conversation.
+        if (input.attachmentIds?.length) {
+          const exists = await d1.prepare(`SELECT 1 AS found FROM conversations WHERE workspace_id = ?1 AND id = ?2`).bind(w, c).first();
+          if (exists) return { outcome: 'invalid_attachments' };
+        }
+        return { outcome: 'not_found' };
       },
 
       /** Everything, including internal notes. For agents only. Oldest first, whichever direction was asked for. */

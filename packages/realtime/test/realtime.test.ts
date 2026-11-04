@@ -266,3 +266,28 @@ describe('stale sockets', () => {
     expect(await runInDurableObject(stub, (_, state) => state.storage.getAlarm())).not.toBeNull();
   });
 });
+
+describe('toVisitorEvent, with files', () => {
+  it("gives the visitor's own route, and only the listed fields", () => {
+    const event = toVisitorEvent({
+      v: 1,
+      kind: 'message.created',
+      workspaceId: 'w',
+      message: {
+        id: 'm',
+        conversationId: 'c',
+        seq: 2,
+        publicSeq: 2,
+        clientMessageId: null,
+        sender: { type: 'member', id: 'mem', displayName: 'A' },
+        type: 'file',
+        visibility: 'public',
+        content: '',
+        attachments: [{ id: 'att', filename: 'a.pdf', contentType: 'application/pdf', size: 3, url: '/api/v1/workspaces/w/attachments/att', secret: 'x' } as never],
+        createdAt: '2026-01-01T00:00:00.000Z',
+        metadata: {},
+      } as never,
+    });
+    expect((event as { data: { message: { attachments: unknown[] } } }).data.message.attachments).toEqual([{ id: 'att', filename: 'a.pdf', contentType: 'application/pdf', size: 3, url: '/api/v1/widget/attachments/att' }]);
+  });
+});
