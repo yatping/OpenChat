@@ -20,7 +20,9 @@ type Scoped = {
   ownerStatus: number;
 };
 type Unscoped = { kind: 'public' | 'self'; reason: string };
-type Case = Scoped | Unscoped;
+/** Needs a visitor's token. `ownerStatus` is what the owning visitor gets. */
+type VisitorScoped = { kind: 'visitor'; body?: Record<string, unknown>; ownerStatus: number };
+type Case = Scoped | Unscoped | VisitorScoped;
 
 /** Keyed by operationId. Adding a route without an entry here fails the first test below. */
 const CASES: Record<string, Case> = {
@@ -45,6 +47,14 @@ const CASES: Record<string, Case> = {
   listWebsites: { kind: 'workspace', ownerStatus: 200 },
   createWebsite: { kind: 'workspace', body: { name: 'Taken over', allowedOrigins: [] }, ownerStatus: 201 },
   updateWebsite: { kind: 'workspace', body: { name: 'Taken over' }, ownerStatus: 200 },
+  widgetBootstrap: { kind: 'public', reason: 'Public configuration. Only ever the named website' },
+  createVisitorSession: { kind: 'public', reason: 'Creates a new anonymous visitor, or resumes the one holding the token' },
+  updateVisitorProfile: { kind: 'visitor', body: { name: 'Taken over' }, ownerStatus: 204 },
+  listVisitorConversations: { kind: 'visitor', ownerStatus: 200 },
+  createVisitorConversation: { kind: 'visitor', body: { clientMessageId: 'isolation-2', content: 'New' }, ownerStatus: 201 },
+  listVisitorMessages: { kind: 'visitor', ownerStatus: 200 },
+  sendVisitorMessage: { kind: 'visitor', body: { clientMessageId: 'isolation-3', content: 'Taken over' }, ownerStatus: 201 },
+  markVisitorConversationRead: { kind: 'visitor', body: { deliveredSeq: 0, readSeq: 0 }, ownerStatus: 204 },
   listConversations: { kind: 'workspace', ownerStatus: 200 },
   getConversation: { kind: 'workspace', ownerStatus: 200 },
   updateConversation: { kind: 'workspace', body: { expectedVersion: 1, priority: 'urgent' }, ownerStatus: 200 },
@@ -145,7 +155,7 @@ const request = (method: string, path: string, token: string | null, body?: Reco
     createExecutionContext(),
   );
 
-const TABLES = ['workspaces', 'workspace_members', 'websites', 'invitations', 'audit_log', 'outbox', 'conversation_read_cursors', 'conversation_events', 'messages', 'conversations', 'contacts'];
+const TABLES = ['workspaces', 'workspace_members', 'websites', 'invitations', 'audit_log', 'outbox', 'conversation_read_cursors', 'conversation_events', 'messages', 'conversations', 'contacts', 'visitors'];
 
 /** Every row belonging to workspace A. A refused request must leave this exactly as it was. */
 async function snapshotOfA(): Promise<string> {
@@ -183,6 +193,82 @@ async function signIn(email: string) {
   return ((await response.json()) as { accessToken: string }).accessToken;
 }
 
+const bodyOf = (id: string) => (CASES[id] as Scoped | VisitorScoped).body;
+
+describe('between visitors', () => {
+  const visitorRoutes = contractRoutes.filter((r) => CASES[r.id]?.kind === 'visitor');
+  const SITE = 'https://site-a.example';
+
+  async function visitorToken(websiteId: string, origin: string) {
+    const site = await env.DB.prepare(`SELECT website_key AS k FROM websites WHERE id = ?1`).bind(websiteId).first<{ k: string }>();
+    const response = await worker.fetch(
+      new Request(`${ORIGIN}/api/v1/widget/sessions`, {
+        method: 'POST',
+        headers: { origin, 'content-type': 'application/json', 'cf-connecting-ip': `192.0.2.${++requests}` },
+        body: JSON.stringify({ websiteKey: site!.k }),
+      }),
+      testEnv,
+      createExecutionContext(),
+    );
+    expect(response.status).toBe(200);
+    return ((await response.json()) as { accessToken: string }).accessToken;
+  }
+
+  let owner = '';
+  let conversationId = '';
+  const paths = (path: string) => path.replace('{conversationId}', conversationId);
+
+  beforeAll(async () => {
+    passwordHash = await hashPassword(PASSWORD);
+  });
+
+  beforeEach(async () => {
+    await seed();
+    await env.DB.prepare(`UPDATE websites SET allowed_origins_json = json_array('https://site-' || substr(id, 6) || '.example')`).run();
+    owner = await visitorToken('site_a', SITE);
+    const created = await request('POST', '/api/v1/widget/conversations', owner, { clientMessageId: 'isolation-0', content: 'Mine' });
+    conversationId = ((await created.json()) as { id: string }).id;
+  });
+
+  it.each(visitorRoutes)('$id works for the visitor who owns it', async ({ method, path, id }) => {
+    const c = CASES[id] as VisitorScoped;
+    expect((await request(method, paths(path), owner, c.body)).status).toBe(c.ownerStatus);
+  });
+
+  it.each(visitorRoutes)('$id refuses an agent token', async ({ method, path, id }) => {
+    const agent = await signIn('owner-a@example.com');
+    const before = await snapshotOfA();
+    expect((await request(method, paths(path), agent, bodyOf(id))).status).toBe(401);
+    expect(await snapshotOfA()).toBe(before);
+  });
+
+  const conversationRoutes = visitorRoutes.filter((r) => r.path.includes('{conversationId}'));
+
+  it.each(conversationRoutes)('$id answers 404 to another visitor of the same website', async ({ method, path, id }) => {
+    const other = await visitorToken('site_a', SITE);
+    const before = await snapshotOfA();
+    expect((await request(method, paths(path), other, bodyOf(id))).status).toBe(404);
+    expect(await snapshotOfA()).toBe(before);
+  });
+
+  it.each(conversationRoutes)('$id answers 404 to a visitor of another workspace', async ({ method, path, id }) => {
+    const other = await visitorToken('site_b', 'https://site-b.example');
+    const before = await snapshotOfA();
+    expect((await request(method, paths(path), other, bodyOf(id))).status).toBe(404);
+    expect(await snapshotOfA()).toBe(before);
+  });
+
+  it('refuses a visitor token on every agent route', async () => {
+    const before = await snapshotOfA();
+    for (const { method, path, id } of contractRoutes.filter((r) => ['workspace', 'self'].includes(CASES[r.id]?.kind ?? ''))) {
+      const c = CASES[id];
+      const body = c?.kind === 'workspace' ? c.body : undefined;
+      expect([id, (await request(method, urlFor(path, RESOURCES.a), owner, body)).status]).toEqual([id, 401]);
+    }
+    expect(await snapshotOfA()).toBe(before);
+  });
+});
+
 describe('across tenants', () => {
   beforeAll(async () => {
     passwordHash = await hashPassword(PASSWORD);
@@ -194,11 +280,9 @@ describe('across tenants', () => {
     tokens.ownerB = await signIn('owner-b@example.com');
   });
 
-  const bodyOf = (id: string) => (CASES[id] as Scoped).body;
-
   it.each(contractRoutes.filter((r) => !r.isPublic))('$id refuses a request with no token', async ({ method, path, id }) => {
     const before = await snapshotOfA();
-    const response = await request(method, urlFor(path, RESOURCES.a), null, CASES[id]?.kind === 'workspace' ? bodyOf(id) : undefined);
+    const response = await request(method, urlFor(path, RESOURCES.a), null, CASES[id]?.kind === 'self' ? undefined : bodyOf(id));
     expect(response.status).toBe(401);
     expect(await snapshotOfA()).toBe(before);
   });

@@ -73,9 +73,11 @@ POST /api/v1/widget/sessions { websiteKey, refreshToken? } + Origin header
 | Control | Notes |
 |---|---|
 | Origin allowlist | A control against *other websites embedding the widget*. **Not authentication:** any script can forge the header. Do not rely on it for anything else. |
-| Token scope | Can touch only this visitor's conversations. Internal notes filtered by `visibility` in SQL. |
+| Token scope | Can touch only this visitor's conversations. Internal notes filtered by `visibility` in SQL, in a repository of its own that has no way to return them. The audience claim keeps visitor and agent tokens from working in each other's routes. |
+| Replays | A replayed `clientMessageId` returns a message only if this visitor sent it. An ID already used by anyone else answers 409, because returning that message could reveal an internal note. |
+| Agent names | Hidden from visitors unless the website sets `showAgentNames`. |
 | Storage | `localStorage` on the host site, subject to consent settings. An XSS bug on the host site can read it, but it only exposes that visitor's own chat. |
-| Abuse controls | Rate limit binding per visitor and per website for messages; session creation limits; quotas on attachments per visitor and per day; optional Turnstile on the first message. |
+| Abuse controls | Strict counters in the `AuthGuard` Durable Object: 20 messages a minute per visitor, 600 per website, and 30 new sessions an hour per IP address and 3,000 per website. The rate limit binding would be cheaper but is approximate; the load test decides whether to switch. Trade-off: a flood can use up a website's allowance and hold up its real visitors, though not other websites; quotas on attachments per visitor and per day; optional Turnstile on the first message. |
 | Identity upgrade | Email provided by a visitor is unverified, and never merges into an existing contact automatically. Otherwise anyone could type a customer's email and read their history. Merging is an agent action. **A returning visitor only sees history tied to their own visitor token.** |
 | Signed identity (later) | A host site can pass an HMAC of its user ID, signed server-side, to link identities safely. |
 
@@ -113,7 +115,7 @@ CI runs secret scanning. `.dev.vars.example` contains placeholders only, and `.d
 
 - Strict CSP on the dashboard, from `apps/dashboard/public/_headers`, with no third-party scripts or inline code.
 - The dashboard keeps its access token in memory. Refreshes are serialised by one promise per tab and a Web Lock across tabs, because a repeated refresh revokes the session. Tokens in emailed links are removed from the address bar on load.
-- CORS allowed only on `/api/v1/widget/*`, per website origin. The dashboard is same-origin and needs none.
+- CORS allowed only on `/api/v1/widget/*`. These routes use bearer tokens and no cookies, so the response headers reflect the caller, and each route refuses an origin its website does not allow. The dashboard is same-origin and needs none.
 - All input validated with Zod. Request bodies have explicit limits.
 - Message content is plain text, rendered escaped on every client. There is no HTML message type. Links are detected on display and get `rel="noopener noreferrer"`.
 - Email templates escape interpolated values.

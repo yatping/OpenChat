@@ -61,12 +61,8 @@ const isClaims = (value: Record<string, unknown>): value is Record<string, unkno
   Number.isSafeInteger(value.exp);
 
 /** The algorithm is fixed here and never taken from the token, which rules out algorithm confusion. */
-export async function verifyAccessToken(
-  token: string,
-  keys: VerificationKeys,
-  issuer: string,
-  now: number = Math.floor(Date.now() / 1000),
-): Promise<VerifyResult> {
+/** The signature and shape only. Each kind of token then decides whether the claims are its own. */
+async function verifySigned(token: string, keys: VerificationKeys): Promise<{ ok: true; claims: Record<string, unknown> } | { ok: false; reason: VerifyFailure }> {
   if (token.length > MAX_TOKEN_LENGTH) return { ok: false, reason: 'malformed' };
   const parts = token.split('.');
   if (parts.length !== 3) return { ok: false, reason: 'malformed' };
@@ -90,7 +86,21 @@ export async function verifyAccessToken(
   if (!valid) return { ok: false, reason: 'bad_signature' };
 
   const claims = decodeJson(claimsPart);
-  if (!claims || !isClaims(claims)) return { ok: false, reason: 'malformed' };
+  if (!claims) return { ok: false, reason: 'malformed' };
+  return { ok: true, claims };
+}
+
+export async function verifyAccessToken(
+  token: string,
+  keys: VerificationKeys,
+  issuer: string,
+  now: number = Math.floor(Date.now() / 1000),
+): Promise<VerifyResult> {
+  const signed = await verifySigned(token, keys);
+  if (!signed.ok) return signed;
+  const { claims } = signed;
+  // Any audience means a token for something else, such as a visitor.
+  if (claims.aud !== undefined || !isClaims(claims)) return { ok: false, reason: 'malformed' };
   if (claims.iss !== issuer) return { ok: false, reason: 'bad_issuer' };
   if (claims.exp + CLOCK_SKEW_SECONDS <= now) return { ok: false, reason: 'expired' };
   return { ok: true, claims: { sub: claims.sub, sid: claims.sid, iss: claims.iss, iat: claims.iat, exp: claims.exp } };
@@ -130,4 +140,45 @@ export async function importVerificationKeys(serialized: readonly Pick<Serialize
     serialized.map(async (k) => [k.kid, await crypto.subtle.importKey('raw', fromBase64Url(k.publicKey), ED25519, false, ['verify'])] as const),
   );
   return new Map(entries);
+}
+
+export const VISITOR_TOKEN_TTL_SECONDS = 60 * 60;
+
+export interface VisitorClaims {
+  aud: 'visitor';
+  sub: string;
+  wid: string;
+  site: string;
+  iss: string;
+  iat: number;
+  exp: number;
+}
+
+export async function signVisitorToken(
+  key: SigningKey,
+  input: { visitorId: string; workspaceId: string; websiteId: string; installationId: string },
+  now: number = Math.floor(Date.now() / 1000),
+): Promise<string> {
+  const claims: VisitorClaims = { aud: 'visitor', sub: input.visitorId, wid: input.workspaceId, site: input.websiteId, iss: input.installationId, iat: now, exp: now + VISITOR_TOKEN_TTL_SECONDS };
+  const body = `${encodeJson({ alg: 'EdDSA', typ: 'JWT', kid: key.kid })}.${encodeJson(claims)}`;
+  const signature = await crypto.subtle.sign(ED25519, key.privateKey, encoder.encode(body));
+  return `${body}.${toBase64Url(new Uint8Array(signature))}`;
+}
+
+/** Refuses anything without the visitor audience, so an agent's token can never act as a visitor. */
+export async function verifyVisitorToken(
+  token: string,
+  keys: VerificationKeys,
+  issuer: string,
+  now: number = Math.floor(Date.now() / 1000),
+): Promise<{ ok: true; claims: VisitorClaims } | { ok: false; reason: VerifyFailure }> {
+  const signed = await verifySigned(token, keys);
+  if (!signed.ok) return signed;
+  const c = signed.claims;
+  if (c.aud !== 'visitor' || typeof c.sub !== 'string' || typeof c.wid !== 'string' || typeof c.site !== 'string' || typeof c.iss !== 'string' || typeof c.iat !== 'number' || typeof c.exp !== 'number') {
+    return { ok: false, reason: 'malformed' };
+  }
+  if (c.iss !== issuer) return { ok: false, reason: 'bad_issuer' };
+  if (c.exp + CLOCK_SKEW_SECONDS <= now) return { ok: false, reason: 'expired' };
+  return { ok: true, claims: { aud: 'visitor', sub: c.sub, wid: c.wid, site: c.site, iss: c.iss, iat: c.iat, exp: c.exp } };
 }

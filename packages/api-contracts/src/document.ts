@@ -9,6 +9,14 @@ import {
   createWebsiteRoute,
   createWorkspaceRoute,
   deleteMeRoute,
+  createVisitorConversationRoute,
+  createVisitorSessionRoute,
+  listVisitorConversationsRoute,
+  listVisitorMessagesRoute,
+  markVisitorConversationReadRoute,
+  sendVisitorMessageRoute,
+  updateVisitorProfileRoute,
+  widgetBootstrapRoute,
   getConversationRoute,
   getDiscoveryRoute,
   getWorkspaceRoute,
@@ -33,6 +41,14 @@ import {
 
 /** Every route must be listed here so that it reaches the published document. */
 export const ALL_ROUTES = [
+  widgetBootstrapRoute,
+  createVisitorSessionRoute,
+  updateVisitorProfileRoute,
+  listVisitorConversationsRoute,
+  createVisitorConversationRoute,
+  listVisitorMessagesRoute,
+  sendVisitorMessageRoute,
+  markVisitorConversationReadRoute,
   listConversationsRoute,
   getConversationRoute,
   updateConversationRoute,
@@ -67,6 +83,7 @@ export function buildOpenApiDocument() {
   for (const route of ALL_ROUTES) app.openAPIRegistry.registerPath(route);
   // OpenAPI has no first-class WebSocket support, so frames are published as schemas from the same source.
   app.openAPIRegistry.registerComponent('securitySchemes', 'bearerAuth', { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' });
+  app.openAPIRegistry.registerComponent('securitySchemes', 'visitorAuth', { type: 'http', scheme: 'bearer', bearerFormat: 'JWT', description: 'A visitor token from POST /api/v1/widget/sessions.' });
   app.openAPIRegistry.register('Problem', ProblemSchema);
   app.openAPIRegistry.register('AgentServerFrame', AgentServerFrameSchema);
   app.openAPIRegistry.register('AgentClientFrame', AgentClientFrameSchema);
