@@ -3,5 +3,36 @@
   "version": "0.0.0",
   "private": true,
   "license": "Apache-2.0",
-  "description": "Placeholder. The Expo app is initialised in Milestone 2, after spike S7."
+  "description": "The OpenChat iOS app. One app, connected to any number of independent installations.",
+  "main": "expo-router/entry",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "start": "expo start --dev-client",
+    "prebuild": "expo prebuild --platform ios --no-install",
+    "ios": "expo run:ios"
+  },
+  "dependencies": {
+    "@openchat/api-client": "workspace:*",
+    "expo": "~58.0.23",
+    "expo-constants": "~58.0.15",
+    "expo-dev-client": "~58.0.18",
+    "expo-linking": "~58.0.16",
+    "expo-router": "~58.0.30",
+    "expo-secure-store": "~58.0.2",
+    "expo-splash-screen": "~58.0.13",
+    "expo-sqlite": "~58.0.15",
+    "expo-status-bar": "~58.0.4",
+    "react": "19.3.0",
+    "react-native": "0.88.1",
+    "react-native-safe-area-context": "~5.11.1",
+    "react-native-screens": "~4.30.1"
+  },
+  "devDependencies": {
+    "@openchat/tsconfig": "workspace:*",
+    "@types/node": "^26.6.6",
+    "@types/react": "~19.3.0",
+    "typescript": "~6.0.3",
+    "vitest": "^5.1.0"
+  }
 }

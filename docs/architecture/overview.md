@@ -81,6 +81,7 @@ If step 4 is lost to a crash, a cron sweep re-dispatches from the outbox. If the
 | Baseline plan and passwords | Workers Paid, scrypt | [0009](decisions/0009-paid-plan-and-password-hashing.md) |
 | Mobile identity | No global account | [0010](decisions/0010-no-global-mobile-account.md) |
 | Licensing | AGPL core with permissive client components | [0011](decisions/0011-license-boundaries.md) |
+| iOS builds | Local, with `expo prebuild` and fastlane. EAS is optional | [0012](decisions/0012-native-builds-without-eas.md) |
 
 ## Technology baseline
 
@@ -98,7 +99,7 @@ Versions were the latest published on 2026-11-03. The lockfile pins exact versio
 | Backend tests | Vitest with `@cloudflare/vitest-plugin` | vitest 5.1, plugin 1.5 |
 | Dashboard | React, Vite, Tailwind, TanStack Query | react-query 5.105 |
 | Widget | Preact, with a small vanilla loader | preact 11.1 |
-| Mobile | Expo, `expo-notifications`, EAS | SDK 58 |
+| Mobile | Expo, including Expo Router and `expo-notifications`, built with `expo prebuild` and fastlane ([ADR-0012](decisions/0012-native-builds-without-eas.md)) | SDK 58 |
 | E2E | Playwright | |
 | Metrics | Workers Analytics Engine, an addition to the spec's list | |
 

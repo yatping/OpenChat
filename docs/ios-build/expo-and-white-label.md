@@ -26,89 +26,32 @@ Tokens are only useful together with the matching Apple credentials, but they st
 
 ## Configuration file
 
-```typescript
-// apps/mobile/app.config.ts
-import type { ExpoConfig } from 'expo/config';
-import { loadVariant } from './config/load-variant';
+`apps/mobile/app.config.ts` reads `variants/<id>/variant.json`, chosen by `APP_VARIANT`, with `official` as the default. Its type is `AppVariant` in `apps/mobile/config/variant.ts`.
 
-const variant = loadVariant(process.env.APP_VARIANT ?? 'official');
-const profile = process.env.EAS_BUILD_PROFILE ?? 'development';
+**Nothing secret goes in a variant or in `extra`**: they are embedded in the app, and anyone can read them. Check with `pnpm exec expo config --type public`.
 
-export default (): ExpoConfig => ({
-  name: variant.appName,
-  slug: variant.slug,
-  scheme: variant.urlScheme,
-  icon: variant.assets.icon,
-  splash: { image: variant.assets.splash, backgroundColor: variant.branding.primaryColor },
-  ios: {
-    bundleIdentifier: variant.bundleIdentifier,
-    supportsTablet: true,
-    infoPlist: { UIBackgroundModes: [] },
-  },
-  plugins: [['expo-notifications', { enableRemoteNotifications: variant.push.enabled }], 'expo-secure-store'],
-  extra: {
-    variant: variant.id,
-    push: {
-      enabled: variant.push.enabled,
-      environment: profile === 'development' ? 'sandbox' : 'production',
-      allowedRelays: variant.push.allowedRelays,
-    },
-    lockedInstallationUrl: variant.lockedInstallationUrl ?? null,
-    branding: variant.branding,
-  },
-});
+A white-label customer adds a directory under `variants/`. The official variant holds only public values, because the APNs key exists only in the relay.
+
+## Building
+
+Builds use `expo prebuild`, then Xcode or fastlane ([ADR-0012](../architecture/decisions/0012-native-builds-without-eas.md)). The `ios/` directory is generated, and is not committed.
+
+```sh
+cd apps/mobile
+pnpm prebuild
+(cd ios && pod install)
+pnpm start
 ```
 
-**Nothing secret goes in `extra`**: it is embedded in the app and is readable by anyone. Check with `npx expo config --type public`.
-
-## Variant definition
-
-```typescript
-// apps/mobile/config/variant.ts. Replaces the spec's AppConfiguration.
-export interface AppVariant {
-  id: string;
-  appName: string;
-  slug: string;
-  urlScheme: string;
-  bundleIdentifier: string;
-  lockedInstallationUrl?: string;
-  push: {
-    enabled: boolean;
-    allowedRelays: { id: string; url: string }[];
-  };
-  branding: { primaryColor: string };
-  assets: { icon: string; splash: string };
-}
-```
-
-Variants live in `apps/mobile/variants/<id>/`. A customer adds a directory. The official variant holds only public values: there is no key material in it, since the APNs key exists only in the relay.
-
-## Build profiles
-
-```jsonc
-// apps/mobile/eas.json
-{
-  "cli": { "version": ">= 16.0.0", "appVersionSource": "remote" },
-  "build": {
-    "development": { "developmentClient": true, "distribution": "internal", "env": { "APP_VARIANT": "official" } },
-    "preview":     { "distribution": "internal", "env": { "APP_VARIANT": "official" } },
-    "production":  { "autoIncrement": true, "env": { "APP_VARIANT": "official" } },
-    "custom":      { "extends": "production", "env": { "APP_VARIANT": "custom" } }
-  }
-}
-```
-
-The `cli.version` floor is set in P0 from the version then current.
-
-| Profile | APNs environment | Distribution |
+| Build | APNs environment | Distribution |
 |---|---|---|
-| `development` | **sandbox** | Device, dev client |
-| `preview` | production | Ad hoc |
-| `production`, `custom` | production | **TestFlight uses production**, as does the App Store |
+| Development | **sandbox** | Device, with the development client |
+| Ad hoc | production | Registered devices |
+| App Store | production | **TestFlight uses production**, as does the App Store |
 
-Getting this wrong produces `BadDeviceToken` from APNs. The relay's metric on that reason exists to catch it. The app reports the environment explicitly, because the entitlement is set by the build, with the plugin writing development and release archives switching to production.
+Set `APP_PROFILE` to anything other than `development` for a release build. Getting this wrong produces `BadDeviceToken` from APNs, and the relay's metric on that reason exists to catch it. The app reports the environment explicitly, because the build sets the entitlement.
 
-Customers can also build without EAS, using `npx expo prebuild` and Xcode, as spec §13.2 requires.
+A customer can also use EAS to build a variant, but nothing in the app needs it.
 
 ## Push registration in the app
 
@@ -186,7 +129,7 @@ An extension could replace "New message" with real text by fetching on the devic
 3. Create an APNs key (`.p8`) and note the Key ID and Team ID.
 4. Add a variant with that bundle ID and the customer's relay URL.
 5. Deploy the relay and set credentials ([deployment](../operations/deployment.md#independent-relay-customers)).
-6. `eas build --profile custom`, or use Xcode.
+6. Build with `APP_VARIANT` set to that variant, using Xcode or fastlane.
 7. Distribute through TestFlight and the App Store.
 
 No managed relay credentials are used at any step, and core messaging works before step 5.

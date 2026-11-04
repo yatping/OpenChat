@@ -1,0 +1,10 @@
+{
+  "id": "official",
+  "appName": "OpenChat",
+  "slug": "openchat",
+  "urlScheme": "openchat",
+  "bundleIdentifier": "com.orangolabs.openchat",
+  "push": { "enabled": false, "allowedRelays": [] },
+  "branding": { "primaryColor": "#2563eb" },
+  "assets": { "icon": "assets/icon.png", "splash": "assets/splash.png" }
+}
