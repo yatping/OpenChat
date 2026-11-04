@@ -2,7 +2,7 @@
  * The tenant isolation harness. It reads every route from the contract and from the running app, so a new
  * route fails here until someone decides how it is isolated. See ADR-0004.
  */
-import { createExecutionContext } from 'cloudflare:test';
+import { createExecutionContext, waitOnExecutionContext } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
 import { ALL_ROUTES } from '@openchat/api-contracts/document';
 import { hashPassword } from '@openchat/auth';
@@ -55,6 +55,9 @@ const CASES: Record<string, Case> = {
   listVisitorMessages: { kind: 'visitor', ownerStatus: 200 },
   sendVisitorMessage: { kind: 'visitor', body: { clientMessageId: 'isolation-3', content: 'Taken over' }, ownerStatus: 201 },
   markVisitorConversationRead: { kind: 'visitor', body: { deliveredSeq: 0, readSeq: 0 }, ownerStatus: 204 },
+  connectRealtime: { kind: 'public', reason: 'Takes a signed ticket, which names exactly what it may reach. Covered in realtime.test.ts' },
+  createAgentTicket: { kind: 'workspace', ownerStatus: 201 },
+  createVisitorTicket: { kind: 'visitor', ownerStatus: 201 },
   listConversations: { kind: 'workspace', ownerStatus: 200 },
   getConversation: { kind: 'workspace', ownerStatus: 200 },
   updateConversation: { kind: 'workspace', body: { expectedVersion: 1, priority: 'urgent' }, ownerStatus: 200 },
@@ -139,8 +142,10 @@ function urlFor(path: string, ...sources: Record<string, string>[]): string {
 }
 
 let requests = 0;
-const request = (method: string, path: string, token: string | null, body?: Record<string, unknown>) =>
-  worker.fetch(
+/** Waits for dispatch after the response, which writes to the outbox and would otherwise disturb a later snapshot. */
+const request = async (method: string, path: string, token: string | null, body?: Record<string, unknown>) => {
+  const ctx = createExecutionContext();
+  const response = await worker.fetch(
     new Request(`${ORIGIN}${path}`, {
       method,
       headers: {
@@ -152,8 +157,11 @@ const request = (method: string, path: string, token: string | null, body?: Reco
       ...(body ? { body: JSON.stringify(body) } : {}),
     }),
     testEnv,
-    createExecutionContext(),
+    ctx,
   );
+  await waitOnExecutionContext(ctx);
+  return response;
+};
 
 const TABLES = ['workspaces', 'workspace_members', 'websites', 'invitations', 'audit_log', 'outbox', 'conversation_read_cursors', 'conversation_events', 'messages', 'conversations', 'contacts', 'visitors'];
 

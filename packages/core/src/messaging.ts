@@ -2,9 +2,10 @@
  * Conversations and messages, for agents. Visitor-facing code does not use this file: it has its own
  * repository, which cannot read internal notes. Write rules: docs/architecture/data-model.md.
  */
-import { canAssignConversation } from '@openchat/auth';
+import { canAssignConversation, signTicket, TICKET_TTL_SECONDS, verifyTicket, type TicketClaims } from '@openchat/auth';
 import { repositories, type ConversationChange, type ConversationRow, type ConversationStatus, type Database, type StoredMessage, type WorkspaceContext } from '@openchat/database';
 import { AppError, notFound, toIso } from '@openchat/shared';
+import type { AuthDeps } from './auth-flows';
 import { requireCapability } from './workspaces';
 
 const invalidCursor = () => new AppError(400, 'invalid_cursor', 'This cursor is not valid for these filters');
@@ -25,7 +26,7 @@ const toConversation = (row: ConversationRow) => ({
   updatedAt: toIso(row.updatedAt),
 });
 
-const toMessage = (row: StoredMessage) => ({
+export const toMessage = (row: StoredMessage) => ({
   id: row.id,
   conversationId: row.conversationId,
   seq: row.seq,
@@ -39,6 +40,10 @@ const toMessage = (row: StoredMessage) => ({
   createdAt: toIso(row.createdAt),
   metadata: {},
 });
+
+const SYNC = 'sync';
+/** Commits can land slightly out of time order, so catching up always looks a little further back. */
+const SYNC_OVERLAP_MS = 5000;
 
 interface InboxCursor {
   v: 1;
@@ -64,12 +69,22 @@ function decodeCursor(value: string, filters: string): InboxCursor {
 export async function listConversations(
   db: Database,
   ctx: WorkspaceContext,
-  input: { status: ConversationStatus; assignee?: string | undefined; cursor?: string | undefined; limit: number },
+  input: { status: ConversationStatus; assignee?: string | undefined; cursor?: string | undefined; updatedAfter?: string | undefined; limit: number },
 ) {
+  const repo = repositories(db, ctx).conversations;
+  const syncCursorAt = async () => encodeCursor({ v: 1, f: SYNC, at: (await repo.now()) - SYNC_OVERLAP_MS, id: '' });
+  if (input.updatedAfter) {
+    const after = decodeCursor(input.updatedAfter, SYNC);
+    const rows = await repo.listChangedSince({ updatedAt: after.at, id: after.id }, input.limit + 1);
+    const changed = rows.slice(0, input.limit);
+    const last = changed.at(-1);
+    const position = rows.length > input.limit && last ? encodeCursor({ v: 1, f: SYNC, at: last.updatedAt, id: last.id }) : null;
+    return { data: changed.map(toConversation), nextCursor: position, syncCursor: position ?? (await syncCursorAt()) };
+  }
   const assignee = input.assignee === undefined ? undefined : input.assignee === 'none' ? null : input.assignee === 'me' ? ctx.memberId : input.assignee;
   const filters = `${input.status}|${assignee === undefined ? '*' : (assignee ?? 'none')}`;
   const cursor = input.cursor ? decodeCursor(input.cursor, filters) : undefined;
-  const rows = await repositories(db, ctx).conversations.list({
+  const rows = await repo.list({
     status: input.status,
     assignee,
     before: cursor ? { lastMessageAt: cursor.at, id: cursor.id } : undefined,
@@ -80,6 +95,7 @@ export async function listConversations(
   return {
     data: page.map(toConversation),
     nextCursor: rows.length > input.limit && last?.lastMessageAt != null ? encodeCursor({ v: 1, f: filters, at: last.lastMessageAt, id: last.id }) : null,
+    syncCursor: await syncCursorAt(),
   };
 }
 
@@ -128,6 +144,29 @@ export async function sendMessage(db: Database, ctx: WorkspaceContext, conversat
   const result = await repositories(db, ctx).messages.send({ conversationId, clientMessageId: input.clientMessageId, sender: { type: 'member', id: ctx.memberId }, type: input.type, content: input.content });
   if (result.outcome === 'not_found') throw notFound();
   return { created: result.outcome === 'created', message: toMessage(result.message) };
+}
+
+const AGENT_SOCKET_MS = 15 * 60 * 1000;
+const VISITOR_SOCKET_MS = 60 * 60 * 1000;
+
+/** The first half of a connection. The member was just authorised, so the ticket proves it. */
+export async function createAgentTicket(deps: Pick<AuthDeps, 'signingKey' | 'installationId'>, ctx: WorkspaceContext, origin: string | undefined) {
+  return issueTicket(deps, { kind: 'agent', sub: ctx.memberId, wid: ctx.workspaceId, role: ctx.role, until: Date.now() + AGENT_SOCKET_MS, ...(origin ? { org: origin } : {}), iss: deps.installationId });
+}
+
+export async function issueTicket(deps: Pick<AuthDeps, 'signingKey'>, claims: Omit<TicketClaims, 'aud' | 'iat' | 'exp'>) {
+  const now = Math.floor(Date.now() / 1000);
+  return { ticket: await signTicket(deps.signingKey, claims, now), expiresAt: toIso((now + TICKET_TTL_SECONDS) * 1000) };
+}
+
+export const visitorSocketUntil = () => Date.now() + VISITOR_SOCKET_MS;
+
+/** The second half. A wrong page is refused here, because browsers send Origin on a WebSocket and any site can try. */
+export async function verifyConnection(deps: Pick<AuthDeps, 'verificationKeys' | 'installationId'>, ticket: string, origin: string | undefined): Promise<TicketClaims> {
+  const verified = await verifyTicket(ticket, deps.verificationKeys, deps.installationId);
+  if (!verified.ok) throw new AppError(401, 'invalid_ticket', 'Ask for a new ticket');
+  if (origin !== verified.claims.org) throw new AppError(403, 'bad_origin', 'This ticket was issued to another page');
+  return verified.claims;
 }
 
 export async function markConversationRead(db: Database, ctx: WorkspaceContext, conversationId: string, input: { deliveredSeq: number; readSeq: number }): Promise<void> {

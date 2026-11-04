@@ -16,6 +16,7 @@ import {
 } from '@openchat/database';
 import { AppError, notFound, toIso } from '@openchat/shared';
 import { enforce, limitKey, LIMITS, type AuthDeps } from './auth-flows';
+import { issueTicket, visitorSocketUntil } from './messaging';
 
 export type { VisitorContext };
 
@@ -96,8 +97,8 @@ export async function listVisitorConversations(deps: Pick<AuthDeps, 'db'>, ctx: 
 
 export async function createVisitorConversation(deps: Pick<AuthDeps, 'db' | 'limiter'>, ctx: VisitorContext, input: { clientMessageId: string; content: string }) {
   await limitMessage(deps, ctx);
-  const { created, conversation } = await visitorRepositories(deps.db, ctx).conversations.create(input);
-  return { created, conversation: toConversation(conversation) };
+  const { created, conversation, messageId } = await visitorRepositories(deps.db, ctx).conversations.create(input);
+  return { created, messageId, conversation: toConversation(conversation) };
 }
 
 export async function listVisitorMessages(deps: Pick<AuthDeps, 'db'>, ctx: VisitorContext, conversationId: string, input: { afterSeq?: number | undefined; beforeSeq?: number | undefined; limit: number }) {
@@ -117,4 +118,9 @@ export async function sendVisitorMessage(deps: Pick<AuthDeps, 'db' | 'limiter'>,
 
 export async function markVisitorConversationRead(deps: Pick<AuthDeps, 'db'>, ctx: VisitorContext, conversationId: string, input: { deliveredSeq: number; readSeq: number }) {
   if (!(await visitorRepositories(deps.db, ctx).messages.markRead(conversationId, input))) throw notFound();
+}
+
+export async function createVisitorTicket(deps: Pick<AuthDeps, 'db' | 'signingKey' | 'installationId'>, ctx: VisitorContext, conversationId: string, origin: string | undefined) {
+  if (!(await visitorRepositories(deps.db, ctx).conversations.get(conversationId))) throw notFound();
+  return issueTicket(deps, { kind: 'visitor', sub: ctx.visitorId, wid: ctx.workspaceId, conv: conversationId, until: visitorSocketUntil(), ...(origin ? { org: origin } : {}), iss: deps.installationId });
 }

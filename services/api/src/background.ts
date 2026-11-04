@@ -6,6 +6,7 @@ import { INVITATION_EMAIL_JOB, PASSWORD_RESET_JOB, sendInvitationEmail, sendPass
 import { claimJob, getInstallation, openDatabase, recordFailedJob } from '@openchat/database';
 import { CloudflareEmailProvider, ConsoleEmailProvider, EmailSendError, ResendEmailProvider, type EmailProvider } from '@openchat/email';
 import { AppError, createLogger, newId, retryDelaySeconds, type JobEnvelope } from '@openchat/shared';
+import { sweepOutbox } from './dispatch';
 import type { Env } from './env';
 
 export const HEARTBEAT_JOB = 'system.heartbeat';
@@ -32,8 +33,9 @@ export function heartbeatJob(scheduledTime: number): JobEnvelope<Record<string, 
 }
 
 export async function handleScheduled(controller: ScheduledController, env: Env): Promise<void> {
-  // Later: outbox and automation sweeps. Each is bounded, and overlapping runs are harmless.
+  // Each sweep is bounded, and overlapping runs are harmless. Automation arrives with follow-ups.
   await env.JOBS_QUEUE.send(heartbeatJob(controller.scheduledTime));
+  await sweepOutbox(env, controller.scheduledTime);
 }
 
 export interface BackgroundDeps {

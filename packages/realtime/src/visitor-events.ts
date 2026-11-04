@@ -26,7 +26,7 @@ export type DomainEvent =
  * until someone decides what visitors may see. Fields are copied one by one, never spread, so a new
  * field on an agent type cannot leak by default.
  */
-export function toVisitorEvent(event: DomainEvent): VisitorEvent | null {
+export function toVisitorEvent(event: DomainEvent, options: { showAgentNames?: boolean } = {}): VisitorEvent | null {
   switch (event.kind) {
     case 'message.created': {
       const { message } = event;
@@ -39,8 +39,8 @@ export function toVisitorEvent(event: DomainEvent): VisitorEvent | null {
             id: message.id,
             conversationId: message.conversationId,
             seq: message.publicSeq,
-            clientMessageId: message.clientMessageId,
-            sender: { type: message.sender.type, displayName: message.sender.displayName },
+            clientMessageId: message.sender.type === 'visitor' ? message.clientMessageId : null,
+            sender: { type: message.sender.type, displayName: message.sender.type === 'member' && !options.showAgentNames ? null : message.sender.displayName },
             type: message.type,
             content: message.content,
             attachments: message.attachments,
@@ -65,3 +65,7 @@ export function toVisitorEvent(event: DomainEvent): VisitorEvent | null {
     }
   }
 }
+
+/** Rooms are named under their workspace, so that an ID from another tenant reaches an empty room. */
+export const hubName = (workspaceId: string) => `workspace:${workspaceId}`;
+export const roomName = (workspaceId: string, conversationId: string) => `conversation:${workspaceId}:${conversationId}`;

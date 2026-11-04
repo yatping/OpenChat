@@ -27,6 +27,7 @@ import {
 } from '@openchat/core';
 import type { Context } from 'hono';
 import { authDeps, type App, type AppEnv } from '../context';
+import { dispatchSoon } from '../dispatch';
 import { requireAuth } from './auth';
 
 /** Deps plus proof of membership. Every route under a workspace ID starts here. */
@@ -63,13 +64,16 @@ export function registerWorkspaceRoutes(app: App) {
   app.openapi(updateMemberRoute, async (c) => {
     const { workspaceId, memberId } = c.req.valid('param');
     const { deps, ctx } = await scoped(c, workspaceId);
-    return c.json(await updateMember(deps.db, ctx, memberId, c.req.valid('json')), 200);
+    const member = await updateMember(deps.db, ctx, memberId, c.req.valid('json'));
+    dispatchSoon(c, workspaceId, [memberId]);
+    return c.json(member, 200);
   });
 
   app.openapi(removeMemberRoute, async (c) => {
     const { workspaceId, memberId } = c.req.valid('param');
     const { deps, ctx } = await scoped(c, workspaceId);
     await removeMember(deps.db, ctx, memberId);
+    dispatchSoon(c, workspaceId, [memberId]);
     return c.body(null, 204);
   });
 

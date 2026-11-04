@@ -101,7 +101,7 @@ Uploads stream through the Worker to R2 ([ADR-0008](decisions/0008-attachment-tr
 | Secret | Where | Rotation |
 |---|---|---|
 | `AUTH_SIGNING_KEY` (Ed25519) | Worker secret | Key ID in the JWT header; two active keys during rotation |
-| `TICKET_SIGNING_KEY` | Worker secret | Short TTL makes rotation simple |
+| Socket tickets | Signed with the access token key | One key to rotate. Tickets carry `aud: 'realtime'`, last 30 seconds, and neither kind of token is accepted as the other |
 | `RELAY_SIGNING_KEY` (Ed25519) | Worker secret | Key ID; relay accepts registered keys |
 | `DATA_ENCRYPTION_KEY` | Worker secret | `key_version` per row |
 | Workspace email credentials | D1, AES-GCM encrypted with the key above and bound to `workspace_id` as associated data | Re-encryption job |

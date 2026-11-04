@@ -23,6 +23,8 @@ D1 batch: domain write + outbox row       (atomic)
 
 Duplicates are possible at every arrow, and consumers must tolerate them. Sockets dedupe by message ID, and the relay and email layers by dedupe key.
 
+Until push arrives in M3, dispatch means publishing to Durable Objects only. The fast path finds rows by the ID of what was just written, so replaying a send also finishes a dispatch that died.
+
 ## Queues
 
 Three queues plus DLQs, not one per job type. Few queues keep self-hosted setup simple, and job types share retry behaviour within each group.

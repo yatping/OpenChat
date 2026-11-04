@@ -44,7 +44,7 @@ Agent clients (dashboard, foregrounded mobile)        Visitor clients (widget)
 
 ```text
 Client                     Worker                         Durable Object
-  | POST /realtime/tickets   |                                 |
+  | POST .../realtime/tickets|                                 |
   |  (normal auth)           | verify, check membership        |
   |<-- ticket (30 s TTL) ----|                                 |
   | GET /realtime/connect?ticket=... (Upgrade)                 |
@@ -56,6 +56,8 @@ Client                     Worker                         Durable Object
 ```
 
 - **Why a ticket.** Browsers cannot set headers on a WebSocket, and a long-lived token in a URL would end up in logs. A ticket lasts 30 seconds and grants only this connection. Request logging redacts the parameter.
+- **Which page.** A ticket records the `Origin` that asked for it, and the connection must carry the same one, or none for a client with no page. Tickets are signed with the same key as access tokens, under their own audience, so neither can stand in for the other.
+- **Room names** include the workspace, `conversation:<workspaceId>:<id>`, so an ID from another tenant reaches an empty room.
 - **Tags:** `member:<id>`, `role:<role>` for hubs, `visitor:<id>` for rooms. Maximum 10 per socket.
 - **Attachment:** `{ kind, principalId, role, expiresAt, connectedAt, protocolVersion }`. Well within the 16 KB limit. It survives hibernation.
 
@@ -109,9 +111,11 @@ The hub filters by audience before sending. Agents can currently see every conve
 
 ### Token expiry and revocation
 
-- **Expiry:** `expiresAt` in the attachment is checked on each inbound message and before each send. There is no alarm per socket. Clients send `auth.refresh` with a new ticket before expiry; otherwise the socket closes with 4401.
+- **Expiry:** `expiresAt` in the attachment is checked on each inbound message and before each send. There is no alarm per socket. Clients send `auth.refresh` with a new ticket before expiry (from the next M1b slice; until then they reconnect); otherwise the socket closes with 4401 at the next event. An expired socket never receives anything.
 - **Revocation:** a role change or removal writes an outbox row (`member.access_changed`), and the sweep guarantees that `hub.revokeMember(memberId)` runs. It closes `member:<id>` sockets with 4403, and clients reconnect with fresh permissions.
-- **A conversation deleted or visitor blocked:** same mechanism on the room.
+- **Account deletion** writes the same row inside the deletion, and relies on the sweep, so its sockets close within about two minutes.
+- **Signing out or changing a password** does not close sockets. They end at their expiry, at most 15 minutes for an agent.
+- **A conversation deleted or visitor blocked** will use the same mechanism on the room. Neither exists yet.
 
 ### Reconnection and catch-up
 

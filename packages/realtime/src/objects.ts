@@ -112,8 +112,19 @@ export class WorkspaceHub extends RealtimeObject {
 
   /** RPC. New event kinds must be additive, because an old object can receive them during a deploy. */
   async publish(event: DomainEvent): Promise<number> {
-    if (event.v !== 1 || event.kind !== 'message.created') return 0;
-    return this.broadcast(JSON.stringify({ v: 1, type: event.kind, data: { workspaceId: event.workspaceId, message: event.message } }));
+    if (event.v !== 1) return 0;
+    switch (event.kind) {
+      case 'message.created':
+        return this.broadcast(JSON.stringify({ v: 1, type: event.kind, data: { workspaceId: event.workspaceId, message: event.message } }));
+      case 'conversation.created':
+      case 'conversation.updated':
+        return this.broadcast(JSON.stringify({ v: 1, type: event.kind, data: { workspaceId: event.workspaceId, conversation: event.conversation } }));
+      case 'conversation.read':
+        return this.broadcast(JSON.stringify({ v: 1, type: event.kind, data: { conversationId: event.conversationId, reader: event.reader, deliveredSeq: event.deliveredSeq, readSeq: event.readSeq } }));
+      default:
+        // An old object may receive a kind it does not know yet.
+        return 0;
+    }
   }
 
   async revokeMember(memberId: string): Promise<number> {
@@ -138,8 +149,8 @@ export class ConversationRoom extends RealtimeObject {
   }
 
   /** The route from domain events to visitors. Everything goes through the allowlist mapper. */
-  async publishDomainEvent(event: DomainEvent): Promise<number> {
-    const visitorEvent = toVisitorEvent(event);
+  async publishDomainEvent(event: DomainEvent, options: { showAgentNames?: boolean } = {}): Promise<number> {
+    const visitorEvent = toVisitorEvent(event, options);
     return visitorEvent ? this.publish(visitorEvent) : 0;
   }
 
