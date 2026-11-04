@@ -28,6 +28,10 @@ pnpm dev           # runs everything below
 | Widget test page | `http://localhost:5174` | A plain host page on a *different origin*, so that CORS and Origin checks run for real |
 | Relay *(M3)* | Same Wrangler session | Started with the installation by `wrangler dev -c ... -c ...`, so that the service binding works |
 
+## Browser tests
+
+`pnpm test:e2e` builds the dashboard and drives it in Chromium against a local Worker on port 8799, with its own state in `services/api/.wrangler/e2e` and a throwaway key, so it does not touch `pnpm dev`. Install the browser once with `pnpm --filter @openchat/e2e exec playwright install chromium`. Until the widget exists, tests play the visitor through its API.
+
 ## What runs locally
 
 | Capability | Local | Fidelity |

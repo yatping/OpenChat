@@ -97,7 +97,15 @@ export const AgentServerFrameSchema = z
     SyncRequiredFrame,
     AuthExpiringFrame,
     ErrorFrame,
-    frame('message.created', z.object({ workspaceId: z.string(), message: WireMessageSchema })),
+    frame(
+      'message.created',
+      z.object({
+        workspaceId: z.string(),
+        message: WireMessageSchema,
+        /** Every message moves the conversation's version, and a client needs it to change the conversation. */
+        conversationVersion: z.number().int().optional(),
+      }),
+    ),
     frame('conversation.created', z.object({ workspaceId: z.string(), conversation: ConversationPatchSchema })),
     frame('conversation.updated', z.object({ workspaceId: z.string(), conversation: ConversationPatchSchema })),
     frame('conversation.read', z.object({ conversationId: z.string(), reader: Reader, deliveredSeq: z.number().int(), readSeq: z.number().int() })),

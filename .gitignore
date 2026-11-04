@@ -21,3 +21,5 @@ apps/mobile/ios/
 apps/mobile/.expo/
 spikes/**/.probe-token
 spikes/**/*.deployed.jsonc
+test-results/
+playwright-report/

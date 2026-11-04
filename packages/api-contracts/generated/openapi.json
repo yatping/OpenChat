@@ -390,6 +390,9 @@
                       "createdAt",
                       "metadata"
                     ]
+                  },
+                  "conversationVersion": {
+                    "type": "integer"
                   }
                 },
                 "required": [

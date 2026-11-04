@@ -4,15 +4,21 @@
  * only, which keeps Zod out of client bundles.
  */
 import type {
+  createAgentTicketRoute,
   createInvitationRoute,
   createWebsiteRoute,
   createWorkspaceRoute,
   getDiscoveryRoute,
   getHealthRoute,
+  getConversationRoute,
   getMeRoute,
+  listConversationsRoute,
   listMembersRoute,
+  listMessagesRoute,
   listWebsitesRoute,
   loginRoute,
+  sendMessageRoute,
+  updateConversationRoute,
   updateMemberRoute,
   updateWebsiteRoute,
   updateWorkspaceRoute,
@@ -39,6 +45,12 @@ export type InvitationInput = BodyOf<typeof createInvitationRoute>;
 export type Invitation = Json201<typeof createInvitationRoute>;
 export type LoginInput = BodyOf<typeof loginRoute>;
 export type CreatedWorkspace = Json201<typeof createWorkspaceRoute>;
+export type Conversation = Json200<typeof getConversationRoute>;
+export type ConversationPage = Json200<typeof listConversationsRoute>;
+export type ConversationUpdate = BodyOf<typeof updateConversationRoute>;
+export type Message = Json200<typeof listMessagesRoute>['data'][number];
+export type MessageInput = BodyOf<typeof sendMessageRoute>;
+export type RealtimeTicket = Json201<typeof createAgentTicketRoute>;
 
 export class ApiError extends Error {
   readonly status: number;
@@ -90,6 +102,12 @@ export function createClient(options: ClientOptions) {
 
   const get = <T>(path: string) => request<T>('GET', path);
   const workspace = (id: string) => `/api/v1/workspaces/${encodeURIComponent(id)}`;
+  const conversation = (workspaceId: string, id: string) => `${workspace(workspaceId)}/conversations/${encodeURIComponent(id)}`;
+  const query = (values: Record<string, string | number | undefined>) => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(values)) if (value !== undefined) params.set(key, String(value));
+    return params.size > 0 ? `?${params}` : '';
+  };
 
   return {
     getHealth: () => get<HealthResponse>('/health'),
@@ -112,6 +130,16 @@ export function createClient(options: ClientOptions) {
     createWebsite: (workspaceId: string, input: WebsiteInput) => request<Website>('POST', `${workspace(workspaceId)}/websites`, input),
     updateWebsite: (workspaceId: string, websiteId: string, input: WebsiteUpdate) =>
       request<Website>('PATCH', `${workspace(workspaceId)}/websites/${encodeURIComponent(websiteId)}`, input),
+
+    listConversations: (workspaceId: string, input: { status: Conversation['status']; assignee?: string | undefined; cursor?: string | undefined }) =>
+      get<ConversationPage>(`${workspace(workspaceId)}/conversations${query({ ...input, limit: 50 })}`),
+    getConversation: (workspaceId: string, id: string) => get<Conversation>(conversation(workspaceId, id)),
+    updateConversation: (workspaceId: string, id: string, input: ConversationUpdate) => request<Conversation>('PATCH', conversation(workspaceId, id), input),
+    listMessages: (workspaceId: string, id: string, input: { afterSeq?: number | undefined; beforeSeq?: number | undefined } = {}) =>
+      get<{ data: Message[] }>(`${conversation(workspaceId, id)}/messages${query({ ...input, limit: 50 })}`),
+    sendMessage: (workspaceId: string, id: string, input: MessageInput) => request<Message>('POST', `${conversation(workspaceId, id)}/messages`, input),
+    markConversationRead: (workspaceId: string, id: string, seq: number) => request<void>('POST', `${conversation(workspaceId, id)}/read`, { deliveredSeq: seq, readSeq: seq }),
+    createRealtimeTicket: (workspaceId: string) => request<RealtimeTicket>('POST', `${workspace(workspaceId)}/realtime/tickets`),
   };
 }
 

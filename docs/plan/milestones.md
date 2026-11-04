@@ -61,7 +61,7 @@ Built and verified on real Cloudflare on 2026-11-04, except for the items below,
 | Isolation test enumerates all routes | Done, and shown to fail for a route with no case |
 | Refresh reuse revokes the session | Done on a real deployment |
 
-Also open: automated browser tests (`pnpm test:e2e`), since the dashboard flows were run by hand, and the owner decisions in [the review](../architecture/security-review-m1a.md#decisions-for-the-owner).
+Also open: browser tests for the account flows (`pnpm test:e2e` covers only the inbox so far), since those were run by hand, and the owner decisions in [the review](../architecture/security-review-m1a.md#decisions-for-the-owner).
 
 ## M1b: Core messaging (XL)
 
@@ -92,7 +92,8 @@ In progress, one PR per slice. Done so far:
 | Visitor sessions and the widget API | Merged. Tested in workerd and on real D1, including notes and isolation between visitors. Turnstile and attachments are not in yet |
 | Sockets, tickets, outbox dispatch, and the sweep | Merged. Verified on real Cloudflare from a Node client, [with these results](../architecture/cloudflare-validation.md#m1b-sockets-on-real-cloudflare-2026-11-04). Not yet from a browser |
 | Typing, presence, availability, `auth.refresh`, frame limits, stale sockets | Merged, and verified on real Cloudflare from a Node client, except the stale socket alarm, which is tested in workerd only. Metrics from the objects are not written yet |
-| Inbox UI, widget UI, attachments, load test | Not started |
+| Inbox UI | In review. Conversation list, thread, replies, notes, status, priority, assignment, typing, presence, and reconnection, all covered by browser tests against a local Worker. Tags and contact details are not started, so a conversation shows only a short visitor ID |
+| Widget UI, attachments, load test | Not started |
 
 ## M2: iOS app without push (L)
 

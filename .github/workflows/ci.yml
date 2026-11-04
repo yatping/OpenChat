@@ -21,6 +21,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify
+      - name: Install a browser
+        run: pnpm --filter @openchat/e2e exec playwright install --with-deps chromium
+      - name: Browser tests
+        run: pnpm test:e2e
       - name: Fail if generated files changed
         run: git diff --exit-code
       - name: Audit production dependencies

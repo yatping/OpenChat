@@ -126,8 +126,11 @@ On every (re)connect:
   1. Receive hello.
   2. Open conversations: GET messages?afterSeq=<highest seq seen>
   3. Inbox: GET conversations?updatedAfter=<cursor>   (cursor from the previous response, 5 s overlap)
+     The dashboard currently reads its loaded list again instead, which costs a little more and converges the same way.
   4. Merge by ID. Duplicates are harmless.
 During a session:
+  - message.created carries conversationVersion for agents, because every message moves the version, and an
+    agent's next change would otherwise be refused as stale.
   - message.created with seq > lastSeq + 1 means a gap: fetch it.
     (Visitors receive public_seq as seq, so the same logic holds for them.)
   - Events are applied by ID and version, so out-of-order delivery converges.

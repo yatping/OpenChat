@@ -2,6 +2,7 @@ import type { Me, Member, Website } from '@openchat/api-client';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api, errorMessage, preference, queryClient, session } from '../app-context';
+import { InboxPanel } from '../inbox/inbox-panel';
 
 type Membership = Me['memberships'][number];
 type Role = Member['role'];
@@ -109,6 +110,12 @@ function WebsitesPanel({ membership }: { membership: Membership }) {
       )}
     </section>
   );
+}
+
+/** The list of members changes rarely, and the inbox needs names and assignees. */
+function InboxWithMembers({ membership }: { membership: Membership }) {
+  const members = useQuery({ queryKey: ['members', membership.workspace.id], queryFn: () => api.listMembers(membership.workspace.id) });
+  return <InboxPanel membership={membership} members={members.data?.data ?? []} />;
 }
 
 const ROLE_OPTIONS: Role[] = ['owner', 'admin', 'supervisor', 'agent'];
@@ -219,7 +226,7 @@ const WORKSPACE_PREFERENCE = 'openchat.workspace';
 export function WorkspaceApp() {
   const me = useQuery({ queryKey: ['me'], queryFn: api.getMe });
   const [selectedId, setSelectedId] = useState(() => preference.get(WORKSPACE_PREFERENCE));
-  const [tab, setTab] = useState<'websites' | 'members'>('websites');
+  const [tab, setTab] = useState<'inbox' | 'websites' | 'members'>('inbox');
 
   const memberships = me.data?.memberships ?? [];
   // A remembered workspace may be gone, or belong to someone else who used this browser.
@@ -230,7 +237,7 @@ export function WorkspaceApp() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 px-4 py-6">
+    <div className={`mx-auto space-y-6 px-4 py-6 ${tab === 'inbox' ? 'max-w-6xl' : 'max-w-3xl'}`}>
       <header className="flex flex-wrap items-center gap-3">
         <h1 className="flex-1 text-lg font-semibold">OpenChat</h1>
         {memberships.length > 0 && current && (
@@ -247,13 +254,13 @@ export function WorkspaceApp() {
         // The key gives each workspace fresh component state, so nothing typed in one appears in another.
         <div key={current.workspace.id} className="space-y-6">
           <nav className="flex gap-2" aria-label="Sections">
-            {(['websites', 'members'] as const).map((name) => (
+            {(['inbox', 'websites', 'members'] as const).map((name) => (
               <button key={name} className={tab === name ? 'button capitalize' : 'button-quiet capitalize'} aria-current={tab === name ? 'page' : undefined} onClick={() => setTab(name)}>
                 {name}
               </button>
             ))}
           </nav>
-          {tab === 'websites' ? <WebsitesPanel membership={current} /> : <MembersPanel membership={current} />}
+          {tab === 'inbox' ? <InboxWithMembers membership={current} /> : tab === 'websites' ? <WebsitesPanel membership={current} /> : <MembersPanel membership={current} />}
           {memberships.some((m) => m.role === 'owner') && <NewWorkspace onCreated={select} />}
         </div>
       )}
