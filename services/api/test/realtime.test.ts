@@ -68,9 +68,10 @@ async function connect(ticketUrl: string, origin?: string) {
     socket,
     frames,
     state,
-    next: async (type: string) => {
-      await until(() => frames.some((f) => f.type === type), type);
-      return frames.splice(frames.findIndex((f) => f.type === type), 1)[0]!;
+    next: async (type: string, about?: (data: Record<string, unknown>) => boolean) => {
+      const matches = (f: Frame) => f.type === type && (!about || about(f.data));
+      await until(() => frames.some(matches), type);
+      return frames.splice(frames.findIndex(matches), 1)[0]!;
     },
     closed: async () => {
       await until(() => state.closed !== null, 'close');
@@ -119,7 +120,7 @@ beforeEach(async () => {
   conversationId = (await json<{ id: string }>(await call('POST', '/api/v1/widget/conversations', { token: visitor, origin: SITE, body: { clientMessageId: 'first-message', content: 'Hello' } }))).id;
 });
 
-afterEach(() => {
+afterEach(async () => {
   for (const socket of open.splice(0)) {
     try {
       socket.close(1000);
@@ -127,6 +128,8 @@ afterEach(() => {
       // Already closed.
     }
   }
+  // Each test reuses the same hub, which would otherwise hear about these closing during the next one.
+  await new Promise((resolve) => setTimeout(resolve, 100));
 });
 
 describe('tickets', () => {
@@ -440,15 +443,19 @@ describe('frames from clients', () => {
 });
 
 describe('presence', () => {
+  // A room left by an earlier test can fire its alarm during this one, so look only at this conversation.
+  const mine = (data: Record<string, unknown>) => data.conversationId === conversationId;
+  const visitorFrames = (s: { frames: Frame[] }) => s.frames.filter((f) => f.type === 'presence.visitor' && mine(f.data));
+
   it('tells agents who else is here, and when a member goes', async () => {
     const a = await agentSocket();
     const { accessToken } = await json<{ accessToken: string }>(await call('POST', '/api/v1/auth/login', { body: { email: 'peer@example.com', password: PASSWORD, clientType: 'mobile' } }));
     const ticket = await json<{ url: string }>(await call('POST', `${W}/realtime/tickets`, { token: accessToken }));
     const peer = await connect(ticket.url);
-    expect((await a.next('presence.member')).data).toEqual({ memberId: 'mem_c', online: true });
-    expect((await peer.next('presence.member')).data).toEqual({ memberId: 'mem_a', online: true });
+    expect((await a.next('presence.member', (d) => d.memberId === 'mem_c')).data).toEqual({ memberId: 'mem_c', online: true });
+    expect((await peer.next('presence.member', (d) => d.memberId === 'mem_a')).data).toEqual({ memberId: 'mem_a', online: true });
     peer.socket.close(1000);
-    expect((await a.next('presence.member')).data).toEqual({ memberId: 'mem_c', online: false });
+    expect((await a.next('presence.member', (d) => d.memberId === 'mem_c')).data).toEqual({ memberId: 'mem_c', online: false });
   });
 
   it('stays online while a second tab is open', async () => {
@@ -456,40 +463,40 @@ describe('presence', () => {
     const { accessToken } = await json<{ accessToken: string }>(await call('POST', '/api/v1/auth/login', { body: { email: 'peer@example.com', password: PASSWORD, clientType: 'mobile' } }));
     const open = async () => connect((await json<{ url: string }>(await call('POST', `${W}/realtime/tickets`, { token: accessToken }))).url);
     const first = await open();
-    await a.next('presence.member');
+    await a.next('presence.member', (d) => d.memberId === 'mem_c' && d.online === true);
     await open();
     first.socket.close(1000);
     await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(a.frames.filter((f) => f.type === 'presence.member')).toEqual([]);
+    expect(a.frames.filter((f) => f.type === 'presence.member' && f.data.memberId === 'mem_c')).toEqual([]);
   });
 
   it('tells agents about a visitor once, and leaves going to the alarm', async () => {
     const a = await agentSocket();
     const v = await visitorSocket();
-    expect((await a.next('presence.visitor')).data).toEqual({ conversationId, online: true });
+    expect((await a.next('presence.visitor', mine)).data).toEqual({ conversationId, online: true });
     const second = await visitorSocket();
     await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(a.frames.filter((f) => f.type === 'presence.visitor')).toEqual([]);
+    expect(visitorFrames(a)).toEqual([]);
     second.socket.close(1000);
     v.socket.close(1000);
     await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(a.frames.filter((f) => f.type === 'presence.visitor')).toEqual([]);
+    expect(visitorFrames(a)).toEqual([]);
     const room = testEnv.CONVERSATION_ROOM.getByName(`conversation:work_1:${conversationId}`);
     expect(await runDurableObjectAlarm(room)).toBe(true);
-    expect((await a.next('presence.visitor')).data).toEqual({ conversationId, online: false });
+    expect((await a.next('presence.visitor', mine)).data).toEqual({ conversationId, online: false });
   });
 
   it('a visitor who comes straight back was never away', async () => {
     const a = await agentSocket();
     const v = await visitorSocket();
-    await a.next('presence.visitor');
+    await a.next('presence.visitor', mine);
     v.socket.close(1000);
     await new Promise((resolve) => setTimeout(resolve, 100));
     await visitorSocket();
     const room = testEnv.CONVERSATION_ROOM.getByName(`conversation:work_1:${conversationId}`);
     await runDurableObjectAlarm(room);
     await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(a.frames.filter((f) => f.type === 'presence.visitor')).toEqual([]);
+    expect(visitorFrames(a)).toEqual([]);
   });
 });
 
