@@ -188,7 +188,10 @@ describe('live delivery', () => {
   it('reaches an agent, including notes, and a visitor, without them', async () => {
     const [a, v] = [await agentSocket(), await visitorSocket()];
     expect((await visitorSend('from-visitor')).status).toBe(201);
-    expect((await a.next('message.created')).data).toMatchObject({ workspaceId: 'work_1', message: { content: 'Visitor words', seq: 2, sender: { type: 'visitor' } } });
+    const received = await a.next('message.created');
+    expect(received.data).toMatchObject({ workspaceId: 'work_1', message: { content: 'Visitor words', seq: 2, sender: { type: 'visitor' } } });
+    // So that the agent's next change to the conversation is not refused as stale.
+    expect(received.data.conversationVersion).toBe((await json<{ version: number }>(await call('GET', `${W}/conversations/${conversationId}`, { token: agent }))).version);
     expect((await v.next('message.created')).data).toMatchObject({ message: { content: 'Visitor words', seq: 2 } });
 
     expect((await agentSend('from-agent-note', 'internal_note', 'SECRET')).status).toBe(201);

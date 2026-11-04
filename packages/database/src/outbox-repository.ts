@@ -51,16 +51,16 @@ export async function recordOutboxFailure(database: Database, id: string): Promi
   await rawHandle(database).prepare(`UPDATE outbox SET attempts = attempts + 1 WHERE id = ?1`).bind(id).run();
 }
 
-export async function messageForDispatch(database: Database, workspaceId: string, messageId: string): Promise<(StoredMessage & { showAgentNames: boolean }) | null> {
+export async function messageForDispatch(database: Database, workspaceId: string, messageId: string): Promise<(StoredMessage & { showAgentNames: boolean; conversationVersion: number | null }) | null> {
   const d1 = rawHandle(database);
   const message = await d1.prepare(`${MESSAGE_SELECT} WHERE m.workspace_id = ?1 AND m.id = ?2`).bind(workspaceId, messageId).first<StoredMessage>();
   if (!message) return null;
   const site = await d1
-    .prepare(`SELECT s.settings_json AS settings FROM conversations c JOIN websites s ON s.workspace_id = c.workspace_id AND s.id = c.website_id WHERE c.workspace_id = ?1 AND c.id = ?2`)
+    .prepare(`SELECT s.settings_json AS settings, c.version FROM conversations c JOIN websites s ON s.workspace_id = c.workspace_id AND s.id = c.website_id WHERE c.workspace_id = ?1 AND c.id = ?2`)
     .bind(workspaceId, message.conversationId)
-    .first<{ settings: string | null }>();
+    .first<{ settings: string | null; version: number }>();
   const settings = site?.settings ? (JSON.parse(site.settings) as { showAgentNames?: boolean }) : {};
-  return { ...message, showAgentNames: settings.showAgentNames === true };
+  return { ...message, showAgentNames: settings.showAgentNames === true, conversationVersion: site?.version ?? null };
 }
 
 export function conversationForDispatch(database: Database, workspaceId: string, conversationId: string) {

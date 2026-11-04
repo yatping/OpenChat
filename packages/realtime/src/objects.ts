@@ -284,7 +284,7 @@ export class WorkspaceHub extends RealtimeObject {
     if (event.v !== 1) return 0;
     switch (event.kind) {
       case 'message.created':
-        return this.broadcast(stringify(event.kind, { workspaceId: event.workspaceId, message: event.message }));
+        return this.broadcast(stringify(event.kind, { workspaceId: event.workspaceId, message: event.message, ...(event.conversationVersion === undefined ? {} : { conversationVersion: event.conversationVersion }) }));
       case 'conversation.created':
       case 'conversation.updated':
         return this.broadcast(stringify(event.kind, { workspaceId: event.workspaceId, conversation: event.conversation }));

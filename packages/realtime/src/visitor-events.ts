@@ -2,7 +2,7 @@ import type { ConversationPatch, VisitorEvent, WireMessage } from '@openchat/api
 
 /** Domain events the Worker publishes after commit. Additive only: old objects may receive new kinds. */
 export type DomainEvent =
-  | { v: 1; kind: 'message.created'; workspaceId: string; message: WireMessage }
+  | { v: 1; kind: 'message.created'; workspaceId: string; message: WireMessage; conversationVersion?: number }
   | { v: 1; kind: 'conversation.created'; workspaceId: string; conversation: ConversationPatch }
   | { v: 1; kind: 'conversation.updated'; workspaceId: string; conversation: ConversationPatch }
   | {

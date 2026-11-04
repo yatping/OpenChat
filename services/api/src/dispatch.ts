@@ -54,7 +54,13 @@ async function dispatchRow(env: Env, db: Database, row: OutboxRow): Promise<void
       const message = await messageForDispatch(db, row.workspaceId, row.aggregateId);
       // Gone since, such as by erasure. Nothing is left to announce.
       if (!message) return;
-      const event: DomainEvent = { v: 1, kind: 'message.created', workspaceId: row.workspaceId, message: toMessage(message) };
+      const event: DomainEvent = {
+        v: 1,
+        kind: 'message.created',
+        workspaceId: row.workspaceId,
+        message: toMessage(message),
+        ...(message.conversationVersion === null ? {} : { conversationVersion: message.conversationVersion }),
+      };
       const room = env.CONVERSATION_ROOM.getByName(roomName(row.workspaceId, message.conversationId));
       await Promise.all([hub.publish(event), room.publishDomainEvent(event, { showAgentNames: message.showAgentNames })]);
       return;
