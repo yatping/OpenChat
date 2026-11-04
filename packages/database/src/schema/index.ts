@@ -667,6 +667,8 @@ export const outbox = sqliteTable(
   },
   (t) => [
     index('outbox_pending_idx').on(t.createdAt).where(sql`${t.dispatchedAt} IS NULL`),
+    // For finishing one send. The index above would scan the whole backlog, just when there is a backlog.
+    index('outbox_pending_aggregate_idx').on(t.workspaceId, t.aggregateId).where(sql`${t.dispatchedAt} IS NULL`),
     index('outbox_purge_idx').on(t.dispatchedAt).where(sql`${t.dispatchedAt} IS NOT NULL`),
   ],
 );

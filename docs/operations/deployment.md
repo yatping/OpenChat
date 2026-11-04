@@ -35,6 +35,10 @@ A brand-new account has not been tried yet, so this list comes from Cloudflare's
 | Secrets | `AUTH_SIGNING_KEY`, `TICKET_SIGNING_KEY`, `RELAY_SIGNING_KEY`, `DATA_ENCRYPTION_KEY`, `RESEND_API_KEY`, `TURNSTILE_SECRET_KEY`, with the public `TURNSTILE_SITE_KEY` set the same way |
 | Email binding | `EMAIL`, only with `--cloudflare-email`, and able to send only from `--email-from` |
 
+The API Worker uses Smart Placement, which moves it near D1 when that is clearly faster. It needs traffic from several locations to decide, and it can take 15 minutes after a deploy. Create the database near your users with `--location`, because a Worker can move and the D1 primary cannot.
+
+To load test a throwaway deployment, see the header of `tooling/scripts/load-test.mjs`. It writes junk data, so never point it at real data. One database takes [about 45 messages a second](../architecture/cloudflare-validation.md#m1b-load-test-on-real-d1-2026-11-04).
+
 ## Configuration model
 
 Wrangler can write generated IDs back into its config file, which would dirty a checked-out repository and make upgrades awkward. So:

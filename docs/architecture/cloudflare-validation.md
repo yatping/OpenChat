@@ -293,6 +293,73 @@ Run with Cloudflare's published test keys, the real `api.js` in headless Chromiu
 - The forced-interactive key shows the checkbox in the panel, seen by screenshot. Nobody clicked it.
 - **Not tested:** a real site key on a real hostname, and any browser but Chromium. The test secret accepts any token, so replay refusal was only tested against a stubbed service.
 
+### M1b load test on real D1, 2026-11-04
+
+Run with `tooling/scripts/load-test.mjs` against a throwaway deployment, since removed, from one laptop whose traffic mostly entered Cloudflare at LAX, with D1 in APAC (Singapore). Absolute latencies include that long path, so read them as this client's, not as typical.
+
+**Sends: about 45 messages a second is the ceiling for one database.** Agent sends over REST, 25 s per level, across 20 conversations, with Smart Placement. One conversation gave the same ceiling in the earlier default-placement run.
+
+| Concurrent senders | Messages/s | p50 ms | p95 ms | Refused with 503, then retried | Gave up, gaps, duplicates |
+|---|---|---|---|---|---|
+| 1 | 1.6 | 524 | 1,280 | 0 | 0 |
+| 5 | 11.8 | 489 | 727 | 0 | 0 |
+| 10 | 22.8 | 502 | 713 | 0 | 0 |
+| 25 | 45.1 | 543 | 973 | 16 | 0 |
+| 50 | 47.0 | 788 | 3,466 | 146 | 0 |
+| 100 | 46.4 | 1,194 | 5,249 | 422 | 0 |
+
+Above the ceiling D1 answers `D1 DB is overloaded. Too many resources consumed within a 10 second window`, a wording this document had not recorded. Latency here includes retries with the same `clientMessageId`, as real clients do. **Every send ended stored exactly once**, and sequences stayed gapless. Rows that were pending straight after a run had drained to none a few minutes later, checked after the earlier runs and not after the last one.
+
+Two defects found and fixed in this slice:
+
+- **Overload returned 500**, where the API conventions promise 503 with `Retry-After`. Some of those sends had committed, so a client seeing 500 could not tell. It is now 503, and a retry gets the original as a replay.
+- **`pendingOutboxFor` read about 1,448 rows per call**, because its only index scanned the backlog, so dispatch got slower exactly when behind. There is now a partial index for it, confirmed by query plan in workerd. Its effect on real rows read was not measured, because the last insights call failed, and it did not move the ceiling. **What limits D1 at 45 a second is not known.** Query times total only a few milliseconds per message, so this looks like a limit on the database rather than the time spent in queries.
+
+**Placement.** One write and one list, n=30, p50:
+
+| Placement | Send | List | Notes |
+|---|---|---|---|
+| Default | 982 ms | 831 ms | Worker ran at the client's entry point, MRS in this run. LAX and others in other runs |
+| `region: aws:ap-southeast-1` | 521 ms | 504 ms | `cf-placement: remote-SIN` |
+| Smart | 500 to 630 ms | 516 to 611 ms | Six of eight rounds, `remote-SIN`. A list that entered at SIN directly took 186 ms. One later round was slower, at 609 and 1,127 ms, unexplained |
+
+Smart Placement matched the explicit region and needs no configuration, so it is now the default. **It may not have had to work this out alone:** this deployment was on the explicit region just before, and it showed `remote-SIN` within about three minutes, sooner than the documented analysis, so a brand-new deployment is unproven. The documentation says it needs traffic from several locations, and otherwise a Worker stays where it is, which is the default row above. It applies to fetch handlers only.
+
+**1,000 agent sockets on one `WorkspaceHub`**, the worst case, since every agent socket fans out through one object.
+
+| Check | Result |
+|---|---|
+| Open 1,000, 40 at a time | 998 open after 80 s |
+| One message to all | 998 of 998, p95 1.2 s from starting the send |
+| After 45 s idle, to wake the hub | 718 of 718, p95 0.9 s. Fewer sockets, because this run's heartbeat started late; see below |
+| **Forced reset, at most 100 at once** | **1,000 of 1,000 back in 99 s, none missing a message**, with 42 messages sent during it. Then 1,000 of 1,000 reached by the next one, p95 6.6 s |
+| Forced reset, all at once | 934 finished in 150 s, none missing a message, 66 gave up after six tries |
+| Redeploy under 1,000 sockets | About 50 closed with 1006 around when the deploy finished, the rest stayed open, and every open socket got every message. That one client earlier saw no close, so expect a few percent to reconnect |
+| Redeploy with the widget in Chromium, one exchange every 6 s | 20 of 20 both ways, the same socket throughout, nothing marked not sent |
+
+The reset was the clients closing their own sockets, not the server dropping them. **Reconnect times mostly measure the client machine.** Retries were all connection timeouts or socket errors on its side (279 and 135 in the paced run, 3,135 and 604 all at once). There were no 5xx answers to ticket or catch-up requests, and the server's error log showed one failed request. Requests that got through stayed quick: ticket p50 460 ms, socket 640 ms, catch-up 652 ms. A single machine cannot tell whether the connection limit was its own, its network's, or Cloudflare's per-address protection, so a true 1,000-address herd is untested. Visitor sockets are also untested at this scale, because sessions are limited to 30 an hour per address.
+
+Also seen:
+
+- Sockets with no heartbeat dropped again, so a run that started its heartbeat after opening lost about 235 of 1,000. With it from the start, 998 stayed. This supports the 62 s figure above.
+- Node's default of 250 ms per address caused most connection failures in the first socket run on this IPv4-only network. The script turns it off.
+- **One unexplained failure:** in one browser run the widget's compose box did not appear within 30 s of a click, just before a deploy. 15 fresh browser contexts afterwards all took under 3 s, and it did not recur.
+
+**Cost estimate, not a bill.** Published Paid prices, and measured rows for a text message: about 16 written (message 6, conversation 5, outbox 3 then 2) and about 25 read, and about 1 KB of database per message. For 1 million messages a month, with 1,000 sockets always connected and 5 million other API requests:
+
+| Item | Use | Cost |
+|---|---|---|
+| Workers Paid base | | $5.00 |
+| Workers requests | 6 million of 10 million included | $0 |
+| D1 rows written | 16 million of 50 million included | $0 |
+| D1 rows read | 25 million of 25 billion included | $0 |
+| D1 storage | About 1 GB of 5 GB included | $0 |
+| Durable Object requests | Assumes 2 per message, plus heartbeats at 20:1 if auto-responses count, which is the worst case: 6.3 million, of which 1 million included | Up to $0.80 |
+| Durable Object duration | Worst case of a separate 10 s wake per message at 128 MB: 1.25 million GB-s, of which 400,000 included | Up to $10.63 |
+| **Total** | | **About $5 to $17 a month** |
+
+Not measured: Worker CPU time ($0.02 per million ms over 30 million included), real Durable Object duration, or queues, which text messages do not use until push and email follow-ups exist. Prices were read from Cloudflare's pricing pages on this date.
+
 ### Follow-up deployment, 2026-11-04
 
 A second throwaway deployment on the same account took about 90 seconds, then was removed. `oc preflight` passed, and with a bad API token it stopped before creating anything. `/api/*` answers carried `no-store` and `nosniff`. Account deletion answered 401 with no token, 400 with no password, 403 with a wrong password, and 409 for the last owner with the right one. A successful deletion has only run in workerd, because this deployment had one user. The check's failure cases for R2, D1, Queues, and several accounts, and the missing `workers.dev` message, have only run against a fake Wrangler.

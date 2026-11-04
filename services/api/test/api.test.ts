@@ -77,6 +77,29 @@ describe('HTTP', () => {
   });
 });
 
+describe('an overloaded database', () => {
+  const message = 'D1_ERROR: D1 DB is overloaded. Too many resources consumed within a 10 second window';
+  const overloaded = { ...env, DB: { prepare: () => { throw new Error(message); }, batch: () => Promise.reject(new Error(message)) } } as unknown as typeof env;
+
+  it('says try again, with when, and does not repeat what the database said', async () => {
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(new Request('https://example.com/api/v1/auth/login', { method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': '203.0.113.200' }, body: JSON.stringify({ email: 'a@example.com', password: 'whatever it is', clientType: 'mobile' }) }), overloaded, ctx);
+    await waitOnExecutionContext(ctx);
+    expect(response.status).toBe(503);
+    expect(response.headers.get('retry-after')).toBe('2');
+    const text = await response.text();
+    expect(JSON.parse(text)).toMatchObject({ code: 'overloaded' });
+    expect(text).not.toContain('D1');
+  });
+});
+
+describe('finishing a send during a backlog', () => {
+  it('finds its outbox row by index, not by reading the backlog', async () => {
+    const { results } = await env.DB.prepare(`EXPLAIN QUERY PLAN SELECT id FROM outbox WHERE dispatched_at IS NULL AND workspace_id = ?1 AND aggregate_id IN (?2) ORDER BY created_at, id`).bind('work_x', 'msg_x').all<{ detail: string }>();
+    expect(results.map((row) => row.detail).join(' ')).toContain('outbox_pending_aggregate_idx');
+  });
+});
+
 describe('cron', () => {
   it('enqueues a job', async () => {
     const controller = createScheduledController({ scheduledTime: new Date('2026-11-03T10:00:00Z'), cron: '* * * * *' });

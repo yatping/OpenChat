@@ -1,0 +1,1 @@
+CREATE INDEX `outbox_pending_aggregate_idx` ON `outbox` (`workspace_id`,`aggregate_id`) WHERE "outbox"."dispatched_at" IS NULL;
