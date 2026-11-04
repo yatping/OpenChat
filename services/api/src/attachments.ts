@@ -2,7 +2,7 @@
  * Streams files between a request and R2. See ADR-0008. R2 needs to know the length of a stream, so the declared
  * length is held to with a FixedLengthStream, and a body that disagrees fails rather than storing part of a file.
  */
-import { ATTACHMENT_HEAD_BYTES, assertAttachmentContent, assertAttachmentLength, attachmentHeaders, cleanAttachmentFilename, normalizeAttachmentType, type UploadInput, type UploadTarget } from '@openchat/core';
+import { ATTACHMENT_HEAD_BYTES, assertAttachmentContent, assertAttachmentLength, assertAttachmentName, attachmentHeaders, cleanAttachmentFilename, normalizeAttachmentType, type UploadInput, type UploadTarget } from '@openchat/core';
 import type { AttachmentRow } from '@openchat/database';
 import { AppError, notFound } from '@openchat/shared';
 import type { Context } from 'hono';
@@ -30,6 +30,7 @@ export async function receiveUpload(c: Context<AppEnv>, conversationId: string, 
   const contentType = normalizeAttachmentType(c.req.header('content-type'));
   const size = assertAttachmentLength(c.req.header('content-length'));
   const name = cleanAttachmentFilename(filename);
+  assertAttachmentName(contentType, name);
   const body = c.req.raw.body;
   if (!body) throw new AppError(400, 'validation_failed', 'The file is empty');
 

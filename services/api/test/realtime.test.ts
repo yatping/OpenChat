@@ -1,3 +1,4 @@
+import { hashOpaqueToken } from '@openchat/auth';
 import { createExecutionContext, runDurableObjectAlarm, waitOnExecutionContext } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
 import { hashPassword } from '@openchat/auth';
@@ -369,6 +370,53 @@ describe('losing an account', () => {
     await env.DB.prepare(`UPDATE outbox SET created_at = created_at - 120000 WHERE topic = 'member.access_changed'`).run();
     await handleScheduled({ scheduledTime: Date.now() } as ScheduledController, testEnv);
     expect(await peer.closed()).toBe(4403);
+  });
+});
+
+describe('losing a session to a thief', () => {
+  const peerLogin = async () => json<{ accessToken: string; refreshToken: string }>(await call('POST', '/api/v1/auth/login', { body: { email: 'peer@example.com', password: PASSWORD, clientType: 'mobile' } }));
+  const peerSocket = async (token: string) => {
+    const socket = await connect((await json<{ url: string }>(await call('POST', `${W}/realtime/tickets`, { token }))).url);
+    await socket.next('hello');
+    return socket;
+  };
+  const sweep = async () => {
+    await env.DB.prepare(`UPDATE outbox SET created_at = created_at - 120000 WHERE topic = 'member.access_changed'`).run();
+    await handleScheduled({ scheduledTime: Date.now() } as ScheduledController, testEnv);
+  };
+
+  it('closes sockets after a password reset, since the attacker needs no session to keep listening', async () => {
+    const peer = await peerSocket((await peerLogin()).accessToken);
+    await env.DB.prepare(`INSERT INTO auth_tokens (token_hash, user_id, purpose, expires_at) VALUES (?1, (SELECT id FROM users WHERE email = 'peer@example.com'), 'password_reset', ?2)`)
+      .bind(await hashOpaqueToken('a-reset-token-for-the-peer'), Date.now() + 60_000)
+      .run();
+    expect((await call('POST', '/api/v1/auth/password-reset/confirm', { body: { token: 'a-reset-token-for-the-peer', password: 'a brand new password' } })).status).toBeLessThan(300);
+    await sweep();
+    expect(await peer.closed()).toBe(4403);
+  });
+
+  it('closes sockets when a refresh token is reused, and not on an ordinary rotation', async () => {
+    const first = await peerLogin();
+    const peer = await peerSocket(first.accessToken);
+    const refresh = (refreshToken: string) => call('POST', '/api/v1/auth/refresh', { body: { refreshToken } });
+    expect((await refresh(first.refreshToken)).status).toBe(200);
+    expect((await env.DB.prepare(`SELECT COUNT(*) AS n FROM outbox WHERE topic = 'member.access_changed'`).first<{ n: number }>())!.n).toBe(0);
+    expect((await refresh(first.refreshToken)).status).toBe(401);
+    await sweep();
+    expect(await peer.closed()).toBe(4403);
+  });
+});
+
+describe('a ticket used more than once', () => {
+  it('opens at most ten sockets for one visitor, however many it is tried on', async () => {
+    const ticket = await json<{ url: string }>(await call('POST', `/api/v1/widget/conversations/${conversationId}/realtime/tickets`, { token: visitor, origin: SITE }));
+    for (let i = 0; i < 10; i++) await connect(ticket.url, SITE);
+    const refused = await worker.fetch(new Request(ticket.url.replace(/^wss?:\/\/[^/]+/, ORIGIN), { headers: { upgrade: 'websocket', origin: SITE, 'cf-connecting-ip': '203.0.113.9' } }), testEnv, createExecutionContext());
+    expect(refused.status).toBe(429);
+  });
+
+  it('does not limit agents, who are signed in and may keep many tabs', async () => {
+    for (let i = 0; i < 11; i++) await agentSocket();
   });
 });
 

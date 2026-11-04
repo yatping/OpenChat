@@ -37,6 +37,29 @@ const SIGNATURES: Record<string, (head: Uint8Array) => boolean> = {
   'text/csv': looksLikeText,
 };
 
+/**
+ * A person opens a saved file by its name, not by what it holds, so the name has to agree too. Otherwise a script
+ * is a perfectly good text file, and `invoice.bat` or `invoice.html` reaches an agent's desktop.
+ */
+const EXTENSIONS: Record<string, string[]> = {
+  'image/png': ['png'],
+  'image/jpeg': ['jpg', 'jpeg'],
+  'image/gif': ['gif'],
+  'image/webp': ['webp'],
+  'application/pdf': ['pdf'],
+  'application/zip': ['zip'],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['docx'],
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['xlsx'],
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['pptx'],
+  'text/plain': ['txt', 'log'],
+  'text/csv': ['csv'],
+};
+
+export function assertAttachmentName(contentType: string, filename: string): void {
+  const extension = filename.includes('.') ? filename.split('.').pop()!.toLowerCase() : '';
+  if (!EXTENSIONS[contentType]?.includes(extension)) throw badType();
+}
+
 /** Shown in the browser when opened directly. Everything else is only ever a download. */
 const INLINE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 
@@ -60,10 +83,13 @@ export function assertAttachmentLength(header: string | undefined): number {
   return length;
 }
 
-/** No path, no control characters, and a length that fits. It is only ever shown as text or sent in a quoted header. */
+/**
+ * No path, no control characters, and a length that fits. It is only ever shown as text or sent in a quoted header.
+ * Characters that reorder or hide text go too, or `exe.txt` could be shown to an agent as something it is not.
+ */
 export function cleanAttachmentFilename(name: string): string {
   // eslint-disable-next-line no-control-regex -- Removing them is the point.
-  const base = (name.split(/[\\/]/).pop() ?? '').replace(/[\u0000-\u001f\u007f"]/g, '').trim();
+  const base = (name.split(/[\\/]/).pop() ?? '').replace(/[\u0000-\u001f\u007f"\u00ad\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, '').trim();
   if (!base || base === '.' || base === '..') throw new AppError(400, 'validation_failed', 'The file needs a name');
   return base.slice(-255);
 }

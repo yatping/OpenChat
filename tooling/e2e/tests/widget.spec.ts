@@ -478,6 +478,44 @@ test('a failed Turnstile check says so, sends nothing, and can be tried again', 
   await context.close();
 });
 
+const XSS = `<img src=x onerror="window.__pwned=1"><script>window.__pwned=1</script><svg onload="window.__pwned=1">`;
+
+test('text from a stranger stays text, on the visitor\'s page and in the inbox', async ({ browser }) => {
+  const context = await visitorContext(browser);
+  const page = await shop(context, WEBSITE_KEY);
+  watch(page);
+  await launcher(page).click();
+  await say(page, `${XSS} visitor words`);
+  await expect(log(page).getByText('Sent', { exact: true })).toBeVisible();
+  // A name and a file name are also the visitor's to choose.
+  const authorization = page.waitForRequest((request) => request.url().includes('/attachments') && request.method() === 'POST');
+  const fileName = '<img src=x onerror=window.__pwned=1>.txt';
+  await panel(page).getByLabel('File to attach').setInputFiles({ name: fileName, mimeType: 'text/plain', buffer: Buffer.from('words') });
+  const headers = (await authorization).headers();
+  await expect(log(page).getByText(fileName, { exact: false })).toBeVisible();
+  const profile = await context.request.patch(`${BASE_URL}/api/v1/widget/me`, { headers: { authorization: headers.authorization!, origin: SITE_ORIGIN }, data: { name: '<img src=x onerror=window.__pwned=1>' } });
+  expect(profile.status()).toBe(204);
+
+  const agentContext = await browser.newContext();
+  const agent = await agentContext.newPage();
+  await signIn(agent, OWNER);
+  await agent.getByRole('region', { name: 'Conversations' }).getByRole('button').first().click();
+  await expect(agent.getByText('visitor words', { exact: false }).first()).toBeVisible();
+  await expect(agent.getByText(fileName, { exact: false }).first()).toBeVisible();
+
+  // An agent's words can carry it the other way, if an account is ever stolen.
+  await agent.getByLabel('Reply').fill(`${XSS} agent words`);
+  await agent.getByRole('button', { name: 'Send reply' }).click();
+  await expect(log(page).getByText('agent words', { exact: false })).toBeVisible();
+
+  // Nothing ran, and nothing became an element.
+  for (const target of [page, agent]) expect(await target.evaluate(() => (window as unknown as { __pwned?: number }).__pwned)).toBeUndefined();
+  expect(await page.locator('#openchat-widget img[src="x"], #openchat-widget svg[onload]').count()).toBe(0);
+  expect(await agent.locator('img[src="x"], svg[onload]').count()).toBe(0);
+  await agentContext.close();
+  await context.close();
+});
+
 test('removes itself from a page the website does not allow', async ({ browser }) => {
   const context = await visitorContext(browser);
   const refused = context.waitForEvent('response', (r) => r.url().includes('/widget/bootstrap'));

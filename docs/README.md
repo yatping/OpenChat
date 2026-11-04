@@ -29,6 +29,7 @@ Suggested reading order for a new contributor is top to bottom.
 | [architecture/background-jobs.md](architecture/background-jobs.md) | Queues, the outbox, and cron |
 | [architecture/security.md](architecture/security.md) | Authentication, tenant isolation, threat model |
 | [architecture/security-review-m1a.md](architecture/security-review-m1a.md) | Review of authentication and sessions, with accepted trade-offs and open decisions |
+| [architecture/security-review-m1b.md](architecture/security-review-m1b.md) | Review of tenant isolation, visitor tokens, attachments, and XSS |
 | [architecture/decisions/](architecture/decisions/) | Architecture decision records |
 
 ## Contracts

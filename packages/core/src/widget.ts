@@ -92,9 +92,11 @@ export async function createVisitorSession(deps: AuthDeps, input: { websiteKey: 
   return { visitorId, accessToken, accessTokenExpiresAt: toIso((now + VISITOR_TOKEN_TTL_SECONDS) * 1000), refreshToken: refreshToken! };
 }
 
-export async function authenticateVisitor(deps: Pick<AuthDeps, 'db' | 'verificationKeys' | 'installationId'>, token: string): Promise<VisitorContext> {
+export async function authenticateVisitor(deps: Pick<AuthDeps, 'db' | 'limiter' | 'verificationKeys' | 'installationId'>, token: string): Promise<VisitorContext> {
   const verified = await verifyVisitorToken(token, deps.verificationKeys, deps.installationId);
   if (!verified.ok) throw unauthorized();
+  // Before the database, because protecting it is the point.
+  await enforce(deps.limiter, await limitKey('visitor-requests', verified.claims.sub), LIMITS.visitorRequests);
   const ctx = await authorizeVisitor(deps.db, { visitorId: verified.claims.sub, workspaceId: verified.claims.wid, websiteId: verified.claims.site });
   if (!ctx) throw unauthorized();
   return ctx;
@@ -106,7 +108,8 @@ async function limitMessage(deps: Pick<AuthDeps, 'limiter'>, ctx: VisitorContext
   await enforce(deps.limiter, await limitKey('website-messages', ctx.websiteId), LIMITS.websiteVisitorMessages);
 }
 
-export async function updateVisitorProfile(deps: Pick<AuthDeps, 'db'>, ctx: VisitorContext, input: { name?: string | undefined; email?: string | undefined; followUpConsent?: boolean | undefined }) {
+export async function updateVisitorProfile(deps: Pick<AuthDeps, 'db' | 'limiter'>, ctx: VisitorContext, input: { name?: string | undefined; email?: string | undefined; followUpConsent?: boolean | undefined }) {
+  await enforce(deps.limiter, await limitKey('website-visitor-writes', ctx.websiteId), LIMITS.websiteVisitorWrites);
   await visitorRepositories(deps.db, ctx).profile.update(input);
 }
 
@@ -137,7 +140,8 @@ export async function sendVisitorMessage(deps: Pick<AuthDeps, 'db' | 'limiter'>,
   return { created: result.outcome === 'created', message: toMessage(result.message, ctx) };
 }
 
-export async function markVisitorConversationRead(deps: Pick<AuthDeps, 'db'>, ctx: VisitorContext, conversationId: string, input: { deliveredSeq: number; readSeq: number }) {
+export async function markVisitorConversationRead(deps: Pick<AuthDeps, 'db' | 'limiter'>, ctx: VisitorContext, conversationId: string, input: { deliveredSeq: number; readSeq: number }) {
+  await enforce(deps.limiter, await limitKey('website-visitor-writes', ctx.websiteId), LIMITS.websiteVisitorWrites);
   const position = await visitorRepositories(deps.db, ctx).messages.markRead(conversationId, input);
   if (!position) throw notFound();
   return position;

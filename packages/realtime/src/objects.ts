@@ -65,6 +65,8 @@ async function verificationKeys(secret: string) {
 abstract class RealtimeObject extends DurableObject<RealtimeEnv> {
   /** How often the alarm looks for dead connections while any socket is here. */
   protected abstract readonly sweepMs: number;
+  /** A ticket can be used more than once while it lasts, so this is what bounds one principal here. */
+  protected readonly maxSocketsPerPrincipal: number = Number.POSITIVE_INFINITY;
 
   constructor(ctx: DurableObjectState, env: RealtimeEnv) {
     super(ctx, env);
@@ -91,7 +93,9 @@ abstract class RealtimeObject extends DurableObject<RealtimeEnv> {
     if (!raw) return new Response('Missing verified claims', { status: 401 });
     const claims = { ...(JSON.parse(raw) as SocketAttachment), connectionId: crypto.randomUUID() };
 
-    const first = this.openSockets(this.principalTag(claims)).length === 0;
+    const theirs = this.openSockets(this.principalTag(claims)).length;
+    if (theirs >= this.maxSocketsPerPrincipal) return new Response('Too many connections', { status: 429 });
+    const first = theirs === 0;
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];
@@ -343,6 +347,8 @@ const SCOPE_KEY = 'announced';
 
 export class ConversationRoom extends RealtimeObject {
   protected readonly sweepMs = 5 * 60_000;
+  /** One for each tab, and more tabs than anyone keeps open on one chat. Agents sign in, so the hub has no such limit. */
+  protected override readonly maxSocketsPerPrincipal = 10;
 
   protected tagsFor(claims: SocketAttachment): string[] {
     return [`visitor:${claims.principalId}`];

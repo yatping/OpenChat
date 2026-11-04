@@ -107,7 +107,8 @@ async function loadBootstrap(c: Context<AppEnv>, websiteKey: string): Promise<Ca
 
 export function registerWidgetRoutes(app: App) {
   app.use('/api/v1/widget/*', cors);
-  for (const path of [updateVisitorProfileRoute.path, listVisitorConversationsRoute.path, '/api/v1/widget/conversations/*', '/api/v1/widget/attachments/*']) {
+  // The wildcard also matches /conversations itself, so naming that as well would run all this twice.
+  for (const path of [updateVisitorProfileRoute.path, '/api/v1/widget/conversations/*', '/api/v1/widget/attachments/*']) {
     app.use(path, requireVisitor as unknown as MiddlewareHandler<AppEnv>);
   }
   const visitorOf = (c: Context<AppEnv>) => (c as unknown as Context<WidgetEnv>).get('visitor');

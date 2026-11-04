@@ -1,3 +1,4 @@
+import { markVisitorConversationRead, updateVisitorProfile } from '@openchat/core';
 import { createExecutionContext } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
 import { hashPassword } from '@openchat/auth';
@@ -297,6 +298,30 @@ describe('read positions', () => {
     await agentCall('POST', `/conversations/${id}/messages`, { clientMessageId: 'note-0001', type: 'internal_note', content: 'x' });
     expect((await call('POST', `/api/v1/widget/conversations/${id}/read`, { token, body: { deliveredSeq: 99, readSeq: 99 } })).status).toBe(204);
     expect(await rows(`SELECT reader_type, delivered_seq, read_seq FROM conversation_read_cursors`)).toEqual([{ reader_type: 'visitor', delivered_seq: 1, read_seq: 1 }]);
+  });
+});
+
+describe('limits on what a visitor can ask for', () => {
+  it('stops one visitor at 120 requests a minute', async () => {
+    const { accessToken: token } = await session();
+    for (let i = 0; i < 120; i++) expect((await call('GET', '/api/v1/widget/conversations', { token })).status).toBe(200);
+    const refused = await call('PATCH', '/api/v1/widget/me', { token, body: { name: 'Flood' } });
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get('retry-after')).toBeTruthy();
+    expect((await rows(`SELECT name FROM contacts`))[0]).not.toMatchObject({ name: 'Flood' });
+    // Another visitor is unaffected.
+    const other = await session();
+    expect((await call('GET', '/api/v1/widget/conversations', { token: other.accessToken })).status).toBe(200);
+  });
+
+  it.each([
+    ['the profile', (deps: never, ctx: never) => updateVisitorProfile(deps, ctx, { name: 'Flood' })],
+    ['a read position', (deps: never, ctx: never) => markVisitorConversationRead(deps, ctx, 'conv_x', { deliveredSeq: 0, readSeq: 0 })],
+  ])('has a limit per website on writes to %s, across all its visitors', async (_name, write) => {
+    const keys: string[] = [];
+    const limiter = { consume: async (key: string, limit: number) => (keys.push(`${limit}`), { allowed: false, retryAfterSeconds: 5, key }) };
+    await expect(write({ limiter } as never, { websiteId: 'site_x' } as never)).rejects.toMatchObject({ status: 429 });
+    expect(keys).toEqual(['1200']);
   });
 });
 

@@ -126,13 +126,13 @@ describe('what may be uploaded', () => {
   });
 
   it.each([
-    ['text/plain', text('Order 1234, please see the note')],
-    ['text/csv; charset=utf-8', text('a,b\n1,2')],
-    ['application/pdf', text('%PDF-1.7 rest')],
-    ['image/jpeg', new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1])],
-    ['image/webp', text('RIFF....WEBPVP8 ')],
-  ])('accepts %s', async (type, file) => {
-    expect((await uploadAs('agent', conversationId, { type, file })).status).toBe(201);
+    ['text/plain', text('Order 1234, please see the note'), 'note.txt'],
+    ['text/csv; charset=utf-8', text('a,b\n1,2'), 'table.csv'],
+    ['application/pdf', text('%PDF-1.7 rest'), 'order.pdf'],
+    ['image/jpeg', new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1]), 'photo.jpg'],
+    ['image/webp', text('RIFF....WEBPVP8 '), 'photo.webp'],
+  ])('accepts %s', async (type, file, filename) => {
+    expect((await uploadAs('agent', conversationId, { type, file }, filename)).status).toBe(201);
   });
 
   it('refuses a file over the limit from its declared size, before reading it', async () => {
@@ -160,6 +160,42 @@ describe('what may be uploaded', () => {
     for (let i = 0; i < 21; i++) last = (await uploadAs('visitor', conversationId)).status;
     expect(last).toBe(429);
   }, 30_000);
+});
+
+describe('the name of a file', () => {
+  it.each([
+    ['a batch file as text', 'invoice.bat', 'text/plain', text('del /q *')],
+    ['a page as text', 'invoice.html', 'text/plain', text('hello <script>alert(1)</script>')],
+    ['a script as text', 'invoice.js', 'text/plain', text('alert(1)')],
+    ['a shortcut as CSV', 'invoice.hta', 'text/csv', text('a,b')],
+    ['a program as a picture', 'photo.exe', 'image/png', PNG],
+    ['a hidden second extension', 'photo.png.exe', 'image/png', PNG],
+    ['a Windows trailing dot', 'notes.bat.', 'text/plain', text('del /q *')],
+    ['no extension', 'invoice', 'text/plain', text('words')],
+  ])('refuses %s', async (_name, filename, type, file) => {
+    const response = await uploadAs('visitor', conversationId, { file, type }, filename);
+    expect(response.status).toBe(415);
+    expect(await env.DB.prepare(`SELECT COUNT(*) AS n FROM attachments`).first<{ n: number }>()).toEqual({ n: 0 });
+  });
+
+  it('applies to agents as well, whose account could be the stolen one', async () => {
+    expect((await uploadAs('agent', conversationId, { file: text('del /q *'), type: 'text/plain' }, 'run.bat')).status).toBe(415);
+  });
+
+  it.each([
+    ['txt', 'text/plain', text('words')],
+    ['LOG', 'text/plain', text('words')],
+    ['csv', 'text/csv', text('a,b')],
+    ['JPEG', 'image/jpeg', new Uint8Array([0xff, 0xd8, 0xff, 0xe0])],
+  ])('accepts .%s, in either case', async (extension, type, file) => {
+    expect((await uploadAs('visitor', conversationId, { file, type }, `file.${extension}`)).status).toBe(201);
+  });
+
+  it('takes out characters that make a name read as something else', async () => {
+    const response = await uploadAs('visitor', conversationId, { file: text('words'), type: 'text/plain' }, 'exe\u202e\u200bgnp.\u2066txt');
+    expect(response.status).toBe(201);
+    expect(await json<{ filename: string }>(response)).toMatchObject({ filename: 'exegnp.txt' });
+  });
 });
 
 describe('who may upload where', () => {
