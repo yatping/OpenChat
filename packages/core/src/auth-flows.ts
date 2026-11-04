@@ -37,7 +37,7 @@ import {
   type Principal,
 } from '@openchat/database';
 import type { EmailProvider } from '@openchat/email';
-import { AppError, newId, toIso, type JobEnvelope } from '@openchat/shared';
+import { AppError, DEFAULT_ABUSE_LIMITS, newId, toIso, type AbuseLimits, type JobEnvelope } from '@openchat/shared';
 import type { JobQueue } from './index';
 
 export interface RateLimiter {
@@ -52,6 +52,7 @@ export interface AuthDeps {
   signingKey: SigningKey;
   verificationKeys: VerificationKeys;
   limiter: RateLimiter;
+  limits: AbuseLimits;
   emailJobs: JobQueue;
   /** Absent unless this installation was deployed with Turnstile keys. */
   turnstile?: TurnstileVerifier;
@@ -97,6 +98,46 @@ async function sha256Hex(value: string): Promise<string> {
 // Limiter keys are hashed, so that emails and IP addresses do not appear in Durable Object names.
 export const limitKey = async (kind: string, value: string) => `${kind}:${await sha256Hex(value.toLowerCase())}`;
 
+const ipv6Words = (part: string | undefined): string[] =>
+  !part
+    ? []
+    : part.split(':').flatMap((word) => {
+        if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(word)) return [word];
+        const [a, b, c, d] = word.split('.').map(Number) as [number, number, number, number];
+        return [((a << 8) | b).toString(16), ((c << 8) | d).toString(16)];
+      });
+
+/**
+ * What counts as one address for a limit. One connection usually holds a whole IPv6 /64, which is billions of
+ * addresses, so a limit on the full address would limit nothing. Different spellings of an address must also
+ * count as one. Anything that cannot be parsed is used as it stands, so it still counts against something.
+ */
+export function ipLimitValue(ip: string, ipv6Prefix: number = DEFAULT_ABUSE_LIMITS.ipv6Prefix): string {
+  const address = ip.trim().toLowerCase().split('%')[0]!;
+  if (!address.includes(':')) return address;
+  const parts = address.split('::');
+  if (parts.length > 2) return address;
+  const head = ipv6Words(parts[0]);
+  const tail = ipv6Words(parts[1]);
+  const missing = 8 - head.length - tail.length;
+  if (parts.length === 1 ? missing !== 0 : missing < 1) return address;
+  const words = [...head, ...Array<string>(missing).fill('0'), ...tail];
+  if (words.some((word) => !/^[0-9a-f]{1,4}$/.test(word))) return address;
+  const numbers = words.map((word) => parseInt(word, 16));
+  // An IPv4 address written as IPv6 is that IPv4 address.
+  if (numbers.slice(0, 5).every((n) => n === 0) && numbers[5] === 0xffff) {
+    return [numbers[6]! >> 8, numbers[6]! & 255, numbers[7]! >> 8, numbers[7]! & 255].join('.');
+  }
+  const kept = numbers.slice(0, Math.ceil(ipv6Prefix / 16)).map((n, i) => {
+    const bits = Math.min(16, ipv6Prefix - i * 16);
+    return (n & (0xffff << (16 - bits)) & 0xffff).toString(16);
+  });
+  return `${kept.join(':')}::/${ipv6Prefix}`;
+}
+
+/** Every limit on an address goes through this, so that none of them can miss the rule above. */
+export const limitKeyForIp = (deps: Pick<AuthDeps, 'limits'>, kind: string, ip: string) => limitKey(kind, ipLimitValue(ip, deps.limits.ipv6Prefix));
+
 export async function enforce(limiter: RateLimiter, key: string, rule: { limit: number; windowSeconds: number }): Promise<void> {
   const result = await limiter.consume(key, rule.limit, rule.windowSeconds);
   if (!result.allowed) {
@@ -123,7 +164,7 @@ export async function login(
 ): Promise<IssuedTokens> {
   // The account key is hashed from the submitted email, so limits behave the same for unknown accounts.
   const accountKey = await limitKey('login-account', input.email);
-  await enforce(deps.limiter, await limitKey('login-ip', input.ip), LIMITS.loginIp);
+  await enforce(deps.limiter, await limitKeyForIp(deps, 'login-ip', input.ip), LIMITS.loginIp);
   await enforce(deps.limiter, accountKey, LIMITS.loginAccount);
 
   const user = await findUserForLogin(deps.db, input.email);
@@ -183,9 +224,9 @@ export async function getMe(deps: Pick<AuthDeps, 'db'>, principal: Principal) {
  * The password is checked first because deleting cannot be undone, and an access token alone can be stolen.
  * Attempts use the login limits, so that the token gives no extra way to guess the password.
  */
-export async function deleteMe(deps: Pick<AuthDeps, 'db' | 'limiter'>, principal: Principal, input: { password: string; ip: string }): Promise<void> {
+export async function deleteMe(deps: Pick<AuthDeps, 'db' | 'limiter' | 'limits'>, principal: Principal, input: { password: string; ip: string }): Promise<void> {
   const accountKey = await limitKey('login-account', principal.email);
-  await enforce(deps.limiter, await limitKey('login-ip', input.ip), LIMITS.loginIp);
+  await enforce(deps.limiter, await limitKeyForIp(deps, 'login-ip', input.ip), LIMITS.loginIp);
   await enforce(deps.limiter, accountKey, LIMITS.loginAccount);
 
   const user = await findUserForLogin(deps.db, principal.email);
@@ -219,7 +260,7 @@ export function passwordResetJob(userId: string): JobEnvelope<{ userId: string }
  */
 export async function requestPasswordReset(deps: AuthDeps, input: { email: string; ip: string }): Promise<void> {
   const [byIp, byEmail] = await Promise.all([
-    deps.limiter.consume(await limitKey('reset-ip', input.ip), LIMITS.resetIp.limit, LIMITS.resetIp.windowSeconds),
+    deps.limiter.consume(await limitKeyForIp(deps, 'reset-ip', input.ip), LIMITS.resetIp.limit, LIMITS.resetIp.windowSeconds),
     deps.limiter.consume(await limitKey('reset-email', input.email), LIMITS.resetEmail.limit, LIMITS.resetEmail.windowSeconds),
   ]);
   // Silently, because an error would reveal which addresses are being limited.
@@ -258,7 +299,7 @@ export async function sendPasswordResetEmail(
 }
 
 export async function completePasswordReset(deps: AuthDeps, input: { token: string; password: string; ip: string }): Promise<void> {
-  await enforce(deps.limiter, await limitKey('confirm-ip', input.ip), LIMITS.confirmIp);
+  await enforce(deps.limiter, await limitKeyForIp(deps, 'confirm-ip', input.ip), LIMITS.confirmIp);
   if (input.password.length < MIN_PASSWORD_LENGTH) throw new AppError(400, 'password_too_short', 'Choose a longer password');
   const tokenHash = await hashOpaqueToken(input.token);
   // Hashing is costly, so an invalid token is turned away first. The batch still makes the real decision.
@@ -267,6 +308,6 @@ export async function completePasswordReset(deps: AuthDeps, input: { token: stri
 }
 
 export async function completeEmailVerification(deps: AuthDeps, input: { token: string; ip: string }): Promise<void> {
-  await enforce(deps.limiter, await limitKey('confirm-ip', input.ip), LIMITS.confirmIp);
+  await enforce(deps.limiter, await limitKeyForIp(deps, 'confirm-ip', input.ip), LIMITS.confirmIp);
   if (!(await confirmEmailVerification(deps.db, await hashOpaqueToken(input.token)))) throw invalidToken();
 }

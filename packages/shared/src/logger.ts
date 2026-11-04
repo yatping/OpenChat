@@ -6,6 +6,7 @@ export interface LogFields {
   requestId?: string;
   installationId?: string;
   workspaceId?: string;
+  websiteId?: string;
   route?: string;
   method?: string;
   status?: number;
@@ -23,6 +24,7 @@ const ALLOWED = new Set<string>([
   'requestId',
   'installationId',
   'workspaceId',
+  'websiteId',
   'route',
   'method',
   'status',

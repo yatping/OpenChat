@@ -98,6 +98,8 @@ Delivered in basic form in Milestone 1, and polished in Milestone 5. Each step i
 | 11 | Verify | Health, discovery, and a login probe that proves the signing key loads. A synthetic visitor message *(M1b)* | 9 |
 | 12 | Print | Dashboard URL and the owner's link. Widget snippet and restore command *(M5)* | 10 |
 
+The [abuse limits](abuse-limits.md) have defaults that suit most installations. To change one, pass its flag to `oc deploy`.
+
 ## Upgrades: `oc upgrade`
 
 A migration and a deploy are not atomic. Safety relies on the [expand/contract rule](../architecture/data-model.md#migration-strategy).

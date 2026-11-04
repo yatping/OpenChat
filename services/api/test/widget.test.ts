@@ -1,7 +1,8 @@
-import { markVisitorConversationRead, updateVisitorProfile } from '@openchat/core';
+import { createVisitorConversation, markVisitorConversationRead, updateVisitorProfile } from '@openchat/core';
 import { createExecutionContext } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
 import { hashPassword } from '@openchat/auth';
+import { DEFAULT_ABUSE_LIMITS, readAbuseLimits } from '@openchat/shared';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Env } from '../src/env';
 import worker from '../src/index';
@@ -19,6 +20,7 @@ interface Options {
   body?: unknown;
   origin?: string | null;
   ip?: string;
+  vars?: Env;
 }
 const call = (method: string, path: string, options: Options = {}) => {
   const origin = options.origin === undefined ? SITE : options.origin;
@@ -33,7 +35,7 @@ const call = (method: string, path: string, options: Options = {}) => {
       },
       ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
     }),
-    testEnv,
+    options.vars ?? testEnv,
     createExecutionContext(),
   );
 };
@@ -323,6 +325,130 @@ describe('limits on what a visitor can ask for', () => {
     await expect(write({ limiter } as never, { websiteId: 'site_x' } as never)).rejects.toMatchObject({ status: 429 });
     expect(keys).toEqual(['1200']);
   });
+
+  it('caps a visitor message at 4,000 characters by default, on both routes, and an agent stays at 16,000', async () => {
+    const { accessToken: token } = await session();
+    const tooLong = 'x'.repeat(4001);
+    expect((await call('POST', '/api/v1/widget/conversations', { token, body: { clientMessageId: 'too-long-1', content: tooLong } })).status).toBe(400);
+    const { id } = await start(token, 'longest-1', 'x'.repeat(4000));
+    expect((await call('POST', `/api/v1/widget/conversations/${id}/messages`, { token, body: { clientMessageId: 'too-long-2', content: tooLong } })).status).toBe(400);
+    expect((await call('POST', `/api/v1/widget/conversations/${id}/messages`, { token, body: { clientMessageId: 'longest-2', content: 'x'.repeat(4000) } })).status).toBe(201);
+    expect((await agentCall('POST', `/conversations/${id}/messages`, { clientMessageId: 'agent-long', type: 'text', content: 'x'.repeat(16000) })).status).toBe(201);
+  });
+
+  /** Sixty messages from enough visitors that no visitor's own limit applies. Each comes from `ipFor(n)`. */
+  async function sixtyMessages(ipFor: (n: number) => string) {
+    let n = 0;
+    for (let v = 0; v < 3; v++) {
+      const { accessToken: token } = await session();
+      for (let i = 0; i < 20; i++) {
+        const response = await call('POST', '/api/v1/widget/conversations', { token, ip: ipFor(n++), body: { clientMessageId: `message-${v}-${i}`, content: 'Hi' } });
+        expect(response.status).toBe(201);
+      }
+    }
+    const { accessToken: token } = await session();
+    return (ip: string, id: string) => call('POST', '/api/v1/widget/conversations', { token, ip, body: { clientMessageId: id, content: 'Hi' } });
+  }
+
+  it('stops one address at 60 messages a minute, across visitors', async () => {
+    const send = await sixtyMessages(() => '198.51.100.7');
+    const refused = await send('198.51.100.7', 'one-too-many');
+    expect(refused.status).toBe(429);
+    expect(await json(refused)).toMatchObject({ code: 'rate_limited' });
+    expect(refused.headers.get('retry-after')).toBeTruthy();
+    expect((await send('198.51.100.8', 'another-address')).status).toBe(201);
+  });
+
+  it('counts a whole IPv6 /64 as one address, however it is written', async () => {
+    const send = await sixtyMessages((n) => `2001:db8:1:2::${(n + 1).toString(16)}`);
+    expect((await send('2001:0db8:0001:0002:ffff:ffff:ffff:ffff', 'same-network')).status).toBe(429);
+    expect((await send('2001:db8:1:3::1', 'next-network')).status).toBe(201);
+  });
+
+  it('counts a whole IPv6 /64 as one address when making sessions', async () => {
+    const make = (n: number) => call('POST', '/api/v1/widget/sessions', { body: { websiteKey: 'key_shop' }, ip: `2001:db8:5:6::${n.toString(16)}` });
+    for (let n = 1; n <= 30; n++) expect((await make(n)).status).toBe(200);
+    expect((await make(31)).status).toBe(429);
+  });
+});
+
+describe('the settings an operator can change', () => {
+  const settings = (variables: Partial<Env>) => ({ ...testEnv, ...variables });
+
+  it('applies a daily limit to each website, refusing with its own code, and agents and other websites keep working', async () => {
+    const vars = settings({ LIMIT_MESSAGES_PER_WEBSITE_PER_DAY: '2' });
+    // Limit counts outlive a test, so these websites have to be new.
+    const newWebsite = async () => {
+      const key = `key_${crypto.randomUUID()}`;
+      await env.DB.prepare(`INSERT INTO websites (id, workspace_id, name, website_key, allowed_origins_json, created_at, updated_at) VALUES (?1, 'work_1', 'New', ?1, ?2, 1, 1)`).bind(key, JSON.stringify([SITE])).run();
+      return key;
+    };
+    const { accessToken: token } = await session(await newWebsite());
+    const send = (path: string, clientMessageId: string, sessionToken = token) => call('POST', path, { token: sessionToken, vars, body: { clientMessageId, content: 'Hello' } });
+    const first = await send('/api/v1/widget/conversations', 'message-1');
+    expect(first.status).toBe(201);
+    const { id } = await json<{ id: string }>(first);
+    const path = `/api/v1/widget/conversations/${id}/messages`;
+    expect((await send(path, 'message-2')).status).toBe(201);
+    const refused = await send(path, 'message-3');
+    expect(refused.status).toBe(429);
+    expect(await json(refused)).toMatchObject({ code: 'daily_limit_reached' });
+    expect(Number(refused.headers.get('retry-after'))).toBeGreaterThan(60 * 60);
+    expect(await count('messages')).toBe(2);
+
+    expect((await agentCall('POST', `/conversations/${id}/messages`, { clientMessageId: 'agent-reply', type: 'text', content: 'Still here' })).status).toBe(201);
+    const { accessToken: elsewhere } = await session(await newWebsite());
+    expect((await send('/api/v1/widget/conversations', 'message-other', elsewhere)).status).toBe(201);
+  });
+
+  it('defaults to 20,000 messages a day, and does not use up the day on a message a speed limit refused', async () => {
+    const seen: { limit: number; windowSeconds: number }[] = [];
+    const limiter = (refused: number) => ({
+      consume: async (_key: string, limit: number, windowSeconds: number) => (seen.push({ limit, windowSeconds }), { allowed: limit !== refused, retryAfterSeconds: 5 }),
+    });
+    const visitor = { websiteId: 'site_x', visitorId: 'vis_x', workspaceId: 'work_x' };
+    const input = { clientMessageId: 'message-1', content: 'Hello' };
+    await expect(createVisitorConversation({ limiter: limiter(60), limits: DEFAULT_ABUSE_LIMITS } as never, visitor as never, input, '198.51.100.1')).rejects.toMatchObject({ code: 'rate_limited' });
+    expect(seen.some((c) => c.windowSeconds === 24 * 60 * 60)).toBe(false);
+    await expect(createVisitorConversation({ limiter: limiter(20000), limits: DEFAULT_ABUSE_LIMITS } as never, visitor as never, input, '198.51.100.1')).rejects.toMatchObject({ code: 'daily_limit_reached' });
+    expect(seen.at(-1)).toEqual({ limit: 20000, windowSeconds: 24 * 60 * 60 });
+  });
+
+  it('changes the limit per address', async () => {
+    const vars = settings({ LIMIT_MESSAGES_PER_IP_PER_MINUTE: '1' });
+    const { accessToken: token } = await session();
+    const send = (clientMessageId: string, ip: string) => call('POST', '/api/v1/widget/conversations', { token, ip, vars, body: { clientMessageId, content: 'Hi' } });
+    expect((await send('message-1', '198.51.100.20')).status).toBe(201);
+    expect((await send('message-2', '198.51.100.20')).status).toBe(429);
+    expect((await send('message-3', '198.51.100.21')).status).toBe(201);
+  });
+
+  it('changes the longest message, tells the widget, and cannot pass what the API accepts', async () => {
+    const vars = settings({ LIMIT_MESSAGE_MAX_CHARS: '10' });
+    const { accessToken: token } = await session();
+    const send = (content: string, clientMessageId: string, variables = vars) => call('POST', '/api/v1/widget/conversations', { token, vars: variables, body: { clientMessageId, content } });
+    const refused = await send('x'.repeat(11), 'message-1');
+    expect(refused.status).toBe(400);
+    expect(await json(refused)).toMatchObject({ code: 'message_too_long' });
+    expect((await send('x'.repeat(10), 'message-2')).status).toBe(201);
+    expect(await json(await call('GET', '/api/v1/widget/bootstrap?websiteKey=key_shop', { vars }))).toMatchObject({ messageMaxChars: 10 });
+    const widest = settings({ LIMIT_MESSAGE_MAX_CHARS: '16000' });
+    expect((await send('x'.repeat(16000), 'message-3', widest)).status).toBe(201);
+    expect((await send('x'.repeat(16001), 'message-4', widest)).status).toBe(400);
+  });
+
+  it('changes how much of an IPv6 address is one address', async () => {
+    const vars = settings({ LIMIT_IPV6_PREFIX: '48', LIMIT_MESSAGES_PER_IP_PER_MINUTE: '1' });
+    const { accessToken: token } = await session();
+    const send = (clientMessageId: string, ip: string) => call('POST', '/api/v1/widget/conversations', { token, ip, vars, body: { clientMessageId, content: 'Hi' } });
+    expect((await send('message-1', '2001:db8:7:1::1')).status).toBe(201);
+    expect((await send('message-2', '2001:db8:7:2::1')).status).toBe(429);
+    expect((await send('message-3', '2001:db8:8:1::1')).status).toBe(201);
+  });
+
+  it.each(['abc', '0', '-5', '1.5', '', '99999999999'])('ignores %j for a setting, rather than turning the limit off', async (value) => {
+    expect(readAbuseLimits({ LIMIT_MESSAGES_PER_WEBSITE_PER_DAY: value }).messagesPerWebsitePerDay).toBe(20000);
+  });
 });
 
 describe('the profile', () => {
@@ -360,7 +486,7 @@ describe('bootstrap', () => {
   it('returns public settings only', async () => {
     const response = await bootstrap('key_shop');
     expect(response.status).toBe(200);
-    expect(await json(response)).toEqual({ websiteId: 'site_1', settings: { welcomeMessage: 'Hi' }, availability: 'offline' });
+    expect(await json(response)).toEqual({ websiteId: 'site_1', settings: { welcomeMessage: 'Hi' }, availability: 'offline', messageMaxChars: 4000 });
   });
 
   it('refuses an origin the website does not allow, even from the cache', async () => {

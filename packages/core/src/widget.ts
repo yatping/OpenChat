@@ -15,8 +15,8 @@ import {
   type VisitorMessageRow,
   type AttachmentJson,
 } from '@openchat/database';
-import { AppError, notFound, toIso } from '@openchat/shared';
-import { enforce, limitKey, LIMITS, type AuthDeps } from './auth-flows';
+import { AppError, createLogger, notFound, toIso } from '@openchat/shared';
+import { enforce, limitKey, limitKeyForIp, LIMITS, type AuthDeps } from './auth-flows';
 import { issueTicket, visitorSocketUntil } from './messaging';
 
 export type { VisitorContext };
@@ -72,7 +72,7 @@ async function assertHuman(deps: Pick<AuthDeps, 'turnstile'>, token: string | un
 }
 
 export async function createVisitorSession(deps: AuthDeps, input: { websiteKey: string; refreshToken?: string | undefined; turnstileToken?: string | undefined; origin: string | undefined; ip: string }) {
-  await enforce(deps.limiter, await limitKey('visitor-session-ip', input.ip), LIMITS.visitorSessionIp);
+  await enforce(deps.limiter, await limitKeyForIp(deps, 'visitor-session-ip', input.ip), LIMITS.visitorSessionIp);
   const website = await findWebsiteByKey(deps.db, input.websiteKey);
   if (!website) throw notFound();
   // Required here, unlike later requests: this is the check that stops other sites starting sessions.
@@ -102,10 +102,23 @@ export async function authenticateVisitor(deps: Pick<AuthDeps, 'db' | 'limiter' 
   return ctx;
 }
 
-/** Per visitor for one person, and per website so that many visitors cannot fill the shared database. */
-async function limitMessage(deps: Pick<AuthDeps, 'limiter'>, ctx: VisitorContext) {
+const DAY_SECONDS = 24 * 60 * 60;
+
+/**
+ * The speed limits come first, per visitor, per address because a visitor is free to replace, and per website.
+ * The daily limit is what stops messages piling up, because a full database stops every tenant on it. It comes
+ * last, so that a message another limit refused does not use up the day. See docs/operations/abuse-limits.md.
+ */
+async function limitMessage(deps: Pick<AuthDeps, 'limiter' | 'limits'>, ctx: VisitorContext, ip: string, content: string) {
+  if (content.length > deps.limits.messageMaxChars) throw new AppError(400, 'message_too_long', `A message can have up to ${deps.limits.messageMaxChars} characters`);
   await enforce(deps.limiter, await limitKey('visitor-message', ctx.visitorId), LIMITS.visitorMessage);
+  await enforce(deps.limiter, await limitKeyForIp(deps, 'visitor-message-ip', ip), { limit: deps.limits.messagesPerIpPerMinute, windowSeconds: 60 });
   await enforce(deps.limiter, await limitKey('website-messages', ctx.websiteId), LIMITS.websiteVisitorMessages);
+  const today = await deps.limiter.consume(await limitKey('website-messages-day', ctx.websiteId), deps.limits.messagesPerWebsitePerDay, DAY_SECONDS);
+  if (!today.allowed) {
+    createLogger({ workspaceId: ctx.workspaceId, websiteId: ctx.websiteId }).warn('website_daily_limit_reached');
+    throw new AppError(429, 'daily_limit_reached', 'This chat cannot take more messages today', { retryAfterSeconds: today.retryAfterSeconds });
+  }
 }
 
 export async function updateVisitorProfile(deps: Pick<AuthDeps, 'db' | 'limiter'>, ctx: VisitorContext, input: { name?: string | undefined; email?: string | undefined; followUpConsent?: boolean | undefined }) {
@@ -117,8 +130,8 @@ export async function listVisitorConversations(deps: Pick<AuthDeps, 'db'>, ctx: 
   return { data: (await visitorRepositories(deps.db, ctx).conversations.list()).map(toConversation) };
 }
 
-export async function createVisitorConversation(deps: Pick<AuthDeps, 'db' | 'limiter'>, ctx: VisitorContext, input: { clientMessageId: string; content: string }) {
-  await limitMessage(deps, ctx);
+export async function createVisitorConversation(deps: Pick<AuthDeps, 'db' | 'limiter' | 'limits'>, ctx: VisitorContext, input: { clientMessageId: string; content: string }, ip: string) {
+  await limitMessage(deps, ctx, ip, input.content);
   const { created, conversation, message } = await visitorRepositories(deps.db, ctx).conversations.create(input);
   return { created, messageId: message.id, conversation: { ...toConversation(conversation), message: toMessage(message, ctx) } };
 }
@@ -130,8 +143,8 @@ export async function listVisitorMessages(deps: Pick<AuthDeps, 'db'>, ctx: Visit
   return { data: (await repos.messages.list(conversationId, input)).map((row) => toMessage(row, ctx)) };
 }
 
-export async function sendVisitorMessage(deps: Pick<AuthDeps, 'db' | 'limiter'>, ctx: VisitorContext, conversationId: string, input: { clientMessageId: string; content: string; attachmentIds?: string[] | undefined }) {
-  await limitMessage(deps, ctx);
+export async function sendVisitorMessage(deps: Pick<AuthDeps, 'db' | 'limiter' | 'limits'>, ctx: VisitorContext, conversationId: string, input: { clientMessageId: string; content: string; attachmentIds?: string[] | undefined }, ip: string) {
+  await limitMessage(deps, ctx, ip, input.content);
   const { attachmentIds, ...rest } = input;
   const result = await visitorRepositories(deps.db, ctx).messages.send(conversationId, { ...rest, ...(attachmentIds?.length ? { attachmentIds: [...new Set(attachmentIds)] } : {}) });
   if (result.outcome === 'not_found') throw notFound();

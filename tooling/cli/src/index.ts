@@ -4,6 +4,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createDeployer } from './deploy';
 import { renderConfig, type DeploymentState } from './render-config';
+import { ABUSE_LIMITS } from '@openchat/shared';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
@@ -16,7 +17,10 @@ function usage(): never {
   pnpm oc render --env <name> --service <api|notification-relay>
 
 RESEND_API_KEY and TURNSTILE_SECRET_KEY are read from the environment, so that they stay out of shell history.
-TURNSTILE_SECRET_KEY needs --turnstile-site-key. Websites can then require Turnstile for new visitors.`);
+TURNSTILE_SECRET_KEY needs --turnstile-site-key. Websites can then require Turnstile for new visitors.
+
+Limits for every website, on deploy. Each is remembered for later deploys, and "default" goes back to its default:
+${Object.values(ABUSE_LIMITS).map((limit) => `  --${limit.flag} <${limit.min} to ${limit.max}>, default ${limit.default}`).join('\n')}`);
   process.exit(2);
 }
 
@@ -46,6 +50,7 @@ async function main(name: string) {
       analytics: rest.includes('--analytics'),
       emailFrom: flag('email-from'),
       turnstileSiteKey: flag('turnstile-site-key'),
+      limitFlag: flag,
       cloudflareEmail: rest.includes('--cloudflare-email'),
     });
     return;

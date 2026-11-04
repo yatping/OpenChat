@@ -27,7 +27,7 @@ import {
   websiteForWidget,
   type VisitorContext,
 } from '@openchat/core';
-import { AppError, notFound } from '@openchat/shared';
+import { AppError, notFound, readAbuseLimits } from '@openchat/shared';
 import type { Context, MiddlewareHandler } from 'hono';
 import { hubName } from '@openchat/realtime';
 import { authDeps, type App, type AppEnv } from '../context';
@@ -118,7 +118,7 @@ export function registerWidgetRoutes(app: App) {
     if (!bootstrap.found) throw notFound();
     const origin = c.req.header('origin');
     if (origin !== undefined && !bootstrap.allowedOrigins!.includes(origin)) throw new AppError(403, 'bad_origin', 'This website does not allow requests from this origin');
-    return c.json({ websiteId: bootstrap.websiteId!, settings: bootstrap.settings!, availability: bootstrap.availability ?? 'offline', ...(bootstrap.settings!.requireTurnstile === true && c.env.TURNSTILE_SITE_KEY ? { turnstileSiteKey: c.env.TURNSTILE_SITE_KEY } : {}) }, 200);
+    return c.json({ websiteId: bootstrap.websiteId!, settings: bootstrap.settings!, availability: bootstrap.availability ?? 'offline', messageMaxChars: readAbuseLimits(c.env).messageMaxChars, ...(bootstrap.settings!.requireTurnstile === true && c.env.TURNSTILE_SITE_KEY ? { turnstileSiteKey: c.env.TURNSTILE_SITE_KEY } : {}) }, 200);
   });
 
   app.openapi(createVisitorSessionRoute, async (c) => {
@@ -134,7 +134,7 @@ export function registerWidgetRoutes(app: App) {
   app.openapi(listVisitorConversationsRoute, async (c) => c.json(await listVisitorConversations(await authDeps(c.env), visitorOf(c)), 200));
 
   app.openapi(createVisitorConversationRoute, async (c) => {
-    const { created, conversation, messageId } = await createVisitorConversation(await authDeps(c.env), visitorOf(c), c.req.valid('json'));
+    const { created, conversation, messageId } = await createVisitorConversation(await authDeps(c.env), visitorOf(c), c.req.valid('json'), clientIp(c));
     dispatchSoon(c, visitorOf(c).workspaceId, [conversation.id, messageId]);
     return created ? c.json(conversation, 201) : c.json(conversation, 200);
   });
@@ -142,7 +142,7 @@ export function registerWidgetRoutes(app: App) {
   app.openapi(listVisitorMessagesRoute, async (c) => c.json(await listVisitorMessages(await authDeps(c.env), visitorOf(c), c.req.valid('param').conversationId, c.req.valid('query')), 200));
 
   app.openapi(sendVisitorMessageRoute, async (c) => {
-    const { created, message } = await sendVisitorMessage(await authDeps(c.env), visitorOf(c), c.req.valid('param').conversationId, c.req.valid('json'));
+    const { created, message } = await sendVisitorMessage(await authDeps(c.env), visitorOf(c), c.req.valid('param').conversationId, c.req.valid('json'), clientIp(c));
     dispatchSoon(c, visitorOf(c).workspaceId, [message.id, message.conversationId]);
     return created ? c.json(message, 201) : c.json(message, 200);
   });

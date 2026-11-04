@@ -68,6 +68,13 @@ export const boundaries = [
       'no-restricted-imports': restrict(
         importError(['hono', '@hono/zod-openapi', 'cloudflare:workers'], 'Domain code talks to ports, not to the platform.'),
       ),
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "CallExpression[callee.name='limitKey'] > Literal[value=/-ip$/]",
+          message: 'Use limitKeyForIp, or one IPv6 network gets billions of separate limits.',
+        },
+      ],
     },
   },
   {

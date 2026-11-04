@@ -35,8 +35,9 @@ export interface ChatState {
   typing: { displayName: string | null } | null;
   loadingOlder: boolean;
   profile: 'none' | 'required' | 'offered';
-  notice: 'rate_limited' | 'unavailable' | 'bad_file' | 'challenge' | null;
+  notice: 'rate_limited' | 'daily_limit' | 'unavailable' | 'bad_file' | 'challenge' | null;
   turnstileSiteKey: string | null;
+  messageMaxChars: number;
 }
 
 export interface ControllerDeps {
@@ -67,6 +68,7 @@ export function createController(deps: ControllerDeps) {
     profile: 'none',
     notice: null,
     turnstileSiteKey: null,
+    messageMaxChars: 4000,
   };
   const update = (change: Partial<ChatState>) => {
     state = { ...state, ...change };
@@ -284,7 +286,7 @@ export function createController(deps: ControllerDeps) {
           continue;
         }
         markMessage(message.key, { status: 'failed' });
-        update({ notice: isChallengeRefusal(error) ? 'challenge' : error instanceof ApiError && error.status === 429 ? 'rate_limited' : null });
+        update({ notice: isChallengeRefusal(error) ? 'challenge' : error instanceof ApiError && error.code === 'daily_limit_reached' ? 'daily_limit' : error instanceof ApiError && error.status === 429 ? 'rate_limited' : null });
         return;
       }
     }
@@ -308,7 +310,7 @@ export function createController(deps: ControllerDeps) {
       bootstrappedAt = now();
       try {
         const bootstrap = await deps.api.bootstrap();
-        update({ phase: 'ready', settings: bootstrap.settings, availability: bootstrap.availability, profile: profileNeed(bootstrap.settings), turnstileSiteKey: bootstrap.turnstileSiteKey ?? null });
+        update({ phase: 'ready', settings: bootstrap.settings, availability: bootstrap.availability, profile: profileNeed(bootstrap.settings), turnstileSiteKey: bootstrap.turnstileSiteKey ?? null, messageMaxChars: bootstrap.messageMaxChars });
       } catch (error) {
         if (error instanceof ApiError && (error.status === 403 || error.status === 404)) {
           update({ phase: 'hidden' });
@@ -332,7 +334,7 @@ export function createController(deps: ControllerDeps) {
           .bootstrap()
           .then((bootstrap) => {
             bootstrappedAt = now();
-            update({ settings: bootstrap.settings, availability: bootstrap.availability, profile: profileNeed(bootstrap.settings), notice: null, turnstileSiteKey: bootstrap.turnstileSiteKey ?? null });
+            update({ settings: bootstrap.settings, availability: bootstrap.availability, profile: profileNeed(bootstrap.settings), notice: null, turnstileSiteKey: bootstrap.turnstileSiteKey ?? null, messageMaxChars: bootstrap.messageMaxChars });
             // Loading failed earlier, so nothing was restored either.
             return state.conversation ? undefined : resume();
           })

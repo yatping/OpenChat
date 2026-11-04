@@ -60,7 +60,7 @@ Roles were not attacked from outside, because this deployment had one user. Each
 
 | Gap | Risk | When |
 |---|---|---|
-| **No cap on total stored data.** At the limits, one website can take 600 messages a minute of 16 KB, about 14 GB a day against D1's limit per database, and about 12 GB of files an hour | One address can reach that rate, with 30 sessions from one hour at 20 messages a minute each, and could then fill D1 in about a day and stop every tenant writing. Turnstile raises the cost, if a website turns it on | **Before general release.** See the decision below |
+| **Closed after this review.** No cap on total stored data: one website could take 600 messages a minute of 16 KB, about 14 GB a day against D1's limit per database. Visitor messages now have a [daily limit per website and other limits](../operations/abuse-limits.md). Files can still reach about 12 GB an hour in R2, a cost rather than an outage, with no daily limit | One website could have filled the database in about a day. Now about 38 days at worst | Files: decide before general release |
 | No alert when any of this happens | The operator finds out when writes fail | M5 |
 | Visitor refresh tokens never expire or rotate, and cannot be revoked | One stolen from a host page works until the visitor is deleted. It reaches only that visitor's conversations | Before general release |
 | Resuming a session counts toward 30 an hour per address | 30 returning visitors behind one office address would be turned away. Fails safe, and is an availability problem | Watch for reports, and consider separating resumes from new visitors |
@@ -72,5 +72,5 @@ Roles were not attacked from outside, because this deployment had one user. Each
 
 ## Decisions for the owner
 
-1. **Should a website have a daily storage budget?** I recommend one before anyone runs this for strangers, because the database is shared by all its tenants. It means choosing a number, and a busy site would need to be able to raise it.
+1. **Decided: a daily limit on visitor messages,** the same for every website, 20,000 by default, set by the operator. See [abuse limits](../operations/abuse-limits.md).
 2. **Get an independent review before general release.** Both this review and [the M1a review](security-review-m1a.md) are by the implementing agent.

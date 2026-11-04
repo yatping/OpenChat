@@ -542,7 +542,9 @@ export const markConversationReadRoute = createRoute({
 
 const visitor = [{ visitorAuth: [] }];
 const ClientMessageId = z.string().min(8).max(64);
-const VisitorContent = z.string().trim().min(1).max(16000);
+/** The most that an installation can allow. Its own limit, 4,000 by default, is checked later and given in the bootstrap. */
+const VISITOR_CONTENT_MAX = 16000;
+const VisitorContent = z.string().trim().min(1).max(VISITOR_CONTENT_MAX);
 const visitorConversationParams = z.object({ conversationId: z.string() });
 
 export const WidgetBootstrapSchema = z
@@ -551,6 +553,7 @@ export const WidgetBootstrapSchema = z
     settings: WidgetSettingsSchema,
     availability: z.enum(['online', 'offline']),
     turnstileSiteKey: z.string().optional().openapi({ description: 'Present when this website requires Turnstile for a new visitor.' }),
+    messageMaxChars: z.number().int().openapi({ description: "The longest message this installation accepts from a visitor. A longer one is refused with `message_too_long`." }),
   })
   .openapi('WidgetBootstrap');
 
@@ -656,7 +659,7 @@ export const sendVisitorMessageRoute = createRoute({
   operationId: 'sendVisitorMessage',
   summary: 'Send a message. Rate limited per visitor and per website.',
   security: visitor,
-  request: { params: visitorConversationParams, body: { required: true, ...json(z.strictObject({ clientMessageId: ClientMessageId, content: z.string().trim().max(16000), attachmentIds: z.array(z.string().max(64)).max(5).optional() }).refine((body) => body.content.length > 0 || (body.attachmentIds?.length ?? 0) > 0, { message: 'Write something or attach a file' })) } },
+  request: { params: visitorConversationParams, body: { required: true, ...json(z.strictObject({ clientMessageId: ClientMessageId, content: z.string().trim().max(VISITOR_CONTENT_MAX), attachmentIds: z.array(z.string().max(64)).max(5).optional() }).refine((body) => body.content.length > 0 || (body.attachmentIds?.length ?? 0) > 0, { message: 'Write something or attach a file' })) } },
   responses: {
     201: { description: 'Committed', ...json(VisitorWireMessageSchema) },
     200: { description: 'A replay of an existing clientMessageId', ...json(VisitorWireMessageSchema) },

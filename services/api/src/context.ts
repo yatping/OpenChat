@@ -3,7 +3,7 @@ import type { OpenAPIHono } from '@hono/zod-openapi';
 import { importSigningKey, importVerificationKeys, type SerializedKey, type SigningKey, type VerificationKeys } from '@openchat/auth';
 import type { AuthDeps, RateLimiter } from '@openchat/core';
 import { getInstallation, openDatabase, type Principal } from '@openchat/database';
-import { AppError, type JobEnvelope, type Logger } from '@openchat/shared';
+import { AppError, readAbuseLimits, type JobEnvelope, type Logger } from '@openchat/shared';
 import type { Env } from './env';
 
 export type AppEnv = { Bindings: Env; Variables: { requestId: string; log: Logger; principal: Principal } };
@@ -54,6 +54,7 @@ export async function authDeps(env: Env): Promise<AuthDeps> {
     signingKey,
     verificationKeys,
     limiter: limiterFor(env),
+    limits: readAbuseLimits(env),
     emailJobs: {
       send: async (job: JobEnvelope) => {
         await env.EMAIL_QUEUE.send(job);

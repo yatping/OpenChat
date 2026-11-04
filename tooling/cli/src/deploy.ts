@@ -9,7 +9,7 @@ import { dirname, join, relative } from 'node:path';
 import { generateOpaqueToken, generateSerializedKey, hashOpaqueToken } from '@openchat/auth';
 import { assertEmail, assertPublicUrl, bootstrapSql, recoverySql, resetLink } from './bootstrap';
 import { formatChecks, hasFailure, isMissingWorkersDev, runPreflight, WORKERS_DEV_HELP } from './preflight';
-import { renderConfig, type DeploymentState } from './render-config';
+import { renderConfig, type DeploymentState, mergeLimitFlags } from './render-config';
 
 export interface State extends Omit<DeploymentState, 'd1DatabaseId'> {
   d1DatabaseId?: string;
@@ -32,6 +32,7 @@ export interface DeployOptions {
   emailFrom?: string | undefined;
   turnstileSiteKey?: string | undefined;
   cloudflareEmail?: boolean;
+  limitFlag?: (name: string) => string | undefined;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -231,6 +232,7 @@ export function createDeployer(root: string) {
       if (options.publicUrl) assertPublicUrl(options.publicUrl);
       if (options.ownerEmail) assertEmail(options.ownerEmail);
       const state = load(options.name);
+      if (options.limitFlag) state.limits = mergeLimitFlags(state.limits, options.limitFlag);
       if (!state.initialized && !options.ownerEmail) throw new Error('A first deploy needs --owner-email');
       if (options.analytics) state.analyticsEngine = true;
       if (options.publicUrl) state.publicBaseUrl = options.publicUrl;

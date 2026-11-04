@@ -133,7 +133,7 @@ Checked on 2026-11-04 against what was actually run. "Real" means a throwaway de
 
 ### M1b decisions for the owner
 
-1. **A storage budget per website.** Nothing caps total stored data, and [one address could fill D1 in about a day](../architecture/security-review-m1b.md#gaps-to-close-later). Recommended before anyone runs this for strangers.
+1. **Decided: a limit on visitor messages per website, per day.** It is 20,000 by default, the same for every website, and the operator can change it. See [abuse limits](../operations/abuse-limits.md). There is still no daily limit on files, which go to R2 and cost money rather than stopping other tenants.
 2. **An independent security review** before general release, covering M1a and M1b.
 
 ## M2: iOS app without push (L)

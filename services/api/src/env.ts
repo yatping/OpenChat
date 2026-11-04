@@ -24,6 +24,11 @@ export interface Env {
   /** Worker secret, with its pair. Without both, no website can require Turnstile. */
   TURNSTILE_SECRET_KEY?: string;
   TURNSTILE_SITE_KEY?: string;
+  /** Optional. See ABUSE_LIMITS in @openchat/shared for what each means and its default. */
+  LIMIT_MESSAGES_PER_WEBSITE_PER_DAY?: string;
+  LIMIT_MESSAGES_PER_IP_PER_MINUTE?: string;
+  LIMIT_MESSAGE_MAX_CHARS?: string;
+  LIMIT_IPV6_PREFIX?: string;
   /** Optional: Analytics Engine has to be enabled per account. See tooling/cli/src/render-config.ts. */
   METRICS?: AnalyticsEngineDataset;
 }

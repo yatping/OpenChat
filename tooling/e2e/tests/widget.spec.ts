@@ -252,6 +252,24 @@ test('a replayed send makes one message, and Try again keeps its identity', asyn
   await agent.context().close();
 });
 
+test('says plainly when a chat has reached its daily limit, and holds a visitor to the longest message', async ({ browser }) => {
+  const context = await visitorContext(browser);
+  const page = await shop(context);
+  watch(page);
+  await startChat(page, 'First');
+  await expect(compose(page)).toHaveAttribute('maxlength', '4000');
+
+  await context.route(/\/conversations\/[^/]+\/messages$/, (route) =>
+    route.request().method() === 'POST'
+      ? route.fulfill({ status: 429, contentType: 'application/problem+json', headers: { 'retry-after': '3600' }, body: JSON.stringify({ type: 'about:blank', title: 'This chat cannot take more messages today', status: 429, code: 'daily_limit_reached' }) })
+      : route.continue(),
+  );
+  await compose(page).fill('Second');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(panel(page).getByRole('alert')).toHaveText('This chat cannot take more messages today. Please try again later.');
+  await context.close();
+});
+
 test('losing the socket mid-exchange loses nothing', async ({ browser }) => {
   const agent = await openInbox(browser);
   const context = await visitorContext(browser);

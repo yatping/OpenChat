@@ -1,11 +1,28 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { parseTemplate, renderConfig } from '../src/render-config';
+import { mergeLimitFlags, parseTemplate, renderConfig } from '../src/render-config';
 
 const source = readFileSync(new URL('../../../services/api/wrangler.template.jsonc', import.meta.url), 'utf8');
 const state = { name: 'acme-prod', d1DatabaseId: '00000000-0000-0000-0000-000000000000' };
 
 describe('renderConfig', () => {
+  it('passes on only the limits the operator chose', () => {
+    expect(renderConfig(source, state, '../../services/api').vars).toBeUndefined();
+    const rendered = renderConfig(source, { ...state, limits: { messagesPerWebsitePerDay: 500 } }, '../../services/api');
+    expect(rendered.vars).toEqual({ LIMIT_MESSAGES_PER_WEBSITE_PER_DAY: '500' });
+  });
+
+  it('keeps what a deployment chose until told otherwise, and refuses a value that cannot work', () => {
+    const flags = (values: Record<string, string>) => (name: string) => values[name];
+    const first = mergeLimitFlags(undefined, flags({ 'messages-per-website-per-day': '500', 'ipv6-prefix': '56' }));
+    expect(first).toEqual({ messagesPerWebsitePerDay: 500, ipv6Prefix: 56 });
+    expect(mergeLimitFlags(first, flags({ 'message-max-chars': '1000' }))).toEqual({ messagesPerWebsitePerDay: 500, ipv6Prefix: 56, messageMaxChars: 1000 });
+    expect(mergeLimitFlags(first, flags({ 'ipv6-prefix': 'default' }))).toEqual({ messagesPerWebsitePerDay: 500 });
+    expect(() => mergeLimitFlags(first, flags({ 'message-max-chars': '16001' }))).toThrow(/1 to 16000/);
+    expect(() => mergeLimitFlags(first, flags({ 'ipv6-prefix': '16' }))).toThrow(/32 to 128/);
+    expect(() => mergeLimitFlags(first, flags({ 'messages-per-ip-per-minute': 'lots' }))).toThrow(/whole number/);
+  });
+
   it('adds the email binding only when chosen, restricted to the sending address', () => {
     expect(renderConfig(source, state, '../../services/api').send_email).toBeUndefined();
     expect(renderConfig(source, { ...state, cloudflareEmailFrom: 'no-reply@example.com' }, '../../services/api').send_email).toEqual([{ name: 'EMAIL', allowed_sender_addresses: ['no-reply@example.com'] }]);
