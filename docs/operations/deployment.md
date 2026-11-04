@@ -32,7 +32,7 @@ A brand-new account has not been tried yet, so this list comes from Cloudflare's
 | Queues | `oc-<name>-notifications`, `-email`, `-jobs`, each with a `-dlq` |
 | Durable Objects | `WorkspaceHub`, `ConversationRoom`, plus an auth guard |
 | Analytics Engine dataset | `oc_<name>`. Opt-in with `analyticsEngine: true` in deployment state, because it must first be enabled once per account in the Cloudflare dashboard, or the deploy fails |
-| Secrets | `AUTH_SIGNING_KEY`, `TICKET_SIGNING_KEY`, `RELAY_SIGNING_KEY`, `DATA_ENCRYPTION_KEY`, `RESEND_API_KEY` |
+| Secrets | `AUTH_SIGNING_KEY`, `TICKET_SIGNING_KEY`, `RELAY_SIGNING_KEY`, `DATA_ENCRYPTION_KEY`, `RESEND_API_KEY`, `TURNSTILE_SECRET_KEY`, with the public `TURNSTILE_SITE_KEY` set the same way |
 | Email binding | `EMAIL`, only with `--cloudflare-email`, and able to send only from `--email-from` |
 
 ## Configuration model
@@ -70,6 +70,7 @@ This needs Workers Paid ([ADR-0009](../architecture/decisions/0009-paid-plan-and
 ```bash
 pnpm oc deploy --env acme --cloudflare-email --email-from no-reply@mail.example.com
 RESEND_API_KEY=... pnpm oc deploy --env acme --email-from no-reply@mail.example.com
+TURNSTILE_SECRET_KEY=... pnpm oc deploy --env acme --turnstile-site-key <site key>
 ```
 
 Metrics are optional: enable Analytics Engine once in the Cloudflare dashboard, then add `--analytics`. To use your own domain, attach it to the Worker, then pass `--public-url https://chat.example.com`, because links in emails are built from that URL.

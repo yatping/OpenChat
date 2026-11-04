@@ -4,6 +4,7 @@
  * Rules are in docs/architecture/realtime.md.
  */
 import { createRealtime, type Realtime, type RealtimeDeps, type RealtimeStatus, type ServerFrame } from '@openchat/api-client/realtime';
+import { ChallengeFailed } from './turnstile';
 import { ApiError, type Api, type Bootstrap, type VisitorConversation, type VisitorMessage } from './api';
 import { hasOlder, lastSeq, mergeMessages, newClientMessageId, pendingMessage, retryDelayMs, unreadCount, type ChatMessage } from './state';
 import type { WidgetStorage } from './storage';
@@ -34,7 +35,8 @@ export interface ChatState {
   typing: { displayName: string | null } | null;
   loadingOlder: boolean;
   profile: 'none' | 'required' | 'offered';
-  notice: 'rate_limited' | 'unavailable' | 'bad_file' | null;
+  notice: 'rate_limited' | 'unavailable' | 'bad_file' | 'challenge' | null;
+  turnstileSiteKey: string | null;
 }
 
 export interface ControllerDeps {
@@ -64,6 +66,7 @@ export function createController(deps: ControllerDeps) {
     loadingOlder: false,
     profile: 'none',
     notice: null,
+    turnstileSiteKey: null,
   };
   const update = (change: Partial<ChatState>) => {
     state = { ...state, ...change };
@@ -237,7 +240,8 @@ export function createController(deps: ControllerDeps) {
     update({ messages: state.messages.map((m) => (m.key === key && m.status !== 'sent' ? { ...m, ...change } : m)) });
   };
 
-  const isTransient = (error: unknown) => !(error instanceof ApiError) || error.status >= 500;
+  const isTransient = (error: unknown) => !(error instanceof ChallengeFailed) && (!(error instanceof ApiError) || error.status >= 500);
+  const isChallengeRefusal = (error: unknown) => error instanceof ChallengeFailed || (error instanceof ApiError && error.code === 'turnstile_failed');
 
   const deliver = async (message: ChatMessage) => {
     const input = { clientMessageId: message.clientMessageId!, content: message.content };
@@ -280,7 +284,7 @@ export function createController(deps: ControllerDeps) {
           continue;
         }
         markMessage(message.key, { status: 'failed' });
-        update({ notice: error instanceof ApiError && error.status === 429 ? 'rate_limited' : null });
+        update({ notice: isChallengeRefusal(error) ? 'challenge' : error instanceof ApiError && error.status === 429 ? 'rate_limited' : null });
         return;
       }
     }
@@ -304,7 +308,7 @@ export function createController(deps: ControllerDeps) {
       bootstrappedAt = now();
       try {
         const bootstrap = await deps.api.bootstrap();
-        update({ phase: 'ready', settings: bootstrap.settings, availability: bootstrap.availability, profile: profileNeed(bootstrap.settings) });
+        update({ phase: 'ready', settings: bootstrap.settings, availability: bootstrap.availability, profile: profileNeed(bootstrap.settings), turnstileSiteKey: bootstrap.turnstileSiteKey ?? null });
       } catch (error) {
         if (error instanceof ApiError && (error.status === 403 || error.status === 404)) {
           update({ phase: 'hidden' });
@@ -328,7 +332,7 @@ export function createController(deps: ControllerDeps) {
           .bootstrap()
           .then((bootstrap) => {
             bootstrappedAt = now();
-            update({ settings: bootstrap.settings, availability: bootstrap.availability, profile: profileNeed(bootstrap.settings), notice: null });
+            update({ settings: bootstrap.settings, availability: bootstrap.availability, profile: profileNeed(bootstrap.settings), notice: null, turnstileSiteKey: bootstrap.turnstileSiteKey ?? null });
             // Loading failed earlier, so nothing was restored either.
             return state.conversation ? undefined : resume();
           })

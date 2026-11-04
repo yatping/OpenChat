@@ -53,6 +53,14 @@ export interface AuthDeps {
   verificationKeys: VerificationKeys;
   limiter: RateLimiter;
   emailJobs: JobQueue;
+  /** Absent unless this installation was deployed with Turnstile keys. */
+  turnstile?: TurnstileVerifier;
+}
+
+/** Throws if the answer could not be found out, which is not the same as a token being wrong. */
+export interface TurnstileVerifier {
+  siteKey: string;
+  verify(token: string, ip: string): Promise<boolean>;
 }
 
 export const LIMITS = {

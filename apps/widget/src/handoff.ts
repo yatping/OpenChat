@@ -5,6 +5,8 @@ export interface Handoff {
   shadow: ShadowRoot;
   host: HTMLElement;
   button: HTMLButtonElement;
+  /** The loader's own nonce, for a host page that allows scripts that way. */
+  nonce?: string;
   /** Hold everything in session storage until the host page says otherwise. */
   consentPending: boolean;
   /** The visitor clicked before the bundle arrived, or the host page called open(). */

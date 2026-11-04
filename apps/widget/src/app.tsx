@@ -181,7 +181,7 @@ function Composer({ controller, canAttach }: { controller: Controller; canAttach
   );
 }
 
-export function App({ controller, button }: { controller: Controller; button: HTMLButtonElement }) {
+export function App({ controller, button, challengeHost }: { controller: Controller; button: HTMLButtonElement; challengeHost: HTMLElement }) {
   const state = useChat(controller);
   const panel = useRef<HTMLDivElement>(null);
   const log = useRef<HTMLDivElement>(null);
@@ -276,8 +276,9 @@ export function App({ controller, button }: { controller: Controller; button: HT
           <Message key={message.key} message={message} state={stateOf(message)} onRetry={() => void controller.retry(message.key)} controller={controller} />
         ))}
       </div>
+      <div class="oc-challenge" ref={(element) => { if (element && challengeHost.parentElement !== element) element.appendChild(challengeHost); }} />
       <div class="oc-typing" aria-live="polite">{state.typing ? S.typing(state.typing.displayName) : ''}</div>
-      {state.notice && <p class="oc-note bad" role="alert">{state.notice === 'rate_limited' ? S.rateLimited : state.notice === 'bad_file' ? S.badFile : S.unavailable}</p>}
+      {state.notice && <p class="oc-note bad" role="alert">{state.notice === 'rate_limited' ? S.rateLimited : state.notice === 'bad_file' ? S.badFile : state.notice === 'challenge' ? S.challengeFailed : S.unavailable}</p>}
       {state.conversation?.status === 'resolved' && <p class="oc-note">{S.resolved}</p>}
       {state.profile === 'offered' && state.messages.some((m) => m.mine) && <ProfileForm controller={controller} required={false} />}
       {state.profile === 'required' ? <ProfileForm controller={controller} required /> : <Composer controller={controller} canAttach={state.conversation !== null} />}

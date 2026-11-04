@@ -1,3 +1,4 @@
+import { turnstileFor } from './turnstile';
 import type { OpenAPIHono } from '@hono/zod-openapi';
 import { importSigningKey, importVerificationKeys, type SerializedKey, type SigningKey, type VerificationKeys } from '@openchat/auth';
 import type { AuthDeps, RateLimiter } from '@openchat/core';
@@ -45,7 +46,9 @@ export async function authDeps(env: Env): Promise<AuthDeps> {
     installationId = installation.id;
   }
   const { signingKey, verificationKeys } = await loadKeys(env.AUTH_SIGNING_KEY);
+  const turnstile = turnstileFor(env);
   return {
+    ...(turnstile ? { turnstile } : {}),
     db,
     installationId,
     signingKey,

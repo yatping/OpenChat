@@ -38,7 +38,7 @@ function start(script: HTMLScriptElement | null, websiteKey: string, apiUrl: str
   button.innerHTML = `${ICON}<span class="oc-badge" hidden></span>`;
   shadow.appendChild(button);
 
-  const handoff: Handoff = { websiteKey, apiUrl, shadow, host, button, consentPending, openOnStart: false };
+  const handoff: Handoff = { websiteKey, apiUrl, shadow, host, button, consentPending, openOnStart: false, ...(script?.nonce ? { nonce: script.nonce } : {}) };
   if (!consentPending) {
     try {
       applyColor(host, localStorage.getItem(colorKey(websiteKey)));

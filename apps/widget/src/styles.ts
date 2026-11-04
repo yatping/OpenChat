@@ -29,6 +29,7 @@ export const CHAT_CSS = `
 .oc-attach{width:40px;height:40px;flex:none;padding:8px;border:1px solid var(--oc-line);border-radius:8px;background:none;color:inherit;cursor:pointer}
 .oc-attach svg{display:block;width:100%;height:100%;fill:currentColor}
 .oc-attach:focus-visible{outline:2px solid var(--oc-primary);outline-offset:1px}
+.oc-challenge{padding:0 14px;max-width:100%;overflow:auto}
 .oc-typing{min-height:18px;padding:0 14px;font-size:12px;color:var(--oc-muted)}
 .oc-note{margin:0;padding:8px 14px;font-size:12px;color:var(--oc-muted);border-top:1px solid var(--oc-line)}
 .oc-note.bad{color:var(--oc-error)}

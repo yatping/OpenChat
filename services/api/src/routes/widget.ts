@@ -117,7 +117,7 @@ export function registerWidgetRoutes(app: App) {
     if (!bootstrap.found) throw notFound();
     const origin = c.req.header('origin');
     if (origin !== undefined && !bootstrap.allowedOrigins!.includes(origin)) throw new AppError(403, 'bad_origin', 'This website does not allow requests from this origin');
-    return c.json({ websiteId: bootstrap.websiteId!, settings: bootstrap.settings!, availability: bootstrap.availability ?? 'offline' }, 200);
+    return c.json({ websiteId: bootstrap.websiteId!, settings: bootstrap.settings!, availability: bootstrap.availability ?? 'offline', ...(bootstrap.settings!.requireTurnstile === true && c.env.TURNSTILE_SITE_KEY ? { turnstileSiteKey: c.env.TURNSTILE_SITE_KEY } : {}) }, 200);
   });
 
   app.openapi(createVisitorSessionRoute, async (c) => {

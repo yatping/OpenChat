@@ -5,13 +5,18 @@ import { App } from './app';
 import { createController } from './controller';
 import { addStyles, applyColor, colorKey, type HandoffScript } from './handoff';
 import { createStorage } from './storage';
+import { createChallenge } from './turnstile';
 import { CHAT_CSS } from './styles';
 
 const handoff = (document.currentScript as HandoffScript | null)?.openchat;
 
 if (handoff) {
   const storage = createStorage(handoff.websiteKey, handoff.consentPending);
+  // Kept out of Preact's tree, because Turnstile writes inside it. The panel gives it a place on the screen.
+  const challengeHost = document.createElement('div');
+  const challenge = createChallenge(challengeHost, handoff.nonce);
   const api = createApi({
+    solveChallenge: () => challenge.solve(),
     apiUrl: handoff.apiUrl,
     websiteKey: handoff.websiteKey,
     loadSession: () => storage.get().session ?? null,
@@ -37,11 +42,12 @@ if (handoff) {
     if (document.visibilityState === 'visible') controller.onVisible();
   });
 
-  render(<App controller={controller} button={handoff.button} />, root);
+  render(<App controller={controller} button={handoff.button} challengeHost={challengeHost} />, root);
   if (handoff.openOnStart) controller.setOpen(true);
 
   let color: string | undefined;
   controller.subscribe(() => {
+    challenge.setSiteKey(controller.getState().turnstileSiteKey ?? undefined);
     const next = controller.getState().settings?.primaryColor;
     if (!next || next === color) return;
     color = next;

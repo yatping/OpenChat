@@ -57,7 +57,21 @@ const toMessage = (row: VisitorMessageRow, ctx: VisitorContext) => ({
 
 export const websiteForWidget = (deps: Pick<AuthDeps, 'db'>, websiteKey: string): Promise<PublicWebsite | null> => findWebsiteByKey(deps.db, websiteKey);
 
-export async function createVisitorSession(deps: AuthDeps, input: { websiteKey: string; refreshToken?: string | undefined; origin: string | undefined; ip: string }) {
+/**
+ * Fails closed: a website that asked for this keeps new visitors out while the check cannot run, because the
+ * alternative is that an outage opens the door. Visitors it already knows carry on.
+ */
+async function assertHuman(deps: Pick<AuthDeps, 'turnstile'>, token: string | undefined, ip: string): Promise<void> {
+  const unavailable = () => new AppError(503, 'turnstile_unavailable', 'New chats cannot start just now. Please try again soon');
+  if (!deps.turnstile) throw unavailable();
+  if (!token) throw new AppError(403, 'turnstile_required', 'This website asks new visitors to pass a check first');
+  const passed = await deps.turnstile.verify(token, ip).catch(() => {
+    throw unavailable();
+  });
+  if (!passed) throw new AppError(403, 'turnstile_failed', 'That check did not pass. Please try again');
+}
+
+export async function createVisitorSession(deps: AuthDeps, input: { websiteKey: string; refreshToken?: string | undefined; turnstileToken?: string | undefined; origin: string | undefined; ip: string }) {
   await enforce(deps.limiter, await limitKey('visitor-session-ip', input.ip), LIMITS.visitorSessionIp);
   const website = await findWebsiteByKey(deps.db, input.websiteKey);
   if (!website) throw notFound();
@@ -68,6 +82,7 @@ export async function createVisitorSession(deps: AuthDeps, input: { websiteKey: 
   let refreshToken = input.refreshToken;
   let visitorId = refreshToken ? await resumeVisitor(deps.db, website.id, await hashOpaqueToken(refreshToken)) : null;
   if (!visitorId) {
+    if (website.settings.requireTurnstile === true) await assertHuman(deps, input.turnstileToken, input.ip);
     refreshToken = generateOpaqueToken();
     visitorId = await createVisitor(deps.db, website, await hashOpaqueToken(refreshToken));
   }

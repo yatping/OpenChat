@@ -283,6 +283,16 @@ Not tested on real Cloudflare: the hourly orphan sweep, and a body shorter than 
 
 **A bucket with files in it cannot be deleted.** `wrangler r2 bucket delete` refuses, and Wrangler has no command to empty one, so removing a deployment that has received files needs a small Worker to delete them first. This matters to the uninstall story, which does not cover it yet.
 
+### Turnstile on real Cloudflare, 2026-11-04
+
+Run with Cloudflare's published test keys, the real `api.js` in headless Chromium, the real siteverify service, and a strict CSP on the host page. Then removed.
+
+- The challenge renders and works inside the widget's open Shadow DOM. First message took 6.4 s including the check, with the Worker and D1 far apart.
+- A page view contacts nobody. A known visitor is not checked again after a reload.
+- No token: 403 `turnstile_required`. Client-side failure key and refusing secret: visitor told, nothing reaches the inbox. Wrong secret: 503 `turnstile_unavailable`.
+- The forced-interactive key shows the checkbox in the panel, seen by screenshot. Nobody clicked it.
+- **Not tested:** a real site key on a real hostname, and any browser but Chromium. The test secret accepts any token, so replay refusal was only tested against a stubbed service.
+
 ### Follow-up deployment, 2026-11-04
 
 A second throwaway deployment on the same account took about 90 seconds, then was removed. `oc preflight` passed, and with a bad API token it stopped before creating anything. `/api/*` answers carried `no-store` and `nosniff`. Account deletion answered 401 with no token, 400 with no password, 403 with a wrong password, and 409 for the last owner with the right one. A successful deletion has only run in workerd, because this deployment had one user. The check's failure cases for R2, D1, Queues, and several accounts, and the missing `workers.dev` message, have only run against a fake Wrangler.

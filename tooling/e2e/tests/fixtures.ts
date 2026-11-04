@@ -6,3 +6,7 @@ export const WEBSITE_KEY = 'key_e2e';
 export const SITE_ORIGIN = 'https://shop.example';
 export const STYLED_WEBSITE_KEY = 'key_e2e_styled';
 export const STYLED_WEBSITE_SETTINGS = { welcomeMessage: 'Welcome to the shop', primaryColor: '#fde047', collectEmail: 'required', showAgentNames: true };
+export const TURNSTILE_WEBSITE_KEY = 'key_e2e_turnstile';
+/** Cloudflare's published test keys, which always pass. The local Worker really asks Cloudflare about them. */
+export const TURNSTILE_TEST_SITE_KEY = '1x00000000000000000000AA';
+export const TURNSTILE_TEST_SECRET = '1x0000000000000000000000000000000AA';

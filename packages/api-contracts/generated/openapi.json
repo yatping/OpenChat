@@ -1503,6 +1503,10 @@
               "online",
               "offline"
             ]
+          },
+          "turnstileSiteKey": {
+            "type": "string",
+            "description": "Present when this website requires Turnstile for a new visitor."
           }
         },
         "required": [
@@ -2879,6 +2883,11 @@
                   "refreshToken": {
                     "type": "string",
                     "maxLength": 256
+                  },
+                  "turnstileToken": {
+                    "type": "string",
+                    "maxLength": 2048,
+                    "description": "Needed to start a new visitor on a website that requires Turnstile. Not needed to resume one."
                   }
                 },
                 "required": [

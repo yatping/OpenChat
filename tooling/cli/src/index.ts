@@ -15,7 +15,8 @@ function usage(): never {
   pnpm oc recover --env <name> --email <address>
   pnpm oc render --env <name> --service <api|notification-relay>
 
-RESEND_API_KEY is read from the environment, so that it stays out of shell history.`);
+RESEND_API_KEY and TURNSTILE_SECRET_KEY are read from the environment, so that they stay out of shell history.
+TURNSTILE_SECRET_KEY needs --turnstile-site-key. Websites can then require Turnstile for new visitors.`);
   process.exit(2);
 }
 
@@ -44,6 +45,7 @@ async function main(name: string) {
       location: flag('location'),
       analytics: rest.includes('--analytics'),
       emailFrom: flag('email-from'),
+      turnstileSiteKey: flag('turnstile-site-key'),
       cloudflareEmail: rest.includes('--cloudflare-email'),
     });
     return;
