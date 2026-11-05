@@ -15,11 +15,13 @@ import { createInboxCache, type InboxCache } from './cache';
 import { ConversationScreen } from './conversation-screen';
 import { InboxScreen } from './inbox-screen';
 import { useLive } from './live';
+import { DetailsScreen } from './details-screen';
 import { SettingsScreen } from './settings-screen';
 
 export type Routes = {
   Inbox: undefined;
   Conversation: { conversationId: string };
+  Details: { conversationId: string };
   Settings: undefined;
 };
 
@@ -59,6 +61,7 @@ function Workspace({ connection, workspaceId, me, api, onAdd, client }: { connec
           <Stack.Navigator>
             <Stack.Screen name="Inbox" component={InboxScreen} options={{ title: membership.workspace.name }} />
             <Stack.Screen name="Conversation" component={ConversationScreen} options={{ title: '' }} />
+            <Stack.Screen name="Details" component={DetailsScreen} />
             <Stack.Screen name="Settings" component={SettingsScreen} />
           </Stack.Navigator>
         </NavigationContainer>

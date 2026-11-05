@@ -1,6 +1,7 @@
 import { ApiError, type Attachment, type Conversation, type Message } from '@openchat/api-client';
 import { highestSeq, mergeMessages, shouldSendTyping } from '@openchat/api-client/inbox-state';
 import { useIsFocused, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { randomUUID } from 'expo-crypto';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -154,7 +155,7 @@ function Composer({ conversationId }: { conversationId: string }) {
 export function ConversationScreen() {
   const theme = useTheme();
   const client = useQueryClient();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<Routes>>();
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
   const { conversationId } = useRoute<RouteProp<Routes, 'Conversation'>>().params;
@@ -178,8 +179,15 @@ export function ConversationScreen() {
   const name = data ? conversationLabel(data) : '';
 
   useLayoutEffect(() => {
-    navigation.setOptions({ title: name });
-  }, [name, navigation]);
+    navigation.setOptions({
+      title: name,
+      headerRight: () => (
+        <Pressable accessibilityRole="button" accessibilityLabel="Contact and tags" onPress={() => navigation.navigate('Details', { conversationId })} hitSlop={8} style={{ paddingHorizontal: 8 }}>
+          <Text style={{ color: theme.primary, fontSize: 16 }}>Details</Text>
+        </Pressable>
+      ),
+    });
+  }, [conversationId, name, navigation, theme.primary]);
 
   const [noMoreHistory, setNoMoreHistory] = useState(false);
   const older = useMutation({

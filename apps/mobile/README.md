@@ -1,6 +1,6 @@
 # OpenChat mobile
 
-The iOS app, built with Expo. It is in progress as Milestone 2. Today it can connect to installations, sign in, switch between them, and sign out. It has an inbox with filters and a conversation view, where you can reply, write internal notes, and change status, priority, and assignee. You can view, send, and open photos and documents. The design is in [the iOS build guide](../../docs/ios-build/expo-and-white-label.md).
+The iOS app, built with Expo. It is in progress as Milestone 2. Today it can connect to installations, sign in, switch between them, and sign out. It has an inbox with filters and a conversation view, where you can reply, write internal notes, and change status, priority, and assignee. You can view, send, and open photos and documents, and edit contact details and tags. The design is in [the iOS build guide](../../docs/ios-build/expo-and-white-label.md).
 
 ```sh
 pnpm prebuild

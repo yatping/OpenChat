@@ -9,7 +9,8 @@ export function SettingsScreen() {
   return (
     <Screen>
       <Title>{connection.installationName}</Title>
-      <Body muted>Signed in as {connection.email}</Body>
+      <Body>{me.name}</Body>
+      <Body muted>Signed in as {me.email}</Body>
       {me.memberships.length > 1 && <Body>Workspaces</Body>}
       {me.memberships.length > 1 &&
         me.memberships.map(({ workspace }) => (
