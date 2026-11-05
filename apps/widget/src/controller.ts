@@ -400,7 +400,7 @@ export function createController(deps: ControllerDeps) {
       }
     },
 
-    async saveProfile(input: { name?: string; email?: string }) {
+    async saveProfile(input: { name?: string; email?: string; followUpConsent?: boolean }) {
       await deps.api.updateProfile(input);
       deps.storage.set({ profileDone: true });
       update({ profile: 'none' });

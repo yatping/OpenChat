@@ -35,6 +35,7 @@ Beyond the spec's entities, the schema adds what stated requirements need:
 | `tags`, `conversation_tags`, `contact_tags` | Tagging |
 | `push_subscriptions` | Replaces `Devices`. Holds handles, never APNs tokens |
 | `email_suppressions`, `email_deliveries` | Suppression and duplicate prevention |
+| `email_unsubscribe_links` | One row per link sent, with a hash of its token. Contact erasure must remove these too |
 | `contacts.follow_up_consent_*` | Consent evidence |
 | `automation_runs` | At most one follow-up per rule and quiet period |
 | `outbox`, `job_receipts`, `failed_jobs` | Reliable dispatch, consumer idempotency, durable failure records |

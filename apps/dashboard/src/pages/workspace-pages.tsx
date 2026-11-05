@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api, errorMessage, preference, queryClient, session } from '../app-context';
 import { InboxPanel } from '../inbox/inbox-panel';
-import { NotificationsPanel } from './notifications-panel';
+import { NotificationsPanel, SuppressionsPanel } from './notifications-panel';
 import { PeoplePage } from './people-page';
 import { CopyableSnippet, WorkspacesAdminPage } from './workspaces-admin-page';
 
@@ -111,14 +111,14 @@ export function WorkspaceApp() {
       {current && !adminPage && (
         // The key gives each workspace fresh component state, so nothing typed in one appears in another.
         <div key={current.workspace.id} className="space-y-6">
-          <nav className="flex gap-2" aria-label="Sections">
+          <nav className="flex flex-wrap gap-2" aria-label="Sections">
             {(['inbox', 'websites', 'members', 'notifications'] as const).map((name) => (
               <button key={name} className={tab === name ? 'button capitalize' : 'button-quiet capitalize'} aria-current={tab === name ? 'page' : undefined} onClick={() => setTab(name)}>
                 {name}
               </button>
             ))}
           </nav>
-          {tab === 'inbox' ? <InboxWithMembers membership={current} /> : tab === 'websites' ? <WebsitesPanel membership={current} /> : tab === 'notifications' ? <NotificationsPanel workspaceId={current.workspace.id} /> : <MembersPanel membership={current} />}
+          {tab === 'inbox' ? <InboxWithMembers membership={current} /> : tab === 'websites' ? <WebsitesPanel membership={current} /> : tab === 'notifications' ? <div className="space-y-6"><NotificationsPanel workspaceId={current.workspace.id} />{current.role === 'supervisor' && <SuppressionsPanel workspaceId={current.workspace.id} />}</div> : <MembersPanel membership={current} />}
         </div>
       )}
     </div>

@@ -40,6 +40,7 @@ export const CHAT_CSS = `
 .oc-form{display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-top:1px solid var(--oc-line)}
 .oc-form p{margin:0;font-weight:600}
 .oc-form label{display:flex;flex-direction:column;gap:2px;font-size:12px}
+.oc-form label.oc-check{flex-direction:row;align-items:flex-start;gap:6px}
 .oc-actions{display:flex;gap:12px;align-items:center}
 @media (max-width:480px){.oc-panel{inset:0;width:auto;height:100%;border:0;border-radius:0;z-index:2147483001}}
 @media (prefers-reduced-motion:no-preference){.oc-panel{animation:oc-in .15s ease-out}@keyframes oc-in{from{opacity:0;transform:translateY(8px)}}}

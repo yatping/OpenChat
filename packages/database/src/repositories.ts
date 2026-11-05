@@ -198,14 +198,17 @@ export function repositories(database: Database, ctx: WorkspaceContext) {
       get(contactId: string): Promise<ContactRow | null> {
         return d1.prepare(`${CONTACT_SELECT} WHERE workspace_id = ?1 AND id = ?2`).bind(w, contactId).first<ContactRow>();
       },
-      /** Undefined leaves a field alone, and null clears it. */
+      /** Undefined leaves a field alone, and null clears it. Consent was given for one address, so a different one loses it. */
       async update(contactId: string, change: { name?: string | null | undefined; email?: string | null | undefined; phone?: string | null | undefined }): Promise<boolean> {
         const field = (value: string | null | undefined) => [value === undefined ? 0 : 1, value ?? null];
         const result = await d1
           .prepare(
             `UPDATE contacts
                 SET name = CASE WHEN ?1 THEN ?2 ELSE name END, email = CASE WHEN ?3 THEN ?4 ELSE email END,
-                    phone = CASE WHEN ?5 THEN ?6 ELSE phone END, updated_at = ${DB_NOW_MS}
+                    phone = CASE WHEN ?5 THEN ?6 ELSE phone END,
+                    follow_up_consent_at = CASE WHEN ?3 AND email IS NOT ?4 THEN NULL ELSE follow_up_consent_at END,
+                    follow_up_consent_source = CASE WHEN ?3 AND email IS NOT ?4 THEN NULL ELSE follow_up_consent_source END,
+                    updated_at = ${DB_NOW_MS}
               WHERE workspace_id = ?7 AND id = ?8`,
           )
           .bind(...field(change.name), ...field(change.email), ...field(change.phone), w, contactId)

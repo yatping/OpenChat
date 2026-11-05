@@ -17,7 +17,7 @@ import {
   type Database,
   type OutboxRow,
 } from '@openchat/database';
-import type { EmailProvider } from '@openchat/email';
+import { EmailSendError, type EmailProvider } from '@openchat/email';
 import { createLogger, newId, type JobEnvelope } from '@openchat/shared';
 import type { Env } from '../env';
 
@@ -95,6 +95,11 @@ async function handleSend(job: JobEnvelope, env: Env, email: EmailProvider): Pro
     const sent = await email.send({ to: recipient.email, from: { name: facts.workspaceName, email: env.SYSTEM_EMAIL_FROM ?? `no-reply@${new URL(installation.publicBaseUrl).hostname}` }, ...message, idempotencyKey: dedupeKey });
     await finishEmailDelivery(db, { workspaceId, dedupeKey, status: 'sent', providerMessageId: sent.messageId });
   } catch (error) {
+    // Cloudflare keeps a list of its own, from bounces and complaints. Retrying could not change its answer.
+    if (error instanceof EmailSendError && error.code === 'E_RECIPIENT_SUPPRESSED') {
+      await finishEmailDelivery(db, { workspaceId, dedupeKey, status: 'suppressed' });
+      return;
+    }
     await finishEmailDelivery(db, { workspaceId, dedupeKey, status: 'failed' }).catch(() => undefined);
     throw error;
   }

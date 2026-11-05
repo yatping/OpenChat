@@ -336,8 +336,13 @@ test('uses the website settings: colour with readable text, welcome, names, and 
   await expect(compose(page)).toBeHidden();
   await expect(panel(page).getByLabel('Name')).toBeFocused();
 
-  await panel(page).getByLabel('Email').fill('visitor@example.com');
+  const consentBox = panel(page).getByRole('checkbox', { name: /Email me about this conversation/ });
+  await expect(consentBox).not.toBeChecked();
+  await panel(page).getByLabel('Email', { exact: true }).fill('visitor@example.com');
+  await consentBox.check();
+  const saved = page.waitForRequest((request) => request.url().endsWith('/api/v1/widget/me') && request.method() === 'PATCH');
   await panel(page).getByRole('button', { name: 'Start chatting' }).click();
+  expect((await saved).postDataJSON()).toMatchObject({ email: 'visitor@example.com', followUpConsent: true });
   await expect(compose(page)).toBeVisible();
   await page.reload();
   await launcher(page).click();

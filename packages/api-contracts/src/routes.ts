@@ -334,6 +334,77 @@ export const setNotificationPreferencesRoute = createRoute({
   responses: { 204: { description: 'Updated' }, default: problemResponse },
 });
 
+// ---------- Email consent ----------
+
+const UnsubscribeQuery = z.object({ token: z.string().max(200).optional() });
+const unsubscribePage = { content: { 'text/html': { schema: z.string() } } };
+
+export const showUnsubscribeRoute = createRoute({
+  method: 'get',
+  path: '/api/v1/unsubscribe',
+  tags: ['email'],
+  security: [],
+  operationId: 'showUnsubscribe',
+  summary: 'A page that asks to confirm',
+  description: 'Changes nothing, because mail scanners open links on their own. No sign-in. The token in the link is the only authority.',
+  request: { query: UnsubscribeQuery },
+  responses: { 200: { description: 'Page', ...unsubscribePage }, 404: { description: 'No such link', ...unsubscribePage }, default: problemResponse },
+});
+
+export const confirmUnsubscribeRoute = createRoute({
+  method: 'post',
+  path: '/api/v1/unsubscribe',
+  tags: ['email'],
+  security: [],
+  operationId: 'confirmUnsubscribe',
+  summary: 'Unsubscribe, from the page or by one click in a mail app (RFC 8058)',
+  description: 'Adds the address to the workspace suppression list and clears its consent. Repeating it changes nothing more.',
+  request: { query: UnsubscribeQuery },
+  responses: { 200: { description: 'Page', ...unsubscribePage }, 404: { description: 'No such link', ...unsubscribePage }, default: problemResponse },
+});
+
+export const EmailSuppressionSchema = z
+  .object({ email: z.string(), reason: z.enum(['unsubscribe', 'bounce', 'complaint', 'manual']), createdAt: z.number() })
+  .openapi('EmailSuppression');
+
+const SuppressionBody = z.strictObject({ email: z.email().max(254) });
+
+export const listEmailSuppressionsRoute = createRoute({
+  method: 'get',
+  path: '/api/v1/workspaces/{workspaceId}/email-suppressions',
+  tags: ['email'],
+  operationId: 'listEmailSuppressions',
+  summary: 'Addresses this workspace must not email. For supervisors.',
+  security: bearer,
+  request: { params: workspaceParams, query: PaginationQuery },
+  responses: { 200: { description: 'Addresses', ...json(page(EmailSuppressionSchema)) }, default: problemResponse },
+});
+
+export const addEmailSuppressionRoute = createRoute({
+  method: 'post',
+  path: '/api/v1/workspaces/{workspaceId}/email-suppressions',
+  tags: ['email'],
+  operationId: 'addEmailSuppression',
+  summary: 'Add an address by hand. For supervisors.',
+  security: bearer,
+  request: { params: workspaceParams, body: { required: true, ...json(SuppressionBody) } },
+  responses: { 204: { description: 'Listed' }, default: problemResponse },
+});
+
+/** A POST with a body, because a path would put the address in request logs. */
+export const removeEmailSuppressionRoute = createRoute({
+  method: 'post',
+  path: '/api/v1/workspaces/{workspaceId}/email-suppressions/remove',
+  tags: ['email'],
+  operationId: 'removeEmailSuppression',
+  summary: 'Remove an address added by hand. For supervisors.',
+  description: 'Refuses with 409 for anyone who unsubscribed, whose bounce or complaint is on record.',
+  security: bearer,
+  request: { params: workspaceParams, body: { required: true, ...json(SuppressionBody) } },
+  responses: { 204: { description: 'Removed' }, default: problemResponse },
+});
+
+
 // ---------- Conversations and messages, for agents ----------
 
 const conversationParams = workspaceParams.extend({ conversationId: z.string() });

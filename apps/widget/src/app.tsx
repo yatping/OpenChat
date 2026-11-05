@@ -90,6 +90,7 @@ function Message({ message, state, onRetry, controller }: { message: ChatMessage
 function ProfileForm({ controller, required }: { controller: Controller; required: boolean }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   return (
@@ -100,7 +101,7 @@ function ProfileForm({ controller, required }: { controller: Controller; require
         setBusy(true);
         setFailed(false);
         controller
-          .saveProfile({ ...(name.trim() ? { name: name.trim() } : {}), ...(email.trim() ? { email: email.trim() } : {}) })
+          .saveProfile({ ...(name.trim() ? { name: name.trim() } : {}), ...(email.trim() ? { email: email.trim() } : {}), followUpConsent: consent })
           .catch(() => setFailed(true))
           .finally(() => setBusy(false));
       }}
@@ -113,6 +114,10 @@ function ProfileForm({ controller, required }: { controller: Controller; require
       <label>
         {S.email}
         <input class="oc-input" type="email" autocomplete="email" required maxLength={254} value={email} onInput={(e) => setEmail(e.currentTarget.value)} />
+      </label>
+      <label class="oc-check">
+        <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.currentTarget.checked)} />
+        <span>{S.followUpConsent}</span>
       </label>
       {failed && <span class="oc-state bad" role="alert">{S.profileFailed}</span>}
       <div class="oc-actions">

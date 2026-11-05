@@ -9,6 +9,7 @@ import { registerConversationRoutes } from './routes/conversations';
 import { registerRealtimeRoutes } from './routes/realtime';
 import { registerWidgetRoutes } from './routes/widget';
 import { registerAdminRoutes } from './routes/admin';
+import { registerEmailRoutes } from './routes/email';
 import { registerPushRoutes } from './routes/push';
 import { registerWorkspaceRoutes } from './routes/workspaces';
 import { discoveryRelay } from './push/relay-client';
@@ -101,6 +102,7 @@ export function createApp() {
   registerAuthRoutes(app);
   registerWorkspaceRoutes(app);
   registerPushRoutes(app);
+  registerEmailRoutes(app);
   registerAdminRoutes(app);
   registerConversationRoutes(app);
   registerWidgetRoutes(app);

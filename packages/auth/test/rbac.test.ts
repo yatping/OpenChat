@@ -10,6 +10,7 @@ const TABLE: Record<Capability, [supervisor: boolean, agent: boolean]> = {
   'conversation.assign.self': [true, true],
   'conversation.assign.others': [true, false],
   'contact.merge': [true, false],
+  'suppression.manage': [true, false],
   'tag.delete': [true, false],
 };
 
