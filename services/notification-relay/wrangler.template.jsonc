@@ -10,13 +10,15 @@
   "observability": { "enabled": true },
   "vars": {
     "RELAY_MODE": "private",
+    "RELAY_ID": "local",
+    "RELAY_BUNDLE_IDS": "",
     "APNS_ENVIRONMENT": "production"
   },
   "durable_objects": { "bindings": [{ "name": "APNS_CREDENTIAL", "class_name": "ApnsCredential" }, { "name": "RELAY_GUARD", "class_name": "RelayGuard" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ApnsCredential"] }, { "tag": "v2", "new_sqlite_classes": ["RelayGuard"] }],
   "d1_databases": [{ "binding": "DB", "database_name": "oc-relay-local", "database_id": "local", "migrations_dir": "./migrations" }],
   // Approximate and per location. RelayGuard enforces the limits that must hold.
-  "ratelimits": [{ "name": "REGISTRATION_LIMIT", "namespace_id": "1001", "simple": { "limit": 20, "period": 60 } }],
+  "ratelimits": [{ "name": "REGISTRATION_LIMIT", "namespace_id": "1001", "simple": { "limit": 20, "period": 60 } }, { "name": "DEVICE_LIMIT", "namespace_id": "1002", "simple": { "limit": 60, "period": 60 } }],
   // Once a day, so a change in how Workers reach APNs is noticed. See ADR-0006.
   "triggers": { "crons": ["17 4 * * *"] }
 }

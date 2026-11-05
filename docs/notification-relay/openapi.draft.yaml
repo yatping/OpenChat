@@ -217,6 +217,7 @@ paths:
               type: object
               additionalProperties: false
               properties:
+                deviceId: { type: string, description: Device requests only. }
                 subscriptionId: { type: string }
                 recipientId: { type: string, description: Installation-signed requests only. }
                 workspaceId: { type: string, description: Required with recipientId. }

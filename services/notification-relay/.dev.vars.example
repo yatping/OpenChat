@@ -6,3 +6,5 @@ APNS_KEY_ID=
 APNS_PRIVATE_KEY=
 APNS_SELF_CHECK_TOPIC=
 RELAY_OPERATOR_TOKEN=
+# Base64url of 32 random bytes. Encrypts APNs tokens at rest.
+RELAY_TOKEN_KEY=

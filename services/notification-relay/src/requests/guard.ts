@@ -36,6 +36,18 @@ export class RelayGuard extends DurableObject {
     return { ok: true };
   }
 
+  /** A grant works once. Grants last 5 minutes at most, so they are forgotten after they have expired. */
+  async consumeGrant(jti: string): Promise<boolean> {
+    const { sql } = this.ctx.storage;
+    const now = Date.now();
+    const id = `grant:${jti}`;
+    const seen = sql.exec<{ expires_at: number }>('SELECT expires_at FROM nonces WHERE id = ?', id).toArray()[0];
+    if (seen && seen.expires_at > now) return false;
+    sql.exec('INSERT INTO nonces (id, expires_at) VALUES (?, ?) ON CONFLICT (id) DO UPDATE SET expires_at = excluded.expires_at', id, now + NONCE_TTL_SECONDS * 1000);
+    if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(now + NONCE_TTL_SECONDS * 1000);
+    return true;
+  }
+
   override async alarm() {
     const { sql } = this.ctx.storage;
     sql.exec('DELETE FROM nonces WHERE expires_at <= ?', Date.now());

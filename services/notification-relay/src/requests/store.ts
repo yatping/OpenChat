@@ -52,8 +52,12 @@ export async function upsertWorkspace(db: D1Database, input: { installationId: s
   return existing ? 'updated' : 'created';
 }
 
+/** Stops delivery and removes the workspace's subscriptions, in one batch, so that none can be left behind. */
 export async function revokeWorkspace(db: D1Database, installationId: string, workspaceId: string, now: number): Promise<void> {
-  await db.prepare(`UPDATE workspaces SET status = 'revoked', updated_at = ? WHERE installation_id = ? AND workspace_id = ?`).bind(now, installationId, workspaceId).run();
+  await db.batch([
+    db.prepare(`UPDATE workspaces SET status = 'revoked', updated_at = ? WHERE installation_id = ? AND workspace_id = ?`).bind(now, installationId, workspaceId),
+    db.prepare('DELETE FROM subscriptions WHERE installation_id = ? AND workspace_id = ?').bind(installationId, workspaceId),
+  ]);
 }
 
 export async function isWorkspaceActive(db: D1Database, installationId: string, workspaceId: string): Promise<boolean> {

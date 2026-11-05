@@ -3,6 +3,7 @@ import { createLogger } from '@openchat/shared';
 import { Hono } from 'hono';
 import { runApnsSelfCheck } from './apns/self-check';
 import { WorkersFetchTransport } from './apns/transport';
+import { deviceRoutes } from './devices/routes';
 import type { Env } from './env';
 import { relayRoutes } from './requests/routes';
 
@@ -31,6 +32,7 @@ export function createApp(transportFor: () => ApnsTransport = () => new WorkersF
   });
 
   app.route('/', relayRoutes(fetcher));
+  app.route('/', deviceRoutes());
 
   app.notFound((c) => c.json(notFound, 404));
   return app;

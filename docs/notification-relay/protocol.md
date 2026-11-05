@@ -77,13 +77,16 @@ App                          Installation                         Relay
 
 The installation learns only the opaque `subscriptionId`, and never the token.
 
-Grant claims:
+If the device sends its ID and secret, the same device is kept and no new secret is returned. With neither, but a token already on file, holding the token is the proof: it is an app reinstalled, or a phone passed on. The device gets a new secret, and **every earlier subscription of that device is removed**, so nobody receives a previous user's pushes. A different member signing in on the same device replaces the subscription for that workspace with a new `subscriptionId`.
+
+`environment` must match the relay's. A token from the other environment would look invalid to APNs, and be deleted. Device registration is limited per IP, a grant is spent only once the other checks pass, and every kind of bad grant answers the same `401 invalid_grant`.
+
+Grant claims, in a compact JWS whose header is `{ "alg": "EdDSA", "kid": "k1", "typ": "oc-grant+jwt" }`. The relay fixes the algorithm, and never takes it from the token:
 
 ```json
 {
   "iss": "inst_01JC...",
   "aud": "relay-id",
-  "kid": "k1",
   "wid": "work_01JC...",
   "sub": "mem_01JC...",
   "jti": "grant_01JC...",
@@ -104,7 +107,7 @@ Rules: `aud` must match the relay, `exp` is at most 5 minutes after `iat`, and `
 
 | Caller | Auth | Use |
 |---|---|---|
-| Device | Device secret, with `subscriptionId` | Logout, or disconnecting one workspace |
+| Device | Device secret, with `deviceId` and `subscriptionId` | Logout, or disconnecting one workspace |
 | Installation | Signed request, with `subscriptionId` or `recipientId` | Member removed, or all sessions revoked |
 
 The app calls it on logout and the installation does too, so a device offline during logout is still handled. A device that has deleted the app is handled by APNs returning 410.
@@ -256,8 +259,8 @@ Own D1 database. No conversation data, and **no messages, names, or email addres
 installations   id, base_url, status, quota_tier, created_at
 installation_keys  installation_id, key_id, public_key, status, created_at
 workspaces      installation_id, workspace_id, display_name, status
-devices         id, secret_hash, platform, bundle_id, environment, apns_token, locale, created_at, updated_at
-                UNIQUE(bundle_id, apns_token)
+devices         id, secret_hash, platform, bundle_id, environment, apns_token, token_lookup, locale, created_at, updated_at
+                UNIQUE(bundle_id, token_lookup)
 subscriptions   id, device_id, installation_id, workspace_id, recipient_id, muted, created_at
                 UNIQUE(device_id, installation_id, workspace_id)
 notifications   id, installation_id, workspace_id, notification_id, event, recipient_id, status, counts, created_at
@@ -274,7 +277,7 @@ Every read filters by `installation_id`. `workspaceId` is never used alone, beca
 | Devices | Until removed, or APNs reports them invalid |
 | Inactive installations | Reported after 180 days of no traffic; removal per the operator's policy |
 
-APNs tokens may be encrypted at rest with a Worker secret. Doing so narrows the exposure of a database-only leak at a small CPU cost, so it is the default.
+APNs tokens are encrypted at rest with AES-256-GCM under a key derived from the `RELAY_TOKEN_KEY` Worker secret, which narrows the exposure of a database-only leak. `token_lookup` is a keyed hash of the token, so that uniqueness needs no plain token. Losing that secret loses the ability to deliver, until apps register again. Rotating it is not built yet.
 
 ## Rate limits
 
