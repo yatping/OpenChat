@@ -147,12 +147,12 @@ Expo app, Connection manager, discovery and compatibility check, sign-in, worksp
 - Agents can reply from iOS.
 - Login expiry is handled mid-session.
 - An out-of-range API version shows an upgrade message.
-- Installed on a physical device through a development build.
+- Installed on a physical device, through a signed ad-hoc build. This was a development build until the owner accepted ad-hoc on 2026-11-05: it is closer to what ships, and needs no dev server or Apple Development certificate.
 
 **Depends on:** Apple Developer account for device builds.
 
 <a id="m2-status"></a>
-**Status: in progress.** Exit criteria are not met yet.
+**Status: exit criteria met**, with the limits in the [exit check](#m2-exit-check).
 
 | Part | State |
 |---|---|
@@ -163,11 +163,29 @@ Expo app, Connection manager, discovery and compatibility check, sign-in, worksp
 | Account deletion | Not in the app or the API. Installation admins manage people from a People page in the dashboard, and removing or deactivating someone can be undone ([ADR-0015](../architecture/decisions/0015-installation-admin-and-reversible-removal.md)). Browser tests cover the page. Tested by hand on the simulator: a removed agent's message shows "Andy Agent (Removed)" |
 | Administration | Installation admins manage people, workspaces, and websites from the dashboard, and workspaces have only supervisors and agents. No invitations ([ADR-0016](../architecture/decisions/0016-installation-admin-replaces-workspace-managers.md)). Replaces the invitation flow that M1a was checked against |
 | One installation, switching workspace | No way to add a second installation ([ADR-0014](../architecture/decisions/0014-one-installation-in-the-app.md)). Tested by hand on the simulator against a local server: two workspaces each show only their own conversation, switching works both ways, and sign-out returns to the address screen |
-| Session ended | A session that no longer exists on the server shows the sign-in screen with the address and email kept. Tested at launch. Not tested while the app is in use, when the access token stays valid until it expires |
+| Session ended | A session that no longer exists on the server shows the sign-in screen with the address and email kept. Tested at launch, and on real Cloudflare while the app was open: it goes to sign-in on its next request, and until then keeps showing the cached list |
 | Real Cloudflare | A fresh `oc deploy` passed the [API and simulator checks](../architecture/cloudflare-validation.md#milestone-2-on-real-cloudflare-2026-11-05), including priority, typing in both directions, a file just under 25 MB, and a session ending while the app was open |
-| Physical device | `fastlane ios device` makes a signed ad-hoc build, and `fastlane ios install` put it on an iPhone on iOS 27.0.1, connected by cable and unlocked. It launched and kept running. Against a fresh `oc deploy`, the owner signed in, read a visitor's message, replied, sent a photo, and returned from the background. The visitor's side was checked by script: the reply arrived, and the 3.6 MB photo downloaded intact. This was an ad-hoc Release build, while the exit criterion names a development build. One device, one session |
+| Physical device | `fastlane ios device` makes a signed ad-hoc build, and `fastlane ios install` put it on an iPhone on iOS 27.0.1, connected by cable and unlocked. It launched and kept running. Against a fresh `oc deploy`, the owner signed in, read a visitor's message, replied, sent a photo, and returned from the background. The visitor's side was checked by script: the reply arrived, and the 3.6 MB photo downloaded intact. One device, one session |
 | Push token (S7) | A throwaway ad-hoc build got a raw 64-character APNs token on the iPhone after the owner allowed notifications ([result](../architecture/cloudflare-validation.md#phase-0-spike-results)). `expo-notifications` is not in the app yet. No push has been received, because no APNs key exists |
 | Not tested yet | Receiving a push, sign-out during a download, an installation upgraded with existing data on real D1, and email delivery of a new account link |
+
+<a id="m2-exit-check"></a>
+### M2 exit check
+
+| Criterion | Evidence | Limit |
+|---|---|---|
+| Connects by address, and signing in to another replaces it, with colliding IDs | Unit tests, including identical IDs. Address and sign-in by hand on the simulator and on an iPhone | Colliding IDs have only unit tests |
+| Switching workspace never leaks. Logout wipes that connection's data | By hand on the simulator against a local server | Not repeated on a phone. Sign-out during a download is untested |
+| Agents can reply from iOS | A supervisor replied and sent a photo from an iPhone, and the visitor's side received both. An agent's reply passed by script on real Cloudflare | The phone test used a supervisor, not an agent |
+| Login expiry mid-session | A session ended on the server sends the app to sign-in on its next request, on real Cloudflare on the simulator | Tested by ending the session on the server, not by waiting for the login to expire |
+| Out-of-range API version shows an upgrade message | Unit tests, and both messages seen on the simulator against a fake server reporting `v2` and `v0` | Seen on the address screen only, not on the launch check of an existing connection |
+| Installed on a physical device | Signed ad-hoc build on one iPhone on iOS 27.0.1 | One device |
+
+Push is M3, so an agent gets no alert while the app is closed. Before anyone relies on the app:
+
+- No push has been received. The token part of S7 passed, and receiving one needs an APNs key that the owner has to create.
+- Not tested: an installation upgraded with existing data on real D1, and email delivery of a new account link.
+- Not done: App Store submission, and confirming that Apple accepts the app without account deletion under guideline 5.1.1(v).
 
 ## M3: Relay and push (L)
 
