@@ -134,7 +134,7 @@ From spec §17, plus spike outcomes:
 - [x] OpenAPI generation and drift check work.
 - [x] Boundary rules demonstrably reject violations.
 - [x] A preview deployment succeeds and passes health checks. Run by hand: `preview.yml` itself has not run, because it needs repository secrets.
-- [x] S1, S2, S3, S4, S5, S6, and S8 reported, with gaps in [the results](../architecture/cloudflare-validation.md#phase-0-spike-results). S7 deferred to M2, because it needs an Apple account and an iPhone. In M2 the token part passed. Receiving a push waits for an APNs key.
+- [x] S1, S2, S3, S4, S5, S6, and S8 reported, with gaps in [the results](../architecture/cloudflare-validation.md#phase-0-spike-results). S7 deferred to M2, because it needs an Apple account and an iPhone. In M2 it passed on production rather than the sandbox: a raw token, and two pushes received on an iPhone.
 - [x] Documentation matches reality, verified from a clean copy of the working tree. A clone is not possible until the first commit.
 - [x] Outstanding issues are written down, and nothing untested is claimed as done.
 
