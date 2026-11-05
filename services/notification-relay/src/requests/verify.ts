@@ -3,7 +3,8 @@ import type { Env } from '../env';
 import { ID_PATTERN } from './schemas';
 import { findActiveKey } from './store';
 
-export const MAX_BODY_BYTES = 16 * 1024;
+/** A full batch of 100 notifications is about 30 KB. */
+export const MAX_BODY_BYTES = 64 * 1024;
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
 const KEY_CACHE_MS = 30_000;
 const KEY_CACHE_MAX = 1_000;

@@ -281,6 +281,11 @@ describe('every signed field', () => {
     expect((await send(me, options)).status).toBe(401);
   });
 
+  it('has room for the largest batch the relay accepts', () => {
+    const item = { workspaceId: `work_${'x'.repeat(26)}`, event: 'conversation_transferred', recipientId: `mem_${'x'.repeat(26)}`, conversationId: `conv_${'x'.repeat(26)}`, notificationId: `ntf_${'x'.repeat(60)}`, expiresAt: '2026-11-05T18:00:00.000Z', metadata: { websiteId: `site_${'x'.repeat(26)}` } };
+    expect(JSON.stringify({ notifications: Array.from({ length: 100 }, () => item) }).length).toBeLessThan(MAX_BODY_BYTES);
+  });
+
   it('rejects a body over the limit', async () => {
     const { me, send, options } = await setup();
     expect((await send(me, { ...options, rawBody: 'x'.repeat(MAX_BODY_BYTES + 1) })).status).toBe(413);

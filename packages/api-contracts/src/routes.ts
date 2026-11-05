@@ -1,4 +1,5 @@
 import { createRoute, z } from '@hono/zod-openapi';
+import { NOTIFICATION_EVENTS } from '@openchat/notification-protocol';
 import { page, PaginationQuery, problemResponse } from './common';
 import { ConversationPrioritySchema, ConversationStatusSchema, VisitorWireMessageSchema } from './realtime';
 
@@ -244,6 +245,86 @@ export const listWebsitesRoute = createRoute({
   security: bearer,
   request: { params: workspaceParams },
   responses: { 200: { description: 'Websites', ...json(z.object({ data: z.array(WebsiteSchema) })) }, default: problemResponse },
+});
+
+// ---------- Push ----------
+
+export const PushSubscriptionSchema = z
+  .object({ id: z.string(), relaySubscriptionId: z.string(), platform: z.enum(['ios']), deviceLabel: z.string().nullable(), createdAt: z.iso.datetime(), updatedAt: z.iso.datetime() })
+  .openapi('PushSubscription');
+
+/** Only `push` so far. `email` joins it with email follow-ups, and adding a value is an additive change. */
+export const NotificationPreferencesSchema = z
+  .object({ preferences: z.array(z.object({ eventType: z.enum(NOTIFICATION_EVENTS), channel: z.enum(['push']), enabled: z.boolean() })).max(NOTIFICATION_EVENTS.length) })
+  .openapi('NotificationPreferences');
+
+export const createPushGrantRoute = createRoute({
+  method: 'post',
+  path: '/api/v1/workspaces/{workspaceId}/push/grants',
+  tags: ['push'],
+  operationId: 'createPushGrant',
+  summary: 'Issue a short-lived, single-use grant for the device to present to the relay',
+  security: bearer,
+  request: { params: workspaceParams },
+  responses: { 201: { description: 'Grant', ...json(z.object({ grant: z.string(), relayUrl: z.string(), expiresAt: z.iso.datetime() })) }, default: problemResponse },
+});
+
+export const listPushSubscriptionsRoute = createRoute({
+  method: 'get',
+  path: '/api/v1/workspaces/{workspaceId}/push/subscriptions',
+  tags: ['push'],
+  operationId: 'listMyPushSubscriptions',
+  summary: "The caller's registered devices",
+  security: bearer,
+  request: { params: workspaceParams },
+  responses: { 200: { description: 'Subscriptions', ...json(z.object({ data: z.array(PushSubscriptionSchema) })) }, default: problemResponse },
+});
+
+export const recordPushSubscriptionRoute = createRoute({
+  method: 'post',
+  path: '/api/v1/workspaces/{workspaceId}/push/subscriptions',
+  tags: ['push'],
+  operationId: 'recordPushSubscription',
+  summary: 'Store the opaque handle returned by the relay. No device token is sent here.',
+  security: bearer,
+  request: {
+    params: workspaceParams,
+    body: { required: true, ...json(z.object({ relaySubscriptionId: z.string().regex(/^sub_[A-Za-z0-9_-]{1,64}$/), deviceLabel: z.string().max(100).optional() })) },
+  },
+  responses: { 201: { description: 'Recorded', ...json(PushSubscriptionSchema) }, default: problemResponse },
+});
+
+export const removePushSubscriptionRoute = createRoute({
+  method: 'delete',
+  path: '/api/v1/workspaces/{workspaceId}/push/subscriptions/{subscriptionId}',
+  tags: ['push'],
+  operationId: 'removePushSubscription',
+  summary: 'Remove a device, and unregister it at the relay',
+  security: bearer,
+  request: { params: workspaceParams.extend({ subscriptionId: z.string() }) },
+  responses: { 204: { description: 'Removed' }, default: problemResponse },
+});
+
+export const getNotificationPreferencesRoute = createRoute({
+  method: 'get',
+  path: '/api/v1/workspaces/{workspaceId}/notification-preferences',
+  tags: ['push'],
+  operationId: 'getNotificationPreferences',
+  summary: "The caller's preferences. An event with no choice made is on.",
+  security: bearer,
+  request: { params: workspaceParams },
+  responses: { 200: { description: 'Preferences', ...json(NotificationPreferencesSchema) }, default: problemResponse },
+});
+
+export const setNotificationPreferencesRoute = createRoute({
+  method: 'put',
+  path: '/api/v1/workspaces/{workspaceId}/notification-preferences',
+  tags: ['push'],
+  operationId: 'setNotificationPreferences',
+  summary: "Replace the caller's preferences",
+  security: bearer,
+  request: { params: workspaceParams, body: { required: true, ...json(NotificationPreferencesSchema) } },
+  responses: { 204: { description: 'Updated' }, default: problemResponse },
 });
 
 // ---------- Conversations and messages, for agents ----------

@@ -73,6 +73,12 @@ const CASES: Record<string, Case> = {
   setConversationTags: { kind: 'workspace', body: { tagIds: [] }, ownerStatus: 204 },
   connectRealtime: { kind: 'public', reason: 'Takes a signed ticket, which names exactly what it may reach. Covered in realtime.test.ts' },
   createAgentTicket: { kind: 'workspace', ownerStatus: 201 },
+  createPushGrant: { kind: 'workspace', ownerStatus: 409 },
+  listMyPushSubscriptions: { kind: 'workspace', ownerStatus: 200 },
+  recordPushSubscription: { kind: 'workspace', body: { relaySubscriptionId: 'sub_taken' }, ownerStatus: 409 },
+  removePushSubscription: { kind: 'workspace', ownerStatus: 204 },
+  getNotificationPreferences: { kind: 'workspace', ownerStatus: 200 },
+  setNotificationPreferences: { kind: 'workspace', body: { preferences: [] }, ownerStatus: 204 },
   createVisitorTicket: { kind: 'visitor', ownerStatus: 201 },
   listConversations: { kind: 'workspace', ownerStatus: 200 },
   getConversation: { kind: 'workspace', ownerStatus: 200 },
@@ -150,8 +156,8 @@ const testEnv = { ...env, EMAIL_QUEUE: { send: async (_job: JobEnvelope) => unde
 
 /** Resources in each workspace, by the name of the path parameter that holds them. */
 const RESOURCES: Record<'a' | 'b', Record<string, string>> = {
-  a: { userId: 'user_a_agent', workspaceId: 'work_a', memberId: 'mem_a_agent', websiteId: 'site_a', conversationId: 'conv_a', contactId: 'cont_a', tagId: 'tag_a', attachmentId: 'att_a' },
-  b: { userId: 'user_b_agent', workspaceId: 'work_b', memberId: 'mem_b_agent', websiteId: 'site_b', conversationId: 'conv_b', contactId: 'cont_b', tagId: 'tag_b', attachmentId: 'att_b' },
+  a: { userId: 'user_a_agent', workspaceId: 'work_a', memberId: 'mem_a_agent', websiteId: 'site_a', conversationId: 'conv_a', contactId: 'cont_a', tagId: 'tag_a', attachmentId: 'att_a', subscriptionId: 'psub_a' },
+  b: { userId: 'user_b_agent', workspaceId: 'work_b', memberId: 'mem_b_agent', websiteId: 'site_b', conversationId: 'conv_b', contactId: 'cont_b', tagId: 'tag_b', attachmentId: 'att_b', subscriptionId: 'psub_b' },
 };
 
 function urlFor(path: string, ...sources: Record<string, string>[]): string {
@@ -184,7 +190,7 @@ const request = async (method: string, path: string, token: string | null, body?
   return response;
 };
 
-const TABLES = ['workspaces', 'workspace_members', 'websites', 'invitations', 'audit_log', 'outbox', 'conversation_read_cursors', 'conversation_events', 'messages', 'conversations', 'tags', 'conversation_tags', 'contacts', 'visitors', 'attachments'];
+const TABLES = ['workspaces', 'workspace_members', 'websites', 'invitations', 'audit_log', 'outbox', 'conversation_read_cursors', 'conversation_events', 'messages', 'conversations', 'tags', 'conversation_tags', 'contacts', 'visitors', 'attachments', 'push_subscriptions', 'notification_preferences'];
 
 /** Every row belonging to workspace A. A refused request must leave this exactly as it was. */
 async function snapshotOfA(): Promise<string> {
@@ -210,6 +216,7 @@ async function seed() {
          (?1, ?2, ?3, 'supervisor', 'active', 1, 1), (?4, ?2, ?5, 'agent', 'active', 1, 1)`,
       ).bind(`mem_${w}_owner`, `work_${w}`, `user_${w}_owner`, `mem_${w}_agent`, `user_${w}_agent`),
       env.DB.prepare(`INSERT INTO websites (id, workspace_id, name, website_key, created_at, updated_at) VALUES (?1, ?2, 'Site', ?3, 1, 1)`).bind(`site_${w}`, `work_${w}`, `key_${w}`),
+      env.DB.prepare(`INSERT INTO push_subscriptions (id, workspace_id, member_id, relay_id, relay_subscription_id, platform, created_at, updated_at) VALUES (?1, ?2, ?3, 'managed', ?4, 'ios', 1, 1)`).bind(`psub_${w}`, `work_${w}`, `mem_${w}_owner`, `sub_${w}`),
       env.DB.prepare(`INSERT INTO tags (id, workspace_id, name, created_at) VALUES (?1, ?2, 'existing', 1)`).bind(`tag_${w}`, `work_${w}`),
       env.DB.prepare(`INSERT INTO contacts (id, workspace_id, first_seen_at, last_seen_at, created_at, updated_at) VALUES (?1, ?2, 1, 1, 1, 1)`).bind(`cont_${w}`, `work_${w}`),
       env.DB.prepare(`INSERT INTO conversations (id, workspace_id, website_id, contact_id, last_message_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, 1, 1, 1)`).bind(`conv_${w}`, `work_${w}`, `site_${w}`, `cont_${w}`),

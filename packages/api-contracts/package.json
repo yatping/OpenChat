@@ -17,6 +17,7 @@
     "check": "tsx scripts/generate.ts --check && redocly lint generated/openapi.json --config redocly.yaml"
   },
   "dependencies": {
+    "@openchat/notification-protocol": "workspace:*",
     "@hono/zod-openapi": "^1.6.3",
     "hono": "^4.13.16",
     "zod": "^4.6.7"

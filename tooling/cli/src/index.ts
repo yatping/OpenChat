@@ -19,6 +19,9 @@ function usage(): never {
 RESEND_API_KEY and TURNSTILE_SECRET_KEY are read from the environment, so that they stay out of shell history.
 TURNSTILE_SECRET_KEY needs --turnstile-site-key. Websites can then require Turnstile for new visitors.
 
+Push, on deploy. All three together, and remembered for later deploys. The signing key is generated once:
+  --relay-url <https://...> --relay-id <id> --relay-bundle-ids <a,b>
+
 Limits for every website, on deploy. Each is remembered for later deploys, and "default" goes back to its default:
 ${Object.values(ABUSE_LIMITS).map((limit) => `  --${limit.flag} <${limit.min} to ${limit.max}>, default ${limit.default}`).join('\n')}`);
   process.exit(2);
@@ -51,6 +54,9 @@ async function main(name: string) {
       emailFrom: flag('email-from'),
       turnstileSiteKey: flag('turnstile-site-key'),
       limitFlag: flag,
+      relayUrl: flag('relay-url'),
+      relayId: flag('relay-id'),
+      relayBundleIds: flag('relay-bundle-ids'),
       cloudflareEmail: rest.includes('--cloudflare-email'),
     });
     return;

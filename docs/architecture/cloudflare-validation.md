@@ -415,6 +415,23 @@ Milestone 3, slice 2, on a throwaway relay with real D1, against a second Worker
 | Slice 4 on a real queue: a notification for a fake device token goes through the consumer to real APNs, which answers `BadDeviceToken` | The relay records `invalidToken: 1`, and removes the device. A repeat gets the original ID, and text in the body answers 400. Throughput was not measured |
 | Slice 3, with fake device tokens: device registration, a reused grant, wrong audience, wrong bundle, wrong environment, an unknown field, a returning device, token rotation, a wrong secret, and both forms of unregister | All as designed. Stored tokens are all encrypted |
 
+## Push from an installation on real Cloudflare (2026-11-05)
+
+`oc deploy` of a temporary installation pointed at a temporary relay in open mode, on one account, with fake device tokens and the real APNs key. Both are deleted.
+
+| Check | Result |
+|---|---|
+| APNs provider token, 67 minutes after the first was minted | Still accepted, with `400 BadDeviceToken` for the fake device, three times out of three. APNs refuses a token older than 60 minutes, so `ApnsCredential` renewed it. A check at 48 minutes passed too |
+| First grant | Registered the installation and workspace with the relay, including domain proof, in one request |
+| A grant used twice | `401` the second time |
+| A visitor's first message | Through `oc-notifications` and the relay's delivery queue to APNs. The fake token was reported invalid, and the relay removed it. All outbox rows dispatched, and `failed_jobs` stayed empty |
+| An event turned off in preferences | No notification record at the relay |
+| Removing a device, and a password reset | Each removed the subscription at the relay |
+
+**The API Worker needs `global_fetch_strictly_public` as well as the relay.** Without it, one Worker's `fetch` to another on the same account does not reach it over the public internet, which is what domain proof found earlier. An independent relay on the customer's own account depends on this.
+
+**Not measured:** a real phone, which is the next slice; throughput; the time from message to push.
+
 ## Milestone 2 on real Cloudflare (2026-11-05)
 
 A throwaway installation, `oc-preview-m2`, deployed from a clean start with `oc deploy` on the rules in [ADR-0016](decisions/0016-installation-admin-replaces-workspace-managers.md), and then removed. It had no email provider, so new account links came from `oc recover`.

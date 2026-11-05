@@ -17,6 +17,7 @@ export interface State extends Omit<DeploymentState, 'd1DatabaseId'> {
   queuesCreated?: string[];
   deployed?: boolean;
   secretsSet?: boolean;
+  relayKeySet?: boolean;
   initialized?: boolean;
   publicBaseUrl?: string;
 }
@@ -33,6 +34,9 @@ export interface DeployOptions {
   turnstileSiteKey?: string | undefined;
   cloudflareEmail?: boolean;
   limitFlag?: (name: string) => string | undefined;
+  relayUrl?: string | undefined;
+  relayId?: string | undefined;
+  relayBundleIds?: string | undefined;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -149,6 +153,14 @@ export function createDeployer(root: string) {
       state.secretsSet = true;
       save(state);
     }
+    if (state.relay && !state.relayKeySet) {
+      // Only once: the relay holds the public half, and a new key would need rotation, which is not built yet.
+      console.log('Generating the relay signing key');
+      const active = await generateSerializedKey(`relay-${Date.now().toString(36)}`);
+      putSecrets(state, { RELAY_SIGNING_KEY: JSON.stringify({ active }) });
+      state.relayKeySet = true;
+      save(state);
+    }
     const resendKey = process.env.RESEND_API_KEY;
     if (state.cloudflareEmailFrom) {
       // Not secret, but set the same way as the Resend settings, so that switching needs no other change.
@@ -235,6 +247,11 @@ export function createDeployer(root: string) {
       if (options.limitFlag) state.limits = mergeLimitFlags(state.limits, options.limitFlag);
       if (!state.initialized && !options.ownerEmail) throw new Error('A first deploy needs --owner-email');
       if (options.analytics) state.analyticsEngine = true;
+      if (options.relayUrl || options.relayId || options.relayBundleIds) {
+        if (!options.relayUrl || !options.relayId || !options.relayBundleIds) throw new Error('A relay needs --relay-url, --relay-id, and --relay-bundle-ids together');
+        assertPublicUrl(options.relayUrl);
+        state.relay = { url: options.relayUrl.replace(/\/+$/, ''), id: options.relayId, bundleIds: options.relayBundleIds };
+      }
       if (options.publicUrl) state.publicBaseUrl = options.publicUrl;
 
       if (!preflight(options)) throw new Error('\nFix the items marked FAIL, then run this again. Nothing was created by this check.');

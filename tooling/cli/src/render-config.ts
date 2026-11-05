@@ -19,6 +19,8 @@ export interface DeploymentState {
   cloudflareEmailFrom?: string;
   /** Only what the operator chose. Anything left out takes its default in the Worker. */
   limits?: Partial<AbuseLimits> | undefined;
+  /** Push is opt-in until a managed relay exists. Its signing key is a secret, set separately. */
+  relay?: { url: string; id: string; bundleIds: string } | undefined;
 }
 
 interface Template {
@@ -95,6 +97,7 @@ export function renderConfig(templateSource: string, state: DeploymentState, rel
   }
   const limits = Object.entries(state.limits ?? {}).map(([name, value]) => [ABUSE_LIMITS[name as AbuseLimitName].variable, String(value)]);
   if (limits.length > 0) t.vars = { ...(t.vars as object | undefined), ...Object.fromEntries(limits) };
+  if (state.relay) t.vars = { ...(t.vars as object | undefined), RELAY_URL: state.relay.url, RELAY_ID: state.relay.id, RELAY_BUNDLE_IDS: state.relay.bundleIds };
   if (state.cloudflareEmailFrom) t.send_email = [{ name: 'EMAIL', allowed_sender_addresses: [state.cloudflareEmailFrom] }];
   return t;
 }

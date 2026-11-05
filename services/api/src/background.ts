@@ -7,6 +7,8 @@ import { claimJob, getInstallation, openDatabase, recordFailedJob } from '@openc
 import { CloudflareEmailProvider, ConsoleEmailProvider, EmailSendError, ResendEmailProvider, type EmailProvider } from '@openchat/email';
 import { AppError, createLogger, newId, retryDelaySeconds, type JobEnvelope } from '@openchat/shared';
 import { sweepOutbox } from './dispatch';
+import { NOTIFICATION_HANDLERS } from './push/fanout';
+import { RelayError } from './push/relay-client';
 import type { Env } from './env';
 
 export const HEARTBEAT_JOB = 'system.heartbeat';
@@ -67,6 +69,7 @@ const HANDLERS: Record<string, Handler> = {
   [NEW_ACCOUNT_EMAIL_JOB]: async (job, env, deps) => {
     await sendNewAccountEmail(await systemEmailDeps(env, deps), (job.payload as { userId: string }).userId);
   },
+  ...NOTIFICATION_HANDLERS,
   // Queued by a Worker from before ADR-0016. Its link would lead nowhere, so it is acknowledged and dropped. Remove after one release.
   'workspace.invitation_email': async () => undefined,
 };
@@ -74,7 +77,7 @@ const HANDLERS: Record<string, Handler> = {
 const isDeadLetterQueue = (queue: string) => queue.endsWith('-dlq');
 
 /** Errors that a retry cannot fix. Everything else is treated as transient. */
-const isPermanent = (error: unknown) => error instanceof AppError && error.status >= 400 && error.status < 500;
+const isPermanent = (error: unknown) => (error instanceof AppError && error.status >= 400 && error.status < 500) || (error instanceof RelayError && error.permanent);
 
 function isEnvelope(body: unknown): body is JobEnvelope {
   const job = body as Partial<JobEnvelope> | null;
@@ -151,7 +154,8 @@ export async function handleQueue(batch: MessageBatch, env: Env, deps: Backgroun
           ...(error instanceof EmailSendError && error.status !== null ? { status: error.status } : {}),
           ...(error instanceof EmailSendError && error.code !== null ? { errorCode: error.code } : {}),
         });
-        message.retry({ delaySeconds: retryDelaySeconds(message.attempts) });
+        // A relay that says when to come back knows better than the backoff.
+        message.retry({ delaySeconds: error instanceof RelayError && error.retryAfterSeconds !== null ? error.retryAfterSeconds : retryDelaySeconds(message.attempts) });
       }
     }
   }

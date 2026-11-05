@@ -30,6 +30,7 @@ export const ID_PREFIXES = {
   audit: 'aud',
   request: 'req',
   mutation: 'mut',
+  grant: 'grant',
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;
