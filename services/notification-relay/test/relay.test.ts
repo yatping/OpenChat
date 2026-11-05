@@ -9,8 +9,8 @@ describe('relay', () => {
     expect(await response.json()).toEqual({ status: 'ok' });
   });
 
-  it('accepts no notifications yet', async () => {
+  it('refuses an unsigned notification', async () => {
     const response = await self.fetch('https://relay.example/v1/notifications/send', { method: 'POST', body: '{}' });
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(400);
   });
 });

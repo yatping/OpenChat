@@ -169,7 +169,8 @@ POST /v1/notifications/send
 - The schema is **closed**: unknown fields return 400. `metadata` accepts only `websiteId`. This is how the "no conversation data" promise is enforced in code.
 - `event`: `new_conversation`, `new_message`, `conversation_assigned`, `conversation_transferred`, `mention`, `conversation_updated`.
 - `notificationId` is unique per recipient and stable across retries. The installation derives it from `(eventId, memberId)`.
-- `POST /v1/notifications/batch` takes up to 100 items and returns a per-item result.
+- `POST /v1/notifications/batch` takes `{ "notifications": [...] }`, up to 100 items for one workspace, and returns a per-item result.
+- `expiresAt` defaults to one hour, and is limited to one day.
 - The response is `202`, with an `id` to check. A duplicate returns the original `id` and status.
 
 `GET /v1/notifications/{id}` is signed, and returns counts per outcome, but never tokens or device data.
@@ -206,7 +207,7 @@ The relay, not the installation, composes the notification text. So a malicious 
 | `apns-collapse-id` | Hash of installation, conversation, and event, at most 64 bytes, so a burst collapses to one |
 | `apns-id` | Derived from `notificationId` |
 
-The body text uses the device's stored `locale`, from a table in the relay. There is no badge number, because no single server knows the total across installations. The app computes it locally.
+The body text uses the device's stored `locale`, from a table in the relay, which holds only English so far. There is no badge number, because no single server knows the total across installations. The app computes it locally.
 
 ### Delivery pipeline
 
@@ -228,6 +229,10 @@ Signed POST -> RelayGuard (nonce, rate, dedupe) -> D1 record -> Queue -> consume
 | 429 `TooManyRequests`, 500, 503, network error | Retry with backoff until `expiresAt` |
 | 429 `TooManyProviderTokenUpdates` | Stop minting tokens, and alert. See below |
 | 413 `PayloadTooLarge`, or any other 4xx | Permanent failure, and alert: this is a bug |
+
+The record commits before the queue sees it. If queueing fails, the installation's retry finds a duplicate still `queued`, and queues it again.
+
+Delivery is at least once. A crash can resend to a device, which `apns-collapse-id` folds into one alert, and `processed_attempt` keeps a repeated attempt from being counted twice. A retry names only the devices still outstanding, waits 30 seconds, then 1, 2, 5, 10, and 15 minutes, and is queued before results are recorded, so a crash can repeat work but cannot lose it. At `expiresAt`, outstanding devices count as failed, and are kept. `muted` is honoured and counted, but nothing sets it yet. A message that keeps throwing goes to a dead-letter queue after 5 retries.
 
 Each invocation can hold only 6 simultaneous connections, which limits throughput to roughly 6 divided by APNs latency, per invocation. Consumer concurrency multiplies this, and it is plenty for the MVP. Measure it in Milestone 3.
 
@@ -285,12 +290,12 @@ Enforced in `RelayGuard`. Defaults for the managed relay, tuned from real usage:
 
 | Scope | Limit |
 |---|---|
-| Notifications per installation | 60 per minute, burst 300; raised on request |
+| Notifications per installation | 60 per minute, burst 300; raised on request. Takes one per item in a batch, or nothing |
 | Notifications per recipient | 30 per minute |
 | New installation registrations | Approximate per-IP limit through the binding |
 | Device registration | Per grant and per IP |
 
-An exceeded quota returns 429 with `Retry-After`. The installation's queue consumer then retries with delay, and messaging is unaffected.
+Checking the quota comes after the replay check, so a replay costs nothing. An exceeded quota returns 429 with `Retry-After`. The installation's queue consumer then retries with delay, and messaging is unaffected.
 
 ## Modes
 
