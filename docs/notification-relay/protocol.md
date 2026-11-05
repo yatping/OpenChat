@@ -220,13 +220,13 @@ Signed POST -> RelayGuard (nonce, rate, dedupe) -> D1 record -> Queue -> consume
 | 403 `InvalidProviderToken` and other credential errors | **Do not delete devices.** Retry with backoff, and alert the operator |
 | 429 `TooManyRequests`, 500, 503, network error | Retry with backoff until `expiresAt` |
 | 429 `TooManyProviderTokenUpdates` | Stop minting tokens, and alert. See below |
-| 400 `PayloadTooLarge` or other bad request | Permanent failure, and alert: this is a bug |
+| 413 `PayloadTooLarge`, or any other 4xx | Permanent failure, and alert: this is a bug |
 
 Each invocation can hold only 6 simultaneous connections, which limits throughput to roughly 6 divided by APNs latency, per invocation. Consumer concurrency multiplies this, and it is plenty for the MVP. Measure it in Milestone 3.
 
 ### Provider tokens
 
-APNs tokens must be refreshed no more than about every 20 minutes and before 60. Workers isolates come and go, so a per-isolate cache could mint many tokens. One `ApnsCredential` Durable Object per Apple identity mints a token and hands it out, renewing at about 40 minutes. Isolates cache it briefly in memory.
+APNs tokens must be refreshed no more than about every 20 minutes and before 60. Workers isolates come and go, so a per-isolate cache could mint many tokens. One `ApnsCredential` Durable Object per Apple identity mints a token and hands it out, renewing at about 40 minutes. Isolates cache it for 5 minutes. A token under 20 minutes old is not replaced, even if APNs calls it expired. After `TooManyProviderTokenUpdates` it mints nothing for 20 minutes. The token is stored, so eviction does not cause a new one.
 
 ### APNs transport
 
@@ -242,7 +242,7 @@ interface ApnsTransport {
 | `HttpGatewayTransport` | Contingency. Forwards to an authenticated HTTP/2 gateway, such as a Cloudflare Container |
 | `MockApnsTransport` | Tests and local development. Simulates each error above |
 
-A startup self-check and a metric on `Network connection lost` errors would reveal a platform behaviour change.
+A self-check reveals a platform behaviour change. Once a day, or on `POST /v1/operator/apns-check`, the relay sends to a device token of 64 zeros, which no phone can have. `BadDeviceToken` is the only healthy answer. It proves the path and the key, **not the topic**: real APNs answered the same for a made-up topic. The route takes `Authorization: Bearer` with `RELAY_OPERATOR_TOKEN`, and answers 404 to anyone else, or if that secret is not set.
 
 ## Relay data
 

@@ -388,6 +388,19 @@ Run on a temporary deployment, which was then removed. The [abuse limits guide](
 
 The text box shows the default of 4,000 for a moment after the widget opens, until the bootstrap response arrives. The server enforces the real limit either way.
 
+## APNs from a Worker with a real key (2026-11-05)
+
+Milestone 3, slice 1, on a throwaway relay with a production key limited to one topic. Local `workerd` cannot do this, because it has no HTTP/2 client.
+
+| Check | Result |
+|---|---|
+| Worker `fetch` to `api.push.apple.com` with a real provider token and a device token of 64 zeros, 10 times | `400 BadDeviceToken` every time, in 84 ms to 1.17 s. So S1's HTTP/2 path also accepts a real token |
+| Wrong key ID | `403 InvalidProviderToken`, reported as a credential error |
+| Another app's bundle ID, or a made-up topic | Also `400 BadDeviceToken`. **The self-check cannot detect a wrong topic** |
+| Operator route with no token, or the wrong one | 404 |
+
+Not shown yet: a push reaching a phone from a Worker, which comes with the app in slice 5. S7 reached one from a local script. Throughput under load is unmeasured, and the daily cron has not been seen firing on Cloudflare. A latency over 1 s would limit one invocation to about 6 sends per second.
+
 ## Milestone 2 on real Cloudflare (2026-11-05)
 
 A throwaway installation, `oc-preview-m2`, deployed from a clean start with `oc deploy` on the rules in [ADR-0016](decisions/0016-installation-admin-replaces-workspace-managers.md), and then removed. It had no email provider, so new account links came from `oc recover`.
