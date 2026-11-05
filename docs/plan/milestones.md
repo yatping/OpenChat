@@ -165,8 +165,8 @@ Expo app, Connection manager, discovery and compatibility check, sign-in, worksp
 | One installation, switching workspace | No way to add a second installation ([ADR-0014](../architecture/decisions/0014-one-installation-in-the-app.md)). Tested by hand on the simulator against a local server: two workspaces each show only their own conversation, switching works both ways, and sign-out returns to the address screen |
 | Session ended | A session that no longer exists on the server shows the sign-in screen with the address and email kept. Tested at launch. Not tested while the app is in use, when the access token stays valid until it expires |
 | Real Cloudflare | A fresh `oc deploy` passed the [API and simulator checks](../architecture/cloudflare-validation.md#milestone-2-on-real-cloudflare-2026-11-05), including priority, typing in both directions, a file just under 25 MB, and a session ending while the app was open |
-| Device build | `fastlane ios device` makes a signed ad-hoc build for registered devices. **Installing it on a phone has not worked yet**: the first try timed out with the phone on Wi-Fi only |
-| Not tested yet | A physical device, sign-out during a download, an installation upgraded with existing data on real D1, and email delivery of a new account link |
+| Physical device | `fastlane ios device` makes a signed ad-hoc build, and `fastlane ios install` put it on an iPhone on iOS 27.0.1, connected by cable and unlocked. It launched and kept running. Against a fresh `oc deploy`, the owner signed in, read a visitor's message, replied, sent a photo, and returned from the background. The visitor's side was checked by script: the reply arrived, and the 3.6 MB photo downloaded intact. This was an ad-hoc Release build, while the exit criterion names a development build. One device, one session |
+| Not tested yet | Push on a device (S7), sign-out during a download, an installation upgraded with existing data on real D1, and email delivery of a new account link |
 
 ## M3: Relay and push (L)
 
