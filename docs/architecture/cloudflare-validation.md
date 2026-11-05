@@ -388,6 +388,31 @@ Run on a temporary deployment, which was then removed. The [abuse limits guide](
 
 The text box shows the default of 4,000 for a moment after the widget opens, until the bootstrap response arrives. The server enforces the real limit either way.
 
+## Milestone 2 on real Cloudflare (2026-11-05)
+
+A throwaway installation, `oc-preview-m2`, deployed from a clean start with `oc deploy` on the rules in [ADR-0016](decisions/0016-installation-admin-replaces-workspace-managers.md), and then removed. It had no email provider, so new account links came from `oc recover`.
+
+| Checked by script against the deployment | Result |
+|---|---|
+| First admin sets a password from the deploy link, and is a supervisor of the first workspace | Works |
+| Admin creates a workspace, adds a website, and renames it without joining. Conversations answer 404 until they add themselves, which is audited | Works |
+| Agent assigned with no invitation. Admin routes answer 404 to them. Removed routes answer 404. `owner` is refused as a role | Works |
+| Visitor reply and typing, both ways, over sockets. An internal note reaches neither the visitor's socket nor their history | Works |
+| Priority saved and sent live | Works |
+| A file 16 bytes under 25 MB stored in R2 and downloaded byte for byte. One byte over 25 MB answers 413 | Works |
+| Removing an agent closes their socket with 4403, and shows them as removed to the team but not to the visitor. Bringing them back keeps the member | Works |
+| Deactivating ends the session and sign-in. The last admin cannot give up the role | Works |
+
+| Checked in the app, on an iPhone 17 simulator | Result |
+|---|---|
+| Connecting with a bare address, with no `https://`, and signing in | Works |
+| A new conversation and a visitor's message appear live, and "The visitor is typing" shows | Works |
+| Typing and a reply from the app reach the visitor, with the agent's name | Works |
+| Changing priority to urgent, confirmed in D1 | Works |
+| A session ended on the server sends the app to sign-in on its next request, keeping the address and email. Until that request, it keeps showing the cached list | Works |
+
+**Found while removing it.** `wrangler delete` failed once, straight after the queue consumers were removed, and worked when run again. The queues could not be deleted until it had. Check each step's result when removing an installation, and retry. D1 and the bucket can be deleted while the Worker is still running, which then answers `/health` with 200, so that alone does not prove a removal.
+
 ## Sources
 
 - [D1 limits](https://developers.cloudflare.com/d1/platform/limits/), [D1 database API](https://developers.cloudflare.com/d1/worker-api/d1-database/), [migrations](https://developers.cloudflare.com/d1/reference/migrations/), [foreign keys](https://developers.cloudflare.com/d1/sql-api/foreign-keys/), [read replication](https://developers.cloudflare.com/d1/best-practices/read-replication/), [Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/)
