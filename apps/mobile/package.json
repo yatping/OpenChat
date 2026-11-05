@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "license": "Apache-2.0",
-  "description": "The OpenChat iOS app. One app, connected to any number of independent installations.",
+  "description": "The OpenChat iOS app. One app, connected to one installation at a time.",
   "main": "index.ts",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",

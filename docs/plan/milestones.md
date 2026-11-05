@@ -142,8 +142,8 @@ Expo app, Connection manager, discovery and compatibility check, sign-in, worksp
 
 **Exit**
 
-- Connects to two independent installations, including a test with **colliding IDs**.
-- Switching never leaks data. Logout wipes all local data for that connection.
+- Connects to an installation by address, and signing in to another replaces it, including a test with **colliding IDs** ([ADR-0014](../architecture/decisions/0014-one-installation-in-the-app.md)).
+- Switching workspace never leaks data. Logout wipes all local data for that connection.
 - Agents can reply from iOS.
 - Login expiry is handled mid-session.
 - An out-of-range API version shows an upgrade message.
@@ -161,7 +161,9 @@ Expo app, Connection manager, discovery and compatibility check, sign-in, worksp
 | Attachments | Tested by hand on the same simulator: picture preview, PDF through the share sheet, photo and document upload reaching the visitor, GPS removed from photos, no copies left after upload, sign-out removes downloads. Not tried: a file near the 25 MB limit, and signing out during a download |
 | Contact, tags, profile | Tested by hand on the same simulator: contact and tag edits reach the inbox. The profile is read-only, because the API has no way to change a name |
 | Account deletion | Not in the app. The owner decided on 2026-11-05 that agents should not delete their own accounts. Who may delete an account is still open, and `POST /api/v1/me/delete` still works for any signed-in user |
-| Not tested yet | Priority, switching workspace, switching between two real installations, login expiry mid-session, typing indicators, real Cloudflare, a physical device |
+| One installation, switching workspace | No way to add a second installation ([ADR-0014](../architecture/decisions/0014-one-installation-in-the-app.md)). Tested by hand on the simulator against a local server: two workspaces each show only their own conversation, switching works both ways, and sign-out returns to the address screen |
+| Session ended | A session that no longer exists on the server shows the sign-in screen with the address and email kept. Tested at launch. Not tested while the app is in use, when the access token stays valid until it expires |
+| Not tested yet | Priority, typing indicators, real Cloudflare, a physical device |
 
 ## M3: Relay and push (L)
 
@@ -169,7 +171,7 @@ Expo app, Connection manager, discovery and compatibility check, sign-in, worksp
 
 **Exit (spec Phase 3, plus)**
 
-- A visitor message yields a push on the correct devices, including several devices for one member, and devices on two installations.
+- A visitor message yields a push on the correct devices, including several devices for one member, and devices on two different installations.
 - Invalid tokens are removed, and transient failures retried, using the mock for each APNs reason and spot checks against the sandbox.
 - Replayed, stale, tampered, and unsigned requests are rejected, with one test per signed field.
 - Reused grant rejected. Non-allowlisted relay refused by the app.

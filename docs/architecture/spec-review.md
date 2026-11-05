@@ -88,3 +88,4 @@ These take effect on acceptance of this review. `REQUIREMENTS.md` stays unchange
 | A8 | §14 | `notificationRelayUrl` becomes a build-time allowlist. `apiUrl` becomes optional, set only when a white-label app is locked to one installation. |
 | A9 | §15 | Detailed health endpoints require operator authentication. A public `/health` returns status only. |
 | A10 | §17 | Milestone changes per [milestones](../plan/milestones.md). |
+| A11 | §1, §3.1, §17, §20 | The app connects to one installation at a time and switches between its workspaces ([ADR-0014](decisions/0014-one-installation-in-the-app.md)). |

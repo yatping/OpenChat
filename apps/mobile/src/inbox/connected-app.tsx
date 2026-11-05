@@ -36,7 +36,6 @@ export interface WorkspaceScope {
   cache: InboxCache;
   live: ReturnType<typeof useLive>;
   openConversation: RefObject<string | null>;
-  onAdd: () => void;
 }
 
 const Scope = createContext<WorkspaceScope | null>(null);
@@ -47,13 +46,13 @@ export function useWorkspace(): WorkspaceScope {
   return scope;
 }
 
-function Workspace({ connection, workspaceId, me, api, onAdd, client }: { connection: ConnectionView; workspaceId: string; me: Me; api: ApiClient; onAdd: () => void; client: QueryClient }) {
+function Workspace({ connection, workspaceId, me, api, client }: { connection: ConnectionView; workspaceId: string; me: Me; api: ApiClient; client: QueryClient }) {
   const scheme = useColorScheme();
   const cache = useMemo(() => createInboxCache(client, api, workspaceId), [api, client, workspaceId]);
   const openConversation = useRef<string | null>(null);
   const live = useLive(api, workspaceId, cache, openConversation);
   const membership = me.memberships.find((candidate) => candidate.workspace.id === workspaceId)!;
-  const scope: WorkspaceScope = { api, connection, workspaceId, me, memberId: membership.memberId, cache, live, openConversation, onAdd };
+  const scope: WorkspaceScope = { api, connection, workspaceId, me, memberId: membership.memberId, cache, live, openConversation };
   return (
     <Scope.Provider value={scope}>
       <NavigationIndependentTree>
@@ -70,7 +69,7 @@ function Workspace({ connection, workspaceId, me, api, onAdd, client }: { connec
   );
 }
 
-function Loaded({ connection, api, onAdd, client }: { connection: ConnectionView; api: ApiClient; onAdd: () => void; client: QueryClient }) {
+function Loaded({ connection, api, client }: { connection: ConnectionView; api: ApiClient; client: QueryClient }) {
   const me = useQuery({ queryKey: ['me'], queryFn: () => api.getMe() });
   const memberships = me.data?.memberships;
   const held = memberships?.some((membership) => membership.workspace.id === connection.workspaceId) ?? false;
@@ -80,7 +79,7 @@ function Loaded({ connection, api, onAdd, client }: { connection: ConnectionView
     if (memberships && !held && memberships[0]) void connections.selectWorkspace(connection.id, memberships[0].workspace.id);
   }, [connection.id, held, memberships]);
 
-  if (me.data && held) return <Workspace connection={connection} workspaceId={connection.workspaceId!} me={me.data} api={api} onAdd={onAdd} client={client} />;
+  if (me.data && held) return <Workspace connection={connection} workspaceId={connection.workspaceId!} me={me.data} api={api} client={client} />;
 
   const signOut = <Button title="Sign out" kind="danger" onPress={() => void connections.signOut(connection.id)} />;
   if (me.error && !(me.error instanceof ApiError && me.error.status === 401)) {
@@ -89,7 +88,6 @@ function Loaded({ connection, api, onAdd, client }: { connection: ConnectionView
         <Title>{connection.installationName}</Title>
         <Problem>Could not load your account. Check your connection and try again.</Problem>
         <Button title="Try again" onPress={() => void me.refetch()} />
-        <Button title="Add an installation" kind="plain" onPress={onAdd} />
         {signOut}
       </Screen>
     );
@@ -103,7 +101,7 @@ function Loaded({ connection, api, onAdd, client }: { connection: ConnectionView
   );
 }
 
-export function ConnectedApp({ connection, onAdd }: { connection: ConnectionView; onAdd: () => void }) {
+export function ConnectedApp({ connection }: { connection: ConnectionView }) {
   const api = connections.session(connection.id).client;
   // One per Connection and workspace, never shared, so cached data has nowhere to leak from.
   const [client] = useState(
@@ -117,7 +115,7 @@ export function ConnectedApp({ connection, onAdd }: { connection: ConnectionView
   useEffect(() => () => client.clear(), [client]);
   return (
     <QueryClientProvider client={client}>
-      <Loaded connection={connection} api={api} onAdd={onAdd} client={client} />
+      <Loaded connection={connection} api={api} client={client} />
     </QueryClientProvider>
   );
 }

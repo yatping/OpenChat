@@ -1,7 +1,7 @@
 /**
- * Holds one Connection per installation and user. Installations are independent and may even choose the same IDs,
- * so a connection is known by a local ID, and everything it owns hangs off that. There is no global client.
- * See docs/ios-build/expo-and-white-label.md.
+ * Holds the device's Connection: one user signed in to one installation (ADR-0014). Signing in to another replaces it.
+ * Installations are independent and may even choose the same IDs, so a connection is known by a local ID, and
+ * everything it owns hangs off that. There is no global client. See docs/ios-build/expo-and-white-label.md.
  */
 import { ApiError, createClient, type DiscoveryResponse } from '@openchat/api-client';
 import { checkCompatibility, fetchDiscovery, type Compatibility } from './discovery';
@@ -114,6 +114,13 @@ export function createConnectionManager(deps: ManagerDeps) {
     if (activeId) void recheck(activeId);
   };
 
+  /** Ends the session on the installation if it can be reached, and wipes this device either way. */
+  const signOut = async (id: string) => {
+    const session = sessionFor(id);
+    if (session.status() === 'signed_in') await session.client.logout().catch(() => undefined);
+    await wipe(id);
+  };
+
   return {
     getState: () => state,
     subscribe: (listener: () => void) => {
@@ -170,6 +177,8 @@ export function createConnectionManager(deps: ManagerDeps) {
         activeId = id;
         await persist();
         publish();
+        // Only reachable from the session-ended screen, signing in as someone else. Nothing of theirs stays.
+        for (const other of records.filter((candidate) => candidate.id !== id)) await signOut(other.id);
         return { ok: true, connectionId: id };
       } catch (error) {
         // Nothing half-finished stays behind, such as a connection whose token could not be saved.
@@ -183,26 +192,13 @@ export function createConnectionManager(deps: ManagerDeps) {
       }
     },
 
-    async switchTo(id: string) {
-      if (!records.some((record) => record.id === id)) return;
-      activeId = id;
-      await persist();
-      publish();
-      void recheck(id);
-    },
-
     async selectWorkspace(id: string, workspaceId: string) {
       records = records.map((record) => (record.id === id ? { ...record, workspaceId } : record));
       await persist();
       publish();
     },
 
-    /** Ends the session on the installation if it can be reached, and wipes this device either way. */
-    async signOut(id: string) {
-      const session = sessionFor(id);
-      if (session.status() === 'signed_in') await session.client.logout().catch(() => undefined);
-      await wipe(id);
-    },
+    signOut,
 
     /** Removes a connection whose session has ended, or that is gone, without calling it. */
     remove: wipe,

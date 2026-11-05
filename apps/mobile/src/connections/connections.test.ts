@@ -119,44 +119,52 @@ describe('compatibility', () => {
   });
 });
 
-describe('two installations with colliding IDs', () => {
-  it('keeps them apart: separate connections, tokens, and requests', async () => {
-    const { manager, a, b, secure } = setup();
-    await manager.start();
-    const first = await sign(manager, 'https://a.example', 'alpha');
-    const second = await sign(manager, 'https://b.example', 'beta');
-    if (!first.ok || !second.ok) throw new Error('Could not sign in');
-    expect(first.connectionId).not.toBe(second.connectionId);
-    expect(manager.getState().connections.map((c) => [c.installationId, c.userId, c.workspaceId])).toEqual([['inst_same', 'user_same', 'work_same'], ['inst_same', 'user_same', 'work_same']]);
-    expect(secure.values.get(refreshTokenKey(first.connectionId))).toBe('alpha-refresh-0');
-    expect(secure.values.get(refreshTokenKey(second.connectionId))).toBe('beta-refresh-0');
-
-    a.state.meCalls.length = 0;
-    b.state.meCalls.length = 0;
-    await manager.session(first.connectionId).client.getMe();
-    await manager.session(second.connectionId).client.getMe();
-    expect(a.state.meCalls).toEqual(['Bearer alpha-access']);
-    expect(b.state.meCalls).toEqual(['Bearer beta-access']);
-  });
-
-  it('signing out of one wipes it, and leaves the other working', async () => {
+describe('one installation at a time', () => {
+  it('signing in to another, even with identical IDs, replaces the first and wipes all it held', async () => {
     const { manager, a, b, secure, wipeFiles } = setup();
     await manager.start();
     const first = await sign(manager, 'https://a.example', 'alpha');
     const second = await sign(manager, 'https://b.example', 'beta');
     if (!first.ok || !second.ok) throw new Error('Could not sign in');
+    expect(first.connectionId).not.toBe(second.connectionId);
+
+    expect(a.state.loggedOut).toBe(1);
+    expect(secure.values.has(refreshTokenKey(first.connectionId))).toBe(false);
+    expect(secure.values.get(refreshTokenKey(second.connectionId))).toBe('beta-refresh-0');
+    expect(wipeFiles.mock.calls).toEqual([[first.connectionId]]);
+    expect(manager.getState().connections.map((c) => [c.id, c.installationId, c.userId])).toEqual([[second.connectionId, 'inst_same', 'user_same']]);
+    expect(manager.getState().activeId).toBe(second.connectionId);
+    expect(() => manager.session(first.connectionId)).toThrow('Unknown connection');
+
+    a.state.meCalls.length = 0;
+    b.state.meCalls.length = 0;
+    await manager.session(second.connectionId).client.getMe();
+    expect(a.state.meCalls).toEqual([]);
+    expect(b.state.meCalls).toEqual(['Bearer beta-access']);
+  });
+
+  it('a failed sign-in to another leaves the current one alone', async () => {
+    const { manager, a, secure } = setup();
+    await manager.start();
+    const first = await sign(manager, 'https://a.example', 'alpha');
+    if (!first.ok) throw new Error('Could not sign in');
+    await expect(sign(manager, 'https://b.example', 'beta', 'wrong')).resolves.toEqual({ ok: false, reason: 'wrong_credentials' });
+    expect(a.state.loggedOut).toBe(0);
+    expect(secure.values.has(refreshTokenKey(first.connectionId))).toBe(true);
+    expect(manager.getState().activeId).toBe(first.connectionId);
+  });
+
+  it('signing out wipes the connection and returns to no connection', async () => {
+    const { manager, a, secure, wipeFiles } = setup();
+    await manager.start();
+    const first = await sign(manager, 'https://a.example', 'alpha');
+    if (!first.ok) throw new Error('Could not sign in');
     await manager.signOut(first.connectionId);
 
     expect(a.state.loggedOut).toBe(1);
-    expect(b.state.loggedOut).toBe(0);
-    expect(secure.values.has(refreshTokenKey(first.connectionId))).toBe(false);
-    expect(secure.values.has(refreshTokenKey(second.connectionId))).toBe(true);
+    expect(secure.values.size).toBe(0);
     expect(wipeFiles.mock.calls).toEqual([[first.connectionId]]);
-    expect(manager.getState().connections.map((c) => c.id)).toEqual([second.connectionId]);
-    expect(manager.getState().activeId).toBe(second.connectionId);
-    await expect(manager.session(second.connectionId).client.getMe()).resolves.toMatchObject({ email: 'beta@example.com' });
-    expect(() => manager.session(first.connectionId)).toThrow('Unknown connection');
-    expect(a.state.discovery.name).toBe('alpha');
+    expect(manager.getState()).toMatchObject({ connections: [], activeId: null });
   });
 
   it('wipes this device even when the installation cannot be reached', async () => {
@@ -179,16 +187,15 @@ describe('two installations with colliding IDs', () => {
     expect(manager.getState().connections).toHaveLength(1);
   });
 
-  it('remembers connections across a restart, and never stores a token outside the keychain', async () => {
+  it('remembers the connection across a restart, and never stores a token outside the keychain', async () => {
     const { manager, deps, registry } = setup();
     await manager.start();
     await sign(manager, 'https://a.example', 'alpha');
-    await sign(manager, 'https://b.example', 'beta');
     const saved = (await registry.load())!;
     expect(saved).not.toMatch(/access|refresh/);
     const restarted = createConnectionManager(deps);
     await restarted.start();
-    expect(restarted.getState().connections.map((c) => c.installationName)).toEqual(['alpha', 'beta']);
+    expect(restarted.getState().connections.map((c) => c.installationName)).toEqual(['alpha']);
     expect(restarted.getState().activeId).toBe(manager.getState().activeId);
   });
 });
@@ -223,22 +230,21 @@ describe('signing in', () => {
 });
 
 describe('when a session ends mid-use', () => {
-  it('marks only that connection expired, removes its token, and signing in again restores it', async () => {
+  it('marks the connection expired, removes its token, and signing in again restores it', async () => {
     const { manager, a, secure } = setup();
     await manager.start();
     const first = await sign(manager, 'https://a.example', 'alpha');
-    const second = await sign(manager, 'https://b.example', 'beta');
-    if (!first.ok || !second.ok) throw new Error('Could not sign in');
+    if (!first.ok) throw new Error('Could not sign in');
 
     a.state.revoked = true;
     await expect(manager.session(first.connectionId).client.getMe()).rejects.toMatchObject({ status: 401 });
-    expect(manager.getState().connections.map((c) => c.expired)).toEqual([true, false]);
+    expect(manager.getState().connections.map((c) => c.expired)).toEqual([true]);
     expect(secure.values.has(refreshTokenKey(first.connectionId))).toBe(false);
 
     a.state.revoked = false;
     const again = await sign(manager, 'https://a.example', 'alpha');
     expect(again).toEqual(first);
-    expect(manager.getState().connections.map((c) => c.expired)).toEqual([false, false]);
+    expect(manager.getState().connections.map((c) => c.expired)).toEqual([false]);
     await expect(manager.session(first.connectionId).client.getMe()).resolves.toMatchObject({ email: 'alpha@example.com' });
   });
 

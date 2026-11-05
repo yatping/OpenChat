@@ -13,7 +13,6 @@ import { Button, Screen, Title, useTheme } from './ui/kit';
 function Gate() {
   const { ready, connections: all, activeId } = useConnections();
   const theme = useTheme();
-  const [adding, setAdding] = useState(false);
   const [found, setFound] = useState<Found | null>(null);
   const active = all.find((connection) => connection.id === activeId) ?? null;
 
@@ -23,7 +22,6 @@ function Gate() {
 
   // A successful sign-in changes the active connection, which ends the flow that led to it.
   useEffect(() => {
-    setAdding(false);
     setFound(null);
   }, [activeId]);
 
@@ -35,7 +33,7 @@ function Gate() {
     );
   }
   if (found) return <SignInScreen baseUrl={found.baseUrl} discovery={found.discovery} onBack={() => setFound(null)} />;
-  if (adding || !active) return <ConnectScreen onFound={setFound} {...(adding && active ? { onCancel: () => setAdding(false) } : {})} />;
+  if (!active) return <ConnectScreen onFound={setFound} />;
 
   if (active.compatibility !== 'compatible') {
     return (
@@ -43,7 +41,6 @@ function Gate() {
         <Title>{active.installationName}</Title>
         <UpgradeMessage name={active.installationName} compatibility={active.compatibility} />
         <Button title="Check again" onPress={() => void connections.recheck(active.id)} />
-        <Button title="Add an installation" kind="plain" onPress={() => setAdding(true)} />
         <Button title="Sign out" kind="danger" onPress={() => void connections.signOut(active.id)} />
       </Screen>
     );
@@ -57,12 +54,12 @@ function Gate() {
         email={active.email}
         notice="Your session has ended. Please sign in again."
         onBack={() => void connections.remove(active.id)}
-        backTitle="Remove this installation"
+        backTitle="Use a different installation"
       />
     );
   }
   // The key is what guarantees that no state from one connection or workspace survives into another.
-  return <ConnectedApp key={`${active.id}/${active.workspaceId ?? ''}`} connection={active} onAdd={() => setAdding(true)} />;
+  return <ConnectedApp key={`${active.id}/${active.workspaceId ?? ''}`} connection={active} />;
 }
 
 export function App() {
