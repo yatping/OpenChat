@@ -166,8 +166,8 @@ Expo app, Connection manager, discovery and compatibility check, sign-in, worksp
 | Session ended | A session that no longer exists on the server shows the sign-in screen with the address and email kept. Tested at launch, and on real Cloudflare while the app was open: it goes to sign-in on its next request, and until then keeps showing the cached list |
 | Real Cloudflare | A fresh `oc deploy` passed the [API and simulator checks](../architecture/cloudflare-validation.md#milestone-2-on-real-cloudflare-2026-11-05), including priority, typing in both directions, a file just under 25 MB, and a session ending while the app was open |
 | Physical device | `fastlane ios device` makes a signed ad-hoc build, and `fastlane ios install` put it on an iPhone on iOS 27.0.1, connected by cable and unlocked. It launched and kept running. Against a fresh `oc deploy`, the owner signed in, read a visitor's message, replied, sent a photo, and returned from the background. The visitor's side was checked by script: the reply arrived, and the 3.6 MB photo downloaded intact. One device, one session |
-| Push token (S7) | A throwaway ad-hoc build got a raw 64-character APNs token on the iPhone after the owner allowed notifications ([result](../architecture/cloudflare-validation.md#phase-0-spike-results)). `expo-notifications` is not in the app yet. No push has been received, because no APNs key exists |
-| Not tested yet | Receiving a push, sign-out during a download, an installation upgraded with existing data on real D1, and email delivery of a new account link |
+| Push spike (S7) | A throwaway ad-hoc build got a raw 64-character APNs token on the iPhone, and two pushes sent by script through production APNs arrived, one with the app open and one after its process was killed ([result](../architecture/cloudflare-validation.md#phase-0-spike-results)). `expo-notifications` is not in the app yet, so the normal app cannot receive push until M3 |
+| Not tested yet | Sign-out during a download, an installation upgraded with existing data on real D1, and email delivery of a new account link |
 
 <a id="m2-exit-check"></a>
 ### M2 exit check
@@ -183,7 +183,6 @@ Expo app, Connection manager, discovery and compatibility check, sign-in, worksp
 
 Push is M3, so an agent gets no alert while the app is closed. Before anyone relies on the app:
 
-- No push has been received. The token part of S7 passed, and receiving one needs an APNs key that the owner has to create.
 - Not tested: an installation upgraded with existing data on real D1, and email delivery of a new account link.
 - Not done: App Store submission, and confirming that Apple accepts the app without account deletion under guideline 5.1.1(v).
 
@@ -194,7 +193,7 @@ Push is M3, so an agent gets no alert while the app is closed. Before anyone rel
 **Exit (spec Phase 3, plus)**
 
 - A visitor message yields a push on the correct devices, including several devices for one member, and devices on two different installations.
-- Invalid tokens are removed, and transient failures retried, using the mock for each APNs reason and spot checks against the sandbox.
+- Invalid tokens are removed, and transient failures retried, using the mock for each APNs reason and spot checks against production APNs on an ad-hoc build, because the key is production only ([S7](../architecture/cloudflare-validation.md#phase-0-spike-results)).
 - Replayed, stale, tampered, and unsigned requests are rejected, with one test per signed field.
 - Reused grant rejected. Non-allowlisted relay refused by the app.
 - A schema test proves the relay cannot hold content.
