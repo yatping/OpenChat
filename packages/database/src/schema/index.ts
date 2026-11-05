@@ -284,6 +284,8 @@ export const conversations = sqliteTable(
     lastAgentMessageAt: integer('last_agent_message_at'),
     /** Cron work-list. See docs/architecture/background-jobs.md. */
     nextAutomationAt: integer('next_automation_at'),
+    /** When to email members about a visitor still waiting. Set by a visitor's message, cleared by a public reply. */
+    nextUnansweredAlertAt: integer('next_unanswered_alert_at'),
     /** Optimistic concurrency token. */
     version: integer('version').notNull().default(1),
     /** Guards follow-up statements in a batch. See data-model.md, Pattern 2. */
@@ -318,6 +320,7 @@ export const conversations = sqliteTable(
     ),
     index('conversations_contact_idx').on(t.workspaceId, t.contactId, sql`${t.lastMessageAt} DESC`),
     index('conversations_automation_idx').on(t.nextAutomationAt).where(sql`${t.nextAutomationAt} IS NOT NULL`),
+    index('conversations_unanswered_idx').on(t.nextUnansweredAlertAt).where(sql`${t.nextUnansweredAlertAt} IS NOT NULL`),
     index('conversations_updated_idx').on(t.workspaceId, t.updatedAt, t.id),
     check('conversations_status_ck', sql`${t.status} IN ('open','pending','resolved','archived')`),
     check('conversations_priority_ck', sql`${t.priority} IN ('low','normal','high','urgent')`),

@@ -242,7 +242,7 @@ Push is M3, so an agent gets no alert while the app is closed. Before anyone rel
 
 ## M4: Email and automation (L)
 
-Provider abstraction and drivers. Encrypted workspace settings. Templates. Agent alerts for new and unanswered conversations. Transcripts with permissions. Rule model, cron sweep, and evaluation with `automation_runs`. Consent capture, unsubscribe, and suppressions. DLQ sink and operator page. Contact export and erasure.
+Provider abstraction. Templates. Agent alerts for new and unanswered conversations. Transcripts with permissions. Rule model, cron sweep, and evaluation with `automation_runs`. Consent capture, unsubscribe, and suppressions. DLQ sink and operator page. Contact export and erasure.
 
 **Exit (spec Phase 4, plus)**
 
@@ -253,6 +253,17 @@ Provider abstraction and drivers. Encrypted workspace settings. Templates. Agent
 - A provider outage does not affect messaging.
 
 **Depends on:** Q12, Q13.
+
+**Status**
+
+| Slice | State |
+|---|---|
+| Email sending and alerts to members | Done, tested with a fake provider. Not yet sent through real Cloudflare, which the exit check covers |
+| Consent and unsubscribe | Not started |
+| Follow-up automation | Not started |
+| Transcripts | Not started |
+| Operations and data | Not started |
+| Exit check | Not started |
 
 ## M5: Independent deployment (L)
 

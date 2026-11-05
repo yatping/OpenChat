@@ -1546,13 +1546,15 @@
                     "conversation_assigned",
                     "conversation_transferred",
                     "mention",
-                    "conversation_updated"
+                    "conversation_updated",
+                    "conversation_unanswered"
                   ]
                 },
                 "channel": {
                   "type": "string",
                   "enum": [
-                    "push"
+                    "push",
+                    "email"
                   ]
                 },
                 "enabled": {
@@ -1565,7 +1567,7 @@
                 "enabled"
               ]
             },
-            "maxItems": 6
+            "maxItems": 8
           }
         },
         "required": [
@@ -3202,7 +3204,7 @@
           "push"
         ],
         "operationId": "getNotificationPreferences",
-        "summary": "The caller's preferences. An event with no choice made is on.",
+        "summary": "The caller's preferences. Push starts on, and email starts off.",
         "security": [
           {
             "bearerAuth": []
