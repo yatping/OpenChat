@@ -158,8 +158,9 @@ Expo app, Connection manager, discovery and compatibility check, sign-in, worksp
 |---|---|
 | App skeleton, connections, sign-in, upgrade message | Merged, with unit tests including colliding IDs |
 | Inbox and conversation | Tested by hand on an iPhone 17 simulator against a local server: live messages, reply, internal note kept from the visitor, status, assignee, restart keeps the session, sign-out clears local files |
+| Attachments | Tested by hand on the same simulator: picture preview, PDF through the share sheet, photo and document upload reaching the visitor, GPS removed from photos, no copies left after upload, sign-out removes downloads. Not tried: a file near the 25 MB limit, and signing out during a download |
 | Not tested yet | Priority, switching workspace, switching between two real installations, login expiry mid-session, typing indicators, real Cloudflare, a physical device |
-| Not built yet | Viewing and uploading attachments, contact details, profile and account deletion |
+| Not built yet | Contact details, profile and account deletion |
 
 ## M3: Relay and push (L)
 

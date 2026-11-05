@@ -74,6 +74,9 @@ export class ApiError extends Error {
   }
 }
 
+/** A browser has a Blob. React Native has only bytes that it can send. */
+type FileBody = { data: Blob | Uint8Array<ArrayBuffer>; type: string };
+
 export interface ClientOptions {
   baseUrl: string;
   getAccessToken?: () => string | null | Promise<string | null>;
@@ -87,7 +90,7 @@ export function createClient(options: ClientOptions) {
   const doFetch = options.fetch ?? globalThis.fetch.bind(globalThis);
   const baseUrl = options.baseUrl.replace(/\/+$/, '');
 
-  async function send(method: string, path: string, body: unknown, file?: { data: Blob; type: string }): Promise<Response> {
+  async function send(method: string, path: string, body: unknown, file?: FileBody): Promise<Response> {
     const headers = new Headers({ accept: 'application/json' });
     const token = await options.getAccessToken?.();
     if (token) headers.set('authorization', `Bearer ${token}`);
@@ -97,7 +100,7 @@ export function createClient(options: ClientOptions) {
     return doFetch(`${baseUrl}${path}`, { method, headers, ...payload });
   }
 
-  async function checked(method: string, path: string, body?: unknown, file?: { data: Blob; type: string }): Promise<Response> {
+  async function checked(method: string, path: string, body?: unknown, file?: FileBody): Promise<Response> {
     let response = await send(method, path, body, file);
     if (response.status === 401 && options.onUnauthorized && (await options.onUnauthorized())) {
       response = await send(method, path, body, file);
@@ -155,8 +158,12 @@ export function createClient(options: ClientOptions) {
     /** The file's own type decides whether it is allowed. A browser reports none for some files, which are refused. */
     uploadAttachment: async (workspaceId: string, id: string, file: File): Promise<Attachment> =>
       (await (await checked('POST', `${conversation(workspaceId, id)}/attachments?filename=${encodeURIComponent(file.name)}`, undefined, { data: file, type: file.type || 'application/octet-stream' })).json()) as Attachment,
+    /** For React Native, where a picked file is bytes and not a File. The same rules apply on the server. */
+    uploadAttachmentBytes: async (workspaceId: string, id: string, file: { filename: string; contentType: string; data: Uint8Array<ArrayBuffer> }): Promise<Attachment> =>
+      (await (await checked('POST', `${conversation(workspaceId, id)}/attachments?filename=${encodeURIComponent(file.filename)}`, undefined, { data: file.data, type: file.contentType })).json()) as Attachment,
     /** `url` is the path from an attachment. It needs the token, so a file is fetched, not linked. */
     downloadAttachment: async (url: string): Promise<Blob> => (await checked('GET', url)).blob(),
+    downloadAttachmentBytes: async (url: string): Promise<ArrayBuffer> => (await checked('GET', url)).arrayBuffer(),
     sendMessage: (workspaceId: string, id: string, input: MessageInput) => request<Message>('POST', `${conversation(workspaceId, id)}/messages`, input),
     markConversationRead: (workspaceId: string, id: string, seq: number) => request<void>('POST', `${conversation(workspaceId, id)}/read`, { deliveredSeq: seq, readSeq: seq }),
     getContact: (workspaceId: string, id: string) => get<Contact>(`${workspace(workspaceId)}/contacts/${encodeURIComponent(id)}`),

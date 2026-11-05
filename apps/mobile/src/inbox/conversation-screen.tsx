@@ -1,13 +1,15 @@
-import { ApiError, type Conversation, type Message } from '@openchat/api-client';
+import { ApiError, type Attachment, type Conversation, type Message } from '@openchat/api-client';
 import { highestSeq, mergeMessages, shouldSendTyping } from '@openchat/api-client/inbox-state';
 import { useIsFocused, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { randomUUID } from 'expo-crypto';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ActionSheetIOS, AppState, FlatList, KeyboardAvoidingView, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActionSheetIOS, ActivityIndicator, AppState, FlatList, Image, KeyboardAvoidingView, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Body, Button, Problem, useTheme } from '../ui/kit';
+import { localCopy, openFile, pickDocument, pickPhoto, TooLarge, uploadPicked, type Picked } from './attachment-files';
+import { canPreview, formatSize, uploadProblem } from './attachment-rules';
 import { detailKey, threadKey } from './cache';
 import { useWorkspace, type Routes } from './connected-app';
 import { conversationLabel, shortTime } from './format';
@@ -16,11 +18,33 @@ import { ConnectionNotice } from './inbox-screen';
 const STATUSES: Conversation['status'][] = ['open', 'pending', 'resolved', 'archived'];
 const PRIORITIES: Conversation['priority'][] = ['low', 'normal', 'high', 'urgent'];
 const MAX_MESSAGE_CHARS = 16000;
+/** The installation's limit for one message. */
+const MAX_FILES = 10;
 
 function choose(title: string, options: string[], onPick: (index: number) => void) {
   ActionSheetIOS.showActionSheetWithOptions({ title, options: [...options, 'Cancel'], cancelButtonIndex: options.length }, (index) => {
     if (index < options.length) onPick(index);
   });
+}
+
+function AttachmentView({ file, color }: { file: Attachment; color: string }) {
+  const { api, connection } = useWorkspace();
+  const previewable = canPreview(file);
+  const preview = useQuery({ queryKey: ['attachment-file', file.id], queryFn: () => localCopy(api, connection.id, file), enabled: previewable, staleTime: Infinity });
+  const open = useMutation({ mutationFn: async () => openFile(await localCopy(api, connection.id, file), file.contentType, file.filename) });
+  if (file.status !== 'ready') return <Text style={{ fontSize: 14, color }}>{file.filename} (not available)</Text>;
+  return (
+    <View style={{ gap: 4 }}>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Open ${file.filename}, ${formatSize(file.size)}`} disabled={open.isPending} onPress={() => open.mutate()}>
+        {preview.data && <Image accessibilityIgnoresInvertColors source={{ uri: preview.data }} resizeMode="cover" style={styles.preview} />}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 28 }}>
+          <Text style={{ fontSize: 14, color, textDecorationLine: 'underline', flexShrink: 1 }}>{file.filename} ({formatSize(file.size)})</Text>
+          {open.isPending && <ActivityIndicator size="small" />}
+        </View>
+      </Pressable>
+      {open.error && <Text style={{ fontSize: 13, color }}>That did not open. Try again.</Text>}
+    </View>
+  );
 }
 
 function Bubble({ message, memberId }: { message: Message; memberId: string }) {
@@ -36,7 +60,7 @@ function Bubble({ message, memberId }: { message: Message; memberId: string }) {
         {note ? `Note, ${sender}` : sender} · {shortTime(message.createdAt)}
       </Text>
       {message.content.length > 0 && <Text selectable style={{ fontSize: 16, lineHeight: 22, color: note ? '#451a03' : mine ? theme.onPrimary : theme.text }}>{message.content}</Text>}
-      {message.attachments.map((file) => <Text key={file.id} style={{ fontSize: 14, color: note ? '#78350f' : mine ? theme.onPrimary : theme.muted }}>{file.filename}</Text>)}
+      {message.attachments.map((file) => <AttachmentView key={file.id} file={file} color={note ? '#78350f' : mine ? theme.onPrimary : theme.text} />)}
     </View>
   );
 }
@@ -47,31 +71,64 @@ function Composer({ conversationId }: { conversationId: string }) {
   const [draft, setDraft] = useState('');
   const [mode, setMode] = useState<'text' | 'internal_note'>('text');
   // The same attempt keeps its ID, so that retrying after a lost response cannot send it twice.
-  const attempt = useRef<{ id: string; content: string; type: string } | null>(null);
+  const attempt = useRef<{ id: string; content: string; type: string; files: string } | null>(null);
+  const [files, setFiles] = useState<{ id: string; filename: string }[]>([]);
+  const [uploading, setUploading] = useState(0);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const lastTyping = useRef(0);
   const note = mode === 'internal_note';
 
   const send = useMutation({
-    mutationFn: (input: { id: string; content: string; type: 'text' | 'internal_note' }) => api.sendMessage(workspaceId, conversationId, { clientMessageId: input.id, type: input.type, content: input.content }),
+    mutationFn: (input: { id: string; content: string; type: 'text' | 'internal_note'; attachmentIds: string[] }) => api.sendMessage(workspaceId, conversationId, { clientMessageId: input.id, type: input.type, content: input.content, ...(input.attachmentIds.length > 0 ? { attachmentIds: input.attachmentIds } : {}) }),
     onSuccess: (message) => {
       attempt.current = null;
       cache.messageSent(conversationId, message);
       setDraft('');
+      setFiles([]);
     },
   });
   const submit = () => {
     const content = draft.trim();
-    if (!content || send.isPending) return;
-    if (attempt.current?.content !== content || attempt.current.type !== mode) attempt.current = { id: randomUUID(), content, type: mode };
-    send.mutate({ id: attempt.current.id, content, type: mode });
+    if ((!content && files.length === 0) || send.isPending || uploading > 0) return;
+    const attachmentIds = files.map((file) => file.id);
+    const fileKey = attachmentIds.join();
+    if (attempt.current?.content !== content || attempt.current.type !== mode || attempt.current.files !== fileKey) attempt.current = { id: randomUUID(), content, type: mode, files: fileKey };
+    send.mutate({ id: attempt.current.id, content, type: mode, attachmentIds });
   };
+  const upload = async (pick: () => Promise<Picked | null>) => {
+    setUploadError(null);
+    try {
+      const picked = await pick();
+      if (!picked) return;
+      setUploading((count) => count + 1);
+      try {
+        const stored = await uploadPicked(api, workspaceId, conversationId, picked);
+        setFiles((known) => [...known, { id: stored.id, filename: stored.filename }]);
+      } finally {
+        setUploading((count) => count - 1);
+      }
+    } catch (error) {
+      setUploadError(error instanceof TooLarge ? uploadProblem(413) : uploadProblem(error instanceof ApiError ? error.status : undefined));
+    }
+  };
+  const attach = () => choose('Add a file', ['Photo', 'Document'], (index) => void upload(index === 0 ? pickPhoto : pickDocument));
 
   return (
     <View style={[styles.composer, { borderTopColor: theme.border, backgroundColor: note ? '#fffbeb' : theme.background }]}>
       {send.error && <Problem>{send.error instanceof ApiError && send.error.status === 403 ? 'You cannot reply to this conversation.' : 'That did not send. Your message is still here, so try again.'}</Problem>}
+      {uploadError && <Problem>{uploadError}</Problem>}
       <View style={styles.modes}>
         <Button title={note ? 'Write a reply instead' : 'Write a note instead'} kind="plain" onPress={() => setMode(note ? 'text' : 'internal_note')} />
+        <Button title="Add a file" kind="plain" busy={uploading > 0} disabled={files.length >= MAX_FILES} onPress={attach} />
       </View>
+      {files.map((file) => (
+        <View key={file.id} style={styles.picked}>
+          <Text numberOfLines={1} style={{ flex: 1, color: note ? '#451a03' : theme.text }}>{file.filename}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${file.filename}`} hitSlop={8} onPress={() => setFiles((known) => known.filter((other) => other.id !== file.id))}>
+            <Text style={{ color: theme.danger }}>Remove</Text>
+          </Pressable>
+        </View>
+      ))}
       <TextInput
         accessibilityLabel={note ? 'Internal note' : 'Reply'}
         placeholder={note ? 'Only your team can see this' : 'Reply to the visitor'}
@@ -89,7 +146,7 @@ function Composer({ conversationId }: { conversationId: string }) {
         }}
         style={[styles.input, { color: note ? '#451a03' : theme.text, borderColor: theme.border }]}
       />
-      <Button title={note ? 'Save note' : 'Send reply'} busy={send.isPending} disabled={!draft.trim()} onPress={submit} />
+      <Button title={note ? 'Save note' : 'Send reply'} busy={send.isPending} disabled={(!draft.trim() && files.length === 0) || uploading > 0} onPress={submit} />
     </View>
   );
 }
@@ -225,7 +282,9 @@ const styles = StyleSheet.create({
   system: { textAlign: 'center', fontSize: 13 },
   bubble: { maxWidth: '85%', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8, gap: 2 },
   composer: { padding: 10, gap: 8, borderTopWidth: StyleSheet.hairlineWidth },
-  modes: { flexDirection: 'row' },
+  modes: { flexDirection: 'row', gap: 8 },
+  picked: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 32 },
+  preview: { width: 220, height: 160, borderRadius: 8 },
   input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 10, minHeight: 44, maxHeight: 140, fontSize: 16 },
   actions: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth },
   action: { minHeight: 36, borderRadius: 18, paddingHorizontal: 14, justifyContent: 'center' },
