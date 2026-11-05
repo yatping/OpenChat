@@ -24,6 +24,10 @@ import type {
   AttachmentSchema,
   updateConversationRoute,
   updateMemberRoute,
+  assignPersonRoute,
+  createPersonRoute,
+  listAdminWorkspacesRoute,
+  listPeopleRoute,
   updateWebsiteRoute,
   updateWorkspaceRoute,
 } from '@openchat/api-contracts';
@@ -45,6 +49,11 @@ export type Website = Json200<typeof listWebsitesRoute>['data'][number];
 export type WebsiteInput = BodyOf<typeof createWebsiteRoute>;
 export type WebsiteUpdate = BodyOf<typeof updateWebsiteRoute>;
 export type MemberUpdate = BodyOf<typeof updateMemberRoute>;
+export type Person = Json201<typeof createPersonRoute>;
+export type PersonInput = BodyOf<typeof createPersonRoute>;
+export type PersonAssignment = BodyOf<typeof assignPersonRoute>;
+export type People = Json200<typeof listPeopleRoute>;
+export type AdminWorkspaces = Json200<typeof listAdminWorkspacesRoute>;
 export type InvitationInput = BodyOf<typeof createInvitationRoute>;
 export type Invitation = Json201<typeof createInvitationRoute>;
 export type LoginInput = BodyOf<typeof loginRoute>;
@@ -119,6 +128,7 @@ export function createClient(options: ClientOptions) {
   }
 
   const get = <T>(path: string) => request<T>('GET', path);
+  const person = (id: string) => `/api/v1/admin/people/${encodeURIComponent(id)}`;
   const workspace = (id: string) => `/api/v1/workspaces/${encodeURIComponent(id)}`;
   const conversation = (workspaceId: string, id: string) => `${workspace(workspaceId)}/conversations/${encodeURIComponent(id)}`;
   const query = (values: Record<string, string | number | undefined>) => {
@@ -143,6 +153,14 @@ export function createClient(options: ClientOptions) {
     updateMember: (workspaceId: string, memberId: string, input: MemberUpdate) =>
       request<Member>('PATCH', `${workspace(workspaceId)}/members/${encodeURIComponent(memberId)}`, input),
     removeMember: (workspaceId: string, memberId: string) => request<void>('DELETE', `${workspace(workspaceId)}/members/${encodeURIComponent(memberId)}`),
+    listPeople: (input: { cursor?: string; limit?: number } = {}) => get<People>(`/api/v1/admin/people${query(input)}`),
+    createPerson: (input: PersonInput) => request<Person>('POST', '/api/v1/admin/people', input),
+    updatePerson: (userId: string, input: { isInstallationAdmin: boolean }) => request<Person>('PATCH', person(userId), input),
+    deactivatePerson: (userId: string) => request<Person>('POST', `${person(userId)}/deactivate`),
+    reactivatePerson: (userId: string) => request<Person>('POST', `${person(userId)}/reactivate`),
+    assignPerson: (userId: string, workspaceId: string, input: PersonAssignment) => request<Person>('PUT', `${person(userId)}/workspaces/${encodeURIComponent(workspaceId)}`, input),
+    unassignPerson: (userId: string, workspaceId: string) => request<Person>('DELETE', `${person(userId)}/workspaces/${encodeURIComponent(workspaceId)}`),
+    listAdminWorkspaces: (input: { cursor?: string; limit?: number } = {}) => get<AdminWorkspaces>(`/api/v1/admin/workspaces${query(input)}`),
     invite: (workspaceId: string, input: InvitationInput) => request<Invitation>('POST', `${workspace(workspaceId)}/invitations`, input),
     listWebsites: (workspaceId: string) => get<{ data: Website[] }>(`${workspace(workspaceId)}/websites`),
     createWebsite: (workspaceId: string, input: WebsiteInput) => request<Website>('POST', `${workspace(workspaceId)}/websites`, input),

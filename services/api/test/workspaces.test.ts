@@ -46,7 +46,6 @@ async function signIn(email: string, password = PASSWORD): Promise<string> {
 const tokens: Record<string, string> = {};
 const W1 = '/api/v1/workspaces/work_1';
 const W2 = '/api/v1/workspaces/work_2';
-const DELETE_ME = '/api/v1/me/delete';
 
 beforeEach(async () => {
   await env.DB.batch(['audit_log', 'invitations', 'websites', 'workspace_members', 'auth_sessions', 'auth_tokens', 'workspaces', 'users', 'installation'].map((t) => env.DB.prepare(`DELETE FROM ${t}`)));
@@ -277,44 +276,3 @@ describe('websites', () => {
   });
 });
 
-describe('deleting an account', () => {
-  it('refuses the last owner, and ends everything for anyone else', async () => {
-    expect((await call('POST', DELETE_ME, tokens.owner, { password: PASSWORD })).status).toBe(409);
-    expect((await call('GET', W1, tokens.owner)).status).toBe(200);
-    expect((await call('POST', DELETE_ME, tokens.agent, { password: PASSWORD })).status).toBe(204);
-    expect((await call('GET', '/api/v1/me', tokens.agent)).status).toBe(401);
-    expect((await call('POST', '/api/v1/auth/login', undefined, { email: 'agent@example.com', password: PASSWORD, clientType: 'mobile' })).status).toBe(401);
-  });
-
-  it('requires a token', async () => {
-    expect((await call('POST', DELETE_ME, undefined, { password: PASSWORD })).status).toBe(401);
-  });
-
-  it('needs the password, so a stolen access token cannot delete the account', async () => {
-    expect((await call('POST', DELETE_ME, tokens.agent, {})).status).toBe(400);
-    // 403, not 401: a client answers 401 by refreshing and sending the request again.
-    const wrong = await call('POST', DELETE_ME, tokens.agent, { password: 'not the password' });
-    expect(wrong.status).toBe(403);
-    expect(((await wrong.json()) as { code: string }).code).toBe('password_incorrect');
-    expect((await call('GET', '/api/v1/me', tokens.agent)).status).toBe(200);
-    expect(await env.DB.prepare(`SELECT status FROM workspace_members WHERE id = 'mem_agent'`).first('status')).toBe('active');
-  });
-
-  it('takes the password of the signed-in user, not of anyone else', async () => {
-    await env.DB.prepare(`UPDATE users SET password_hash = ?1 WHERE id = 'user_agent'`).bind(await hashPassword('the agents own password')).run();
-    expect((await call('POST', DELETE_ME, tokens.agent, { password: PASSWORD })).status).toBe(403);
-    expect((await call('POST', DELETE_ME, tokens.agent, { password: 'the agents own password' })).status).toBe(204);
-  });
-
-  it('shares the login limit, so the token gives no extra way to guess the password', async () => {
-    await env.DB.batch([
-      env.DB.prepare(`INSERT INTO users (id, email, name, password_hash, created_at, updated_at) VALUES ('user_guess', 'guess@example.com', 'guess', ?1, 1, 1)`).bind(hash),
-    ]);
-    const token = await signIn('guess@example.com');
-    for (let attempt = 0; attempt < 10; attempt++) {
-      expect((await call('POST', DELETE_ME, token, { password: 'wrong' })).status).toBe(403);
-    }
-    expect((await call('POST', DELETE_ME, token, { password: PASSWORD })).status).toBe(429);
-    expect((await call('POST', '/api/v1/auth/login', undefined, { email: 'guess@example.com', password: PASSWORD, clientType: 'mobile' })).status).toBe(429);
-  });
-});

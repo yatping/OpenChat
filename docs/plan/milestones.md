@@ -138,7 +138,7 @@ Checked on 2026-11-04 against what was actually run. "Real" means a throwaway de
 
 ## M2: iOS app without push (L)
 
-Expo app, Connection manager, discovery and compatibility check, sign-in, workspace selector, inbox, conversation view, composer, attachments, contact details, profile and account deletion, secure storage, and realtime in the foreground with catch-up.
+Expo app, Connection manager, discovery and compatibility check, sign-in, workspace selector, inbox, conversation view, composer, attachments, contact details, profile, secure storage, and realtime in the foreground with catch-up.
 
 **Exit**
 
@@ -160,7 +160,7 @@ Expo app, Connection manager, discovery and compatibility check, sign-in, worksp
 | Inbox and conversation | Tested by hand on an iPhone 17 simulator against a local server: live messages, reply, internal note kept from the visitor, status, assignee, restart keeps the session, sign-out clears local files |
 | Attachments | Tested by hand on the same simulator: picture preview, PDF through the share sheet, photo and document upload reaching the visitor, GPS removed from photos, no copies left after upload, sign-out removes downloads. Not tried: a file near the 25 MB limit, and signing out during a download |
 | Contact, tags, profile | Tested by hand on the same simulator: contact and tag edits reach the inbox. The profile is read-only, because the API has no way to change a name |
-| Account deletion | Not in the app. The owner decided on 2026-11-05 that agents should not delete their own accounts. Who may delete an account is still open, and `POST /api/v1/me/delete` still works for any signed-in user |
+| Account deletion | Not in the app or the API. Agents are removed or deactivated instead, which can be undone ([ADR-0015](../architecture/decisions/0015-installation-admin-and-reversible-removal.md)). Screens for this are in progress |
 | One installation, switching workspace | No way to add a second installation ([ADR-0014](../architecture/decisions/0014-one-installation-in-the-app.md)). Tested by hand on the simulator against a local server: two workspaces each show only their own conversation, switching works both ways, and sign-out returns to the address screen |
 | Session ended | A session that no longer exists on the server shows the sign-in screen with the address and email kept. Tested at launch. Not tested while the app is in use, when the access token stays valid until it expires |
 | Not tested yet | Priority, typing indicators, real Cloudflare, a physical device |

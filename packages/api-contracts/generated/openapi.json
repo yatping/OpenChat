@@ -310,6 +310,9 @@
                               "string",
                               "null"
                             ]
+                          },
+                          "removed": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -1921,6 +1924,9 @@
                   "string",
                   "null"
                 ]
+              },
+              "removed": {
+                "type": "boolean"
               }
             },
             "required": [
@@ -2141,6 +2147,9 @@
           "name": {
             "type": "string"
           },
+          "isInstallationAdmin": {
+            "type": "boolean"
+          },
           "memberships": {
             "type": "array",
             "items": {
@@ -2168,6 +2177,7 @@
           "id",
           "email",
           "name",
+          "isInstallationAdmin",
           "memberships"
         ]
       },
@@ -2203,6 +2213,84 @@
           "createdAt"
         ]
       },
+      "Person": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "isInstallationAdmin": {
+            "type": "boolean"
+          },
+          "deactivated": {
+            "type": "boolean"
+          },
+          "memberships": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "memberId": {
+                  "type": "string"
+                },
+                "workspaceId": {
+                  "type": "string"
+                },
+                "workspaceName": {
+                  "type": "string"
+                },
+                "role": {
+                  "$ref": "#/components/schemas/Role"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "active",
+                    "suspended",
+                    "removed"
+                  ]
+                }
+              },
+              "required": [
+                "memberId",
+                "workspaceId",
+                "workspaceName",
+                "role",
+                "status"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "email",
+          "isInstallationAdmin",
+          "deactivated",
+          "memberships"
+        ]
+      },
+      "AdminWorkspace": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
       "Member": {
         "type": "object",
         "properties": {
@@ -2222,7 +2310,8 @@
             "type": "string",
             "enum": [
               "active",
-              "suspended"
+              "suspended",
+              "removed"
             ]
           }
         },
@@ -4827,17 +4916,162 @@
         }
       }
     },
-    "/api/v1/me/delete": {
-      "post": {
+    "/api/v1/admin/people": {
+      "get": {
         "tags": [
-          "auth"
+          "admin"
         ],
-        "operationId": "deleteMe",
-        "summary": "Anonymise the account and leave all workspaces. Needs the password. Refused for the last owner of a workspace.",
-        "description": "A POST, because the password travels in the body and a DELETE body has no defined meaning. A wrong password answers 403, not 401, since the access token is valid and a client must not refresh and retry. Attempts share the login limit for the account.",
         "security": [
           {
             "bearerAuth": []
+          }
+        ],
+        "operationId": "listPeople",
+        "summary": "List every account on the installation. Anyone but an installation admin gets 404.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "cursor",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "People",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Person"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "operationId": "createPerson",
+        "summary": "Create an account and email a link that lasts seven days to choose a password. 409 if the address has an account.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^\\P{Cc}*$/u"
+                  },
+                  "email": {
+                    "type": "string",
+                    "maxLength": 320
+                  }
+                },
+                "required": [
+                  "name",
+                  "email"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Person"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/people/{userId}": {
+      "patch": {
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "operationId": "updatePerson",
+        "summary": "Grant or take away installation admin. The installation must keep one active admin.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "userId",
+            "in": "path"
           }
         ],
         "requestBody": {
@@ -4847,14 +5081,12 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "password": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 1024
+                  "isInstallationAdmin": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
-                  "password"
+                  "isInstallationAdmin"
                 ],
                 "additionalProperties": false
               }
@@ -4862,8 +5094,307 @@
           }
         },
         "responses": {
-          "204": {
-            "description": "Deleted"
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Person"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/people/{userId}/deactivate": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "operationId": "deactivatePerson",
+        "summary": "End all access, keeping the account and its memberships. Refused for yourself, and for the only owner of a workspace.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "userId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deactivated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Person"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/people/{userId}/reactivate": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "operationId": "reactivatePerson",
+        "summary": "Restore a deactivated account, with its password and memberships as they were.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "userId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reactivated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Person"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/people/{userId}/workspaces/{workspaceId}": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "operationId": "assignPerson",
+        "summary": "Put someone in a workspace with a role, or change their role there. Brings back a removed member. Needs no invitation.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "userId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "$ref": "#/components/schemas/Role"
+                  }
+                },
+                "required": [
+                  "role"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Assigned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Person"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "operationId": "unassignPerson",
+        "summary": "Remove someone from a workspace. Their messages keep their name. A workspace must keep one active owner.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "userId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Removed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Person"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/workspaces": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "operationId": "listAdminWorkspaces",
+        "summary": "List every workspace by name, to assign people to. Gives no access to what is inside.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "cursor",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workspaces",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AdminWorkspace"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ]
+                }
+              }
+            }
           },
           "default": {
             "description": "RFC 9457 problem details",
@@ -5134,7 +5665,7 @@
           "workspaces"
         ],
         "operationId": "updateMember",
-        "summary": "Change a role or status. A workspace must keep one active owner.",
+        "summary": "Change a role or status. Setting active also brings back a removed member. A workspace must keep one active owner.",
         "security": [
           {
             "bearerAuth": []
@@ -5209,7 +5740,7 @@
           "workspaces"
         ],
         "operationId": "removeMember",
-        "summary": "Remove a member and their push subscriptions",
+        "summary": "Remove a member and their push subscriptions. Their messages keep their name, and the member can be brought back.",
         "security": [
           {
             "bearerAuth": []

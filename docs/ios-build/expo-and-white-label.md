@@ -131,7 +131,7 @@ An extension could replace "New message" with real text by fetching on the devic
 |---|---|
 | Guideline 2.1 | Demo installation and credentials in the review notes ([Q8](../architecture/open-questions.md)) |
 | Guideline 4.2.6 | The official app is a single binary used with many installations, which fits the "picker" model. Customers must submit white-label apps **under their own accounts** |
-| Guideline 5.1.1(v) | The app has no signup; in-app deletion of the account on an installation is offered regardless |
+| Guideline 5.1.1(v) | The app has no signup, and does not offer account deletion ([ADR-0015](../architecture/decisions/0015-installation-admin-and-reversible-removal.md)). Confirm before submitting that this is acceptable |
 | Guideline 3.1 | No purchases or purchase prompts in the app |
 | Licence | See [ADR-0011](../architecture/decisions/0011-license-boundaries.md) |
 | Bundle ID | Decide before first upload, because it is **permanent for the listing** ([Q1](../architecture/open-questions.md)) |

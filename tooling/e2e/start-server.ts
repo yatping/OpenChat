@@ -23,9 +23,9 @@ const quote = (value: string) => `'${value.replaceAll("'", "''")}'`;
 const seed = `
 INSERT INTO installation (id, name, public_base_url, created_at, updated_at) VALUES ('inst_e2e', 'E2E', 'http://localhost:8799', 1, 1);
 INSERT INTO workspaces (id, name, slug, created_at, updated_at) VALUES (${quote(WORKSPACE_ID)}, 'E2E', 'e2e', 1, 1);
-INSERT INTO users (id, email, name, password_hash, created_at, updated_at) VALUES
-  ('user_owner', ${quote(OWNER.email)}, ${quote(OWNER.name)}, ${quote(hash)}, 1, 1),
-  ('user_agent', ${quote(AGENT.email)}, ${quote(AGENT.name)}, ${quote(hash)}, 1, 1);
+INSERT INTO users (id, email, name, password_hash, is_installation_admin, created_at, updated_at) VALUES
+  ('user_owner', ${quote(OWNER.email)}, ${quote(OWNER.name)}, ${quote(hash)}, 1, 1, 1),
+  ('user_agent', ${quote(AGENT.email)}, ${quote(AGENT.name)}, ${quote(hash)}, 0, 1, 1);
 INSERT INTO workspace_members (id, workspace_id, user_id, role, status, created_at, updated_at) VALUES
   (${quote(OWNER.memberId)}, ${quote(WORKSPACE_ID)}, 'user_owner', 'owner', 'active', 1, 1),
   (${quote(AGENT.memberId)}, ${quote(WORKSPACE_ID)}, 'user_agent', 'agent', 'active', 1, 1);

@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { acceptInvitation, authorizeWorkspaceMember, createWorkspace, deleteAccount, inspectInvitation, openDatabase, prepareInvitationEmail, repositories, type WorkspaceContext } from '../src/index';
+import { acceptInvitation, adminRepository, authorizeInstallationAdmin, authorizeWorkspaceMember, createWorkspace, inspectInvitation, openDatabase, prepareInvitationEmail, repositories, type WorkspaceContext } from '../src/index';
 
 // These call batches directly, with contexts that may be stale, because a decision made in JavaScript would
 // pass every sequential test. A context is proof of what was true when the request was authorised.
@@ -207,30 +207,51 @@ describe('createWorkspace', () => {
   });
 });
 
-describe('deleteAccount', () => {
-  it('refuses the last active owner, changing nothing', async () => {
-    expect(await deleteAccount(db(), 'owner')).toBe(false);
-    expect(await env.DB.prepare(`SELECT email FROM users WHERE id = 'owner'`).first('email')).toBe('owner@x.test');
-    expect(await roleOf('m_owner')).toBe('owner');
+
+describe('adminRepository', () => {
+  const adminContext = async () => {
+    await env.DB.prepare(`UPDATE users SET is_installation_admin = 1 WHERE id = 'owner'`).run();
+    return (await authorizeInstallationAdmin(db(), 'owner'))!;
+  };
+
+  it('gives no context to anyone but an active admin', async () => {
+    expect(await authorizeInstallationAdmin(db(), 'agent')).toBeNull();
+    await adminContext();
+    await env.DB.prepare(`UPDATE users SET disabled_at = 1 WHERE id = 'owner'`).run();
+    expect(await authorizeInstallationAdmin(db(), 'owner')).toBeNull();
   });
 
-  it('anonymises, removes memberships and tokens, and ends sessions', async () => {
-    await env.DB.batch([
-      env.DB.prepare(`INSERT INTO auth_sessions (id, user_id, refresh_token_hash, client_type, created_at, last_used_at, expires_at) VALUES ('s', 'agent', 'r', 'mobile', 1, 1, 9999999999999)`),
-      env.DB.prepare(`INSERT INTO auth_tokens (token_hash, user_id, purpose, expires_at) VALUES ('t', 'agent', 'password_reset', 9999999999999)`),
-    ]);
-    expect(await deleteAccount(db(), 'agent')).toBe(true);
-    const user = await env.DB.prepare(`SELECT email, name, password_hash AS h, disabled_at AS d FROM users WHERE id = 'agent'`).first<{ email: string; name: string; h: string; d: number }>();
-    expect(user).toMatchObject({ name: 'Deleted user', h: '!' });
-    expect(user!.email).toBe('deleted-agent@deleted.invalid');
-    expect(user!.d).toBeGreaterThan(0);
-    expect(await roleOf('m_agent')).toBeNull();
-    expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM auth_tokens').first('n')).toBe(0);
-    expect(await env.DB.prepare(`SELECT revoked_at AS r FROM auth_sessions WHERE id = 's'`).first('r')).toBeGreaterThan(0);
+  // A context says what was true when the request was authorised. The role may be gone by the commit.
+  it('refuses every change once the role is gone, for a context already held', async () => {
+    const stale = await adminContext();
+    await env.DB.prepare(`UPDATE users SET is_installation_admin = 0 WHERE id = 'owner'`).run();
+    const admin = adminRepository(db(), stale);
+    expect(await admin.create({ name: 'New', email: 'new@x.test' })).toEqual({ outcome: 'forbidden' });
+    expect(await admin.setAdmin('agent', true)).toEqual({ outcome: 'forbidden' });
+    expect(await admin.deactivate('agent')).toEqual({ outcome: 'forbidden' });
+    expect(await admin.assign('agent', 'w2', 'agent')).toEqual({ outcome: 'forbidden' });
+    expect(await admin.unassign('agent', 'w1')).toEqual({ outcome: 'forbidden' });
+    await env.DB.prepare(`UPDATE users SET disabled_at = 1 WHERE id = 'agent'`).run();
+    expect(await admin.reactivate('agent')).toEqual({ outcome: 'forbidden' });
+    expect(await env.DB.prepare(`SELECT disabled_at AS d FROM users WHERE id = 'agent'`).first('d')).toBe(1);
+    expect(await env.DB.prepare(`SELECT COUNT(*) AS n FROM audit_log WHERE action LIKE 'person.%'`).first('n')).toBe(0);
   });
 
-  it('allows an owner when another active owner remains', async () => {
-    await addSecondOwner();
-    expect(await deleteAccount(db(), 'owner')).toBe(true);
+  it('leaves nothing behind when a change is refused', async () => {
+    const admin = adminRepository(db(), await adminContext());
+    await env.DB.prepare(`INSERT INTO auth_sessions (id, user_id, refresh_token_hash, client_type, created_at, last_used_at, expires_at) VALUES ('s', 'other', 'h', 'mobile', 1, 1, 9999999999999)`).run();
+    const outboxBefore = await env.DB.prepare(`SELECT COUNT(*) AS n FROM outbox`).first('n');
+    expect(await admin.deactivate('other')).toEqual({ outcome: 'last_owner' });
+    expect(await env.DB.prepare(`SELECT revoked_at AS r FROM auth_sessions WHERE id = 's'`).first('r')).toBeNull();
+    expect(await env.DB.prepare(`SELECT disabled_at AS d FROM users WHERE id = 'other'`).first('d')).toBeNull();
+    expect(await env.DB.prepare(`SELECT COUNT(*) AS n FROM outbox`).first('n')).toBe(outboxBefore);
+  });
+
+  it('removing keeps the row, marks it removed, and takes away push subscriptions', async () => {
+    await env.DB.prepare(`INSERT INTO push_subscriptions (id, workspace_id, member_id, relay_id, relay_subscription_id, platform, created_at, updated_at) VALUES ('p', 'w1', 'm_agent', 'r', 'h', 'ios', 1, 1)`).run();
+    expect(await repos(await context('owner')).members.remove('m_agent')).toEqual({ outcome: 'done' });
+    expect(await env.DB.prepare(`SELECT status, removed_at AS r FROM workspace_members WHERE id = 'm_agent'`).first()).toMatchObject({ status: 'suspended', r: expect.any(Number) });
+    expect(await env.DB.prepare(`SELECT COUNT(*) AS n FROM push_subscriptions`).first('n')).toBe(0);
+    expect(await authorizeWorkspaceMember(db(), 'agent', 'w1')).toBeNull();
   });
 });

@@ -17,7 +17,7 @@ export interface WorkspaceRow {
 
 const WORKSPACE_COLUMNS = `id, name, slug, created_at AS createdAt`;
 
-/** Null if the signup policy refuses. Invite-only allows only someone who already owns a workspace. */
+/** Null if the signup policy refuses. Invite-only allows an installation admin, or someone who already owns a workspace. */
 export async function createWorkspace(database: Database, input: { userId: string; name: string; slug: string }): Promise<WorkspaceRow | null> {
   const d1 = rawHandle(database);
   const id = newId('workspace');
@@ -28,7 +28,8 @@ export async function createWorkspace(database: Database, input: { userId: strin
         `INSERT INTO workspaces (id, name, slug, created_at, updated_at)
          SELECT ?1, ?2, ?3, ${DB_NOW_MS}, ${DB_NOW_MS}
           WHERE EXISTS (SELECT 1 FROM installation WHERE signup_policy = 'open')
-             OR EXISTS (SELECT 1 FROM workspace_members WHERE user_id = ?4 AND role = 'owner' AND status = 'active')`,
+             OR EXISTS (SELECT 1 FROM workspace_members WHERE user_id = ?4 AND role = 'owner' AND status = 'active')
+             OR EXISTS (SELECT 1 FROM users WHERE id = ?4 AND is_installation_admin = 1)`,
       )
       .bind(id, input.name, input.slug, input.userId),
     d1
@@ -46,56 +47,6 @@ export async function createWorkspace(database: Database, input: { userId: strin
   ]);
   if (inserted?.meta.changes !== 1) return null;
   return d1.prepare(`SELECT ${WORKSPACE_COLUMNS} FROM workspaces WHERE id = ?1`).bind(id).first<WorkspaceRow>();
-}
-
-/**
- * Anonymises rather than deletes, because messages keep their authors. Refused for the last active owner of
- * any workspace, which is decided in the first statement. False means refused.
- */
-export async function deleteAccount(database: Database, userId: string): Promise<boolean> {
-  const d1 = rawHandle(database);
-  const audit = newId('audit');
-  const guard = `EXISTS (SELECT 1 FROM audit_log WHERE id = ?1)`;
-  const [allowed] = await d1.batch([
-    d1
-      .prepare(
-        `INSERT INTO audit_log (id, workspace_id, actor_type, actor_id, action, target_type, target_id, created_at)
-         SELECT ?1, NULL, 'user', u.id, 'account.deleted', 'user', u.id, ${DB_NOW_MS}
-           FROM users u
-          WHERE u.id = ?2 AND u.disabled_at IS NULL
-            AND NOT EXISTS (
-              SELECT 1 FROM workspace_members m
-               WHERE m.user_id = u.id AND m.role = 'owner' AND m.status = 'active'
-                 AND NOT EXISTS (SELECT 1 FROM workspace_members o
-                                  WHERE o.workspace_id = m.workspace_id AND o.id <> m.id AND o.role = 'owner' AND o.status = 'active'))`,
-      )
-      .bind(audit, userId),
-    d1
-      .prepare(
-        `UPDATE conversations SET assigned_member_id = NULL, version = version + 1, updated_at = ${DB_NOW_MS}
-          WHERE ${guard} AND assigned_member_id IN (SELECT id FROM workspace_members WHERE user_id = ?2)`,
-      )
-      .bind(audit, userId),
-    // Before the members go, so that their sockets can be found and closed. Swept within about two minutes.
-    d1
-      .prepare(
-        `INSERT INTO outbox (id, workspace_id, topic, aggregate_id, payload_json, created_at)
-         SELECT ?3 || '_' || id, workspace_id, 'member.access_changed', id, json_object('memberId', id), ${DB_NOW_MS}
-           FROM workspace_members WHERE ${guard} AND user_id = ?2`,
-      )
-      .bind(audit, userId, newId('outbox')),
-    d1.prepare(`DELETE FROM workspace_members WHERE ${guard} AND user_id = ?2`).bind(audit, userId),
-    d1.prepare(`DELETE FROM auth_tokens WHERE ${guard} AND user_id = ?2`).bind(audit, userId),
-    d1.prepare(`UPDATE auth_sessions SET revoked_at = ${DB_NOW_MS} WHERE ${guard} AND user_id = ?2 AND revoked_at IS NULL`).bind(audit, userId),
-    d1
-      .prepare(
-        `UPDATE users SET email = 'deleted-' || id || '@deleted.invalid', name = 'Deleted user', password_hash = '!',
-                          email_verified_at = NULL, disabled_at = ${DB_NOW_MS}, updated_at = ${DB_NOW_MS}
-          WHERE ${guard} AND id = ?2`,
-      )
-      .bind(audit, userId),
-  ]);
-  return allowed?.meta.changes === 1;
 }
 
 /** Only so that a new account's password is hashed when it is needed. acceptInvitation still decides. */

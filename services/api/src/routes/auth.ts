@@ -1,14 +1,13 @@
 import {
   confirmEmailVerificationRoute,
   confirmPasswordResetRoute,
-  deleteMeRoute,
   getMeRoute,
   loginRoute,
   logoutRoute,
   refreshRoute,
   requestPasswordResetRoute,
 } from '@openchat/api-contracts';
-import { authenticate, completeEmailVerification, completePasswordReset, deleteMe, getMe, login, logout, refresh, requestPasswordReset, type IssuedTokens } from '@openchat/core';
+import { authenticate, completeEmailVerification, completePasswordReset, getMe, login, logout, refresh, requestPasswordReset, type IssuedTokens } from '@openchat/core';
 import { AppError } from '@openchat/shared';
 import type { Context, MiddlewareHandler } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
@@ -104,11 +103,4 @@ export function registerAuthRoutes(app: App) {
 
   app.use(getMeRoute.path, requireAuth);
   app.openapi(getMeRoute, async (c) => c.json(await getMe(await authDeps(c.env), c.get('principal')), 200));
-  app.use(deleteMeRoute.path, requireAuth);
-  app.openapi(deleteMeRoute, async (c) => {
-    const { password } = c.req.valid('json');
-    await deleteMe(await authDeps(c.env), c.get('principal'), { password, ip: clientIp(c) });
-    deleteCookie(c, REFRESH_COOKIE, { path: COOKIE_PATH, secure: true });
-    return c.body(null, 204);
-  });
 }

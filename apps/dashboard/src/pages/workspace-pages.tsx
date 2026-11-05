@@ -185,7 +185,7 @@ function MembersPanel({ membership }: { membership: Membership }) {
   const members = useQuery({ queryKey: ['members', workspaceId], queryFn: () => api.listMembers(workspaceId) });
   const refresh = () => client.invalidateQueries({ queryKey: ['members', workspaceId] });
   const update = useMutation({
-    mutationFn: (input: { id: string; role?: Role; status?: Member['status'] }) => {
+    mutationFn: (input: { id: string; role?: Role; status?: 'active' | 'suspended' }) => {
       const { id, ...change } = input;
       return api.updateMember(workspaceId, id, change);
     },

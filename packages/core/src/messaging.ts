@@ -38,7 +38,7 @@ export const toMessage = (row: StoredMessage) => ({
   seq: row.seq,
   publicSeq: row.publicSeq,
   clientMessageId: row.clientMessageId,
-  sender: { type: row.senderType as 'visitor' | 'member' | 'system', id: row.senderId, displayName: row.senderName },
+  sender: { type: row.senderType as 'visitor' | 'member' | 'system', id: row.senderId, displayName: row.senderName, ...(row.senderRemoved ? { removed: true } : {}) },
   type: row.type,
   visibility: row.visibility,
   content: row.content,

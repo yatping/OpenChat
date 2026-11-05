@@ -84,6 +84,7 @@ If step 4 is lost to a crash, a cron sweep re-dispatches from the outbox. If the
 | iOS builds | Local, with `expo prebuild` and fastlane. EAS is optional | [0012](decisions/0012-native-builds-without-eas.md) |
 | iOS navigation | React Navigation, one navigator per connection and workspace. No Expo Router | [0013](decisions/0013-react-navigation-not-expo-router.md) |
 | iOS connections | One installation at a time, switching between its workspaces | [0014](decisions/0014-one-installation-in-the-app.md) |
+| Managing people | Installation admins. Removing and deactivating can be undone, and nobody deletes an account | [0015](decisions/0015-installation-admin-and-reversible-removal.md) |
 
 ## Technology baseline
 

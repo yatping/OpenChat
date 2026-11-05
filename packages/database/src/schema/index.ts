@@ -53,7 +53,10 @@ export const users = sqliteTable('users', {
   /** PHC string, so that parameters can be upgraded per hash. */
   passwordHash: text('password_hash').notNull(),
   emailVerifiedAt: integer('email_verified_at'),
+  /** Set while the account is deactivated. It can be cleared again, and nothing else about the account changes. */
   disabledAt: integer('disabled_at'),
+  /** Manages people across the installation. Reading a workspace still needs a membership. See ADR-0015. */
+  isInstallationAdmin: integer('is_installation_admin', { mode: 'boolean' }).notNull().default(false),
   createdAt: ts('created_at'),
   updatedAt: ts('updated_at'),
 });
@@ -133,6 +136,8 @@ export const workspaceMembers = sqliteTable(
       .references(() => users.id),
     role: text('role', { enum: ['owner', 'admin', 'supervisor', 'agent'] }).notNull(),
     status: text('status', { enum: ['active', 'suspended'] }).notNull().default('active'),
+    /** Removed members keep this row, with status 'suspended', so that their messages keep a name. See ADR-0015. */
+    removedAt: integer('removed_at'),
     createdAt: ts('created_at'),
     updatedAt: ts('updated_at'),
   },
