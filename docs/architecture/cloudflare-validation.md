@@ -432,6 +432,10 @@ Milestone 3, slice 2, on a throwaway relay with real D1, against a second Worker
 
 **Not measured:** throughput.
 
+### The managed relay
+
+On its own domain, in private mode, with the real key. Answered by APNs correctly, and its operator route answers `404` with no token. An installation not on the list was refused. Once listed, it registered with domain proof, and a push with a fake device token went through the queue to APNs. The test's records were then removed, so the relay holds nothing. A resolver that had asked for the name just before the domain was attached kept answering "no such name" for several minutes.
+
 ### Relay offline, private mode, and a second installation
 
 Two temporary installations and one temporary relay, with fake device tokens. All deleted afterwards.
