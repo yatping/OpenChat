@@ -29,7 +29,7 @@ export default (): ExpoConfig => ({
     supportsTablet: true,
     config: { usesNonExemptEncryption: false },
   },
-  plugins: ['expo-secure-store', 'expo-sqlite', ['expo-splash-screen', { image: variant.assets.splash, backgroundColor: variant.branding.primaryColor, imageWidth: 200 }]],
+  plugins: ['expo-secure-store', 'expo-sqlite', 'expo-sharing', 'expo-document-picker', ['expo-image-picker', { photosPermission: 'Choose a photo to send in a conversation.', cameraPermission: false, microphonePermission: false }], ['expo-splash-screen', { image: variant.assets.splash, backgroundColor: variant.branding.primaryColor, imageWidth: 200 }]],
   extra: {
     variant: variant.id,
     push: {

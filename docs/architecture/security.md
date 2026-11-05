@@ -101,6 +101,8 @@ Uploads stream through the Worker to R2 ([ADR-0008](decisions/0008-attachment-tr
 | Bucket | Private. No public access or custom domain on it |
 | Malware scanning | Future integration through a hook in `attachment.process` |
 
+The iOS app removes metadata, including location, from photos before upload, and sends documents unchanged. See [files in the iOS app](../ios-build/expo-and-white-label.md#files).
+
 ## Secrets
 
 | Secret | Where | Rotation |

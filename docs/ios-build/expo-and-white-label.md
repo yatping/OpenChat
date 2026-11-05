@@ -95,6 +95,16 @@ ConnectionManager
 - The list of connections is not secret and lives in app storage. Message data is held in memory, so there is no offline cache yet.
 - A simulator build must be signed, even ad hoc (`CODE_SIGN_IDENTITY=-`). Without a signature the keychain refuses every write, and sign-in fails.
 
+## Files
+
+Files move as bytes through `expo/fetch`, because React Native's own `fetch` handles binary data poorly. They still go through the same API client, so an expired token is refreshed and the request retried.
+
+- **Downloads** go to `Paths.cache/connections/<connection ID>/attachments/<attachment ID>/<name>`, so signing out removes them. The name and ID come from the installation, so each is reduced to one safe path segment. A download that finishes after sign-out deletes what it wrote.
+- **Previews** show PNG, JPEG, GIF, and WebP files up to 5 MB. Never SVG. Other files open in the system share sheet, which is also the only way a file leaves the app, and only when the person chooses.
+- **Photos are encoded again when picked, to remove metadata.** The iOS picker hands over location data by default, and a visitor can download what an agent sends. On a test photo, the original upload kept its GPS directory, and the re-encoded one lost it along with the camera model. Do not remove `quality` from `pickPhoto` without repeating that check. The tag that keeps a photo the right way up stays.
+- **Documents are sent unchanged.** The app cannot remove metadata from a PDF or an Office file, so what is inside one is the sender's choice.
+- **Picked copies** live outside the connection's folder, so they are deleted after each upload, whether it worked or not. iOS gives the app its own copy of a document, never the original, and `isPrivateCopy` refuses to delete anything outside the app's `tmp` and `Caches` folders.
+
 ## Opening a notification
 
 ```text

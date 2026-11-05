@@ -25,6 +25,22 @@ describe('api client', () => {
     expect(calls[0]?.headers.get('authorization')).toBe('Bearer tok');
   });
 
+  it('sends and receives a file as bytes, for React Native', async () => {
+    const seen: { url: string; type: string | null; body: unknown }[] = [];
+    const fetch = (async (url: string, init: RequestInit) => {
+      seen.push({ url, type: new Headers(init.headers).get('content-type'), body: init.body });
+      return init.method === 'GET' ? new Response(new Uint8Array([1, 2, 3])) : new Response(JSON.stringify({ id: 'att_1' }), { status: 201 });
+    }) as unknown as typeof globalThis.fetch;
+    const client = createClient({ baseUrl: 'https://a.example', fetch });
+    const data = new Uint8Array([9, 8]);
+
+    expect(await client.uploadAttachmentBytes('w 1', 'c1', { filename: 'a b.png', contentType: 'image/png', data })).toEqual({ id: 'att_1' });
+    expect(seen[0]).toEqual({ url: 'https://a.example/api/v1/workspaces/w%201/conversations/c1/attachments?filename=a%20b.png', type: 'image/png', body: data });
+
+    const bytes = await client.downloadAttachmentBytes('/api/v1/workspaces/w/attachments/a1');
+    expect([...new Uint8Array(bytes)]).toEqual([1, 2, 3]);
+  });
+
   it('surfaces problem details', async () => {
     const { fetch } = stub(503, { code: 'not_initialized', title: 'Not ready', requestId: 'req_1' });
     const error = await createClient({ baseUrl: 'https://a.example', fetch }).getDiscovery().catch((e: unknown) => e);

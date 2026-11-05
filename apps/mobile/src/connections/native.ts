@@ -1,5 +1,6 @@
 /** The iOS side of the connection manager. The rest of src/connections has no native imports, so it can be tested. */
 import { randomUUID } from 'expo-crypto';
+import { fetch as binaryFetch } from 'expo/fetch';
 import { Directory, Paths } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
 import Storage from 'expo-sqlite/kv-store';
@@ -23,6 +24,8 @@ export const connections = createConnectionManager({
   },
   fetch: (input, init) => {
     const url = String(input);
+    // React Native's own fetch cannot return bytes or send them reliably, and files are the one thing that needs to.
+    if (/\/attachments(\/|\?|$)/.test(url)) return binaryFetch(url, init as Parameters<typeof binaryFetch>[1]) as unknown as Promise<Response>;
     if (!url.endsWith('/realtime/tickets')) return globalThis.fetch(input, init);
     // iOS always puts the server's own origin on a WebSocket, and a ticket must name the origin that will use it.
     const headers = new Headers(init?.headers);
