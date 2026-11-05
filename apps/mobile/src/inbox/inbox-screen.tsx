@@ -95,7 +95,10 @@ export function InboxScreen() {
               style={({ pressed }) => [styles.row, { borderBottomColor: theme.border, backgroundColor: pressed ? theme.surface : theme.background }]}
             >
               <View style={[styles.dot, { backgroundColor: online ? '#16a34a' : 'transparent' }]} />
-              <Text numberOfLines={1} style={{ flex: 1, fontSize: 16, color: theme.text, fontWeight: unread > 0 ? '700' : '400' }}>{name}</Text>
+              <View style={{ flex: 1 }}>
+                <Text numberOfLines={1} style={{ fontSize: 16, color: theme.text, fontWeight: unread > 0 ? '700' : '400' }}>{name}</Text>
+                {item.tags.length > 0 && <Text numberOfLines={1} style={{ fontSize: 13, color: theme.muted }}>{item.tags.map((tag) => tag.name).join(', ')}</Text>}
+              </View>
               {item.lastMessageAt && <Text style={{ color: theme.muted, fontSize: 13 }}>{shortTime(item.lastMessageAt)}</Text>}
               {unread > 0 && <View style={[styles.badge, { backgroundColor: theme.primary }]}><Text style={{ color: theme.onPrimary, fontSize: 12, fontWeight: '700' }}>{unread}</Text></View>}
             </Pressable>

@@ -41,6 +41,19 @@ describe('api client', () => {
     expect([...new Uint8Array(bytes)]).toEqual([1, 2, 3]);
   });
 
+  it('sends the password to delete an account, and reports a refusal', async () => {
+    const bodies: unknown[] = [];
+    const fetch = (async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(init.body as string));
+      return bodies.length === 1 ? new Response(null, { status: 204 }) : new Response(JSON.stringify({ code: 'last_owner', title: 'Refused' }), { status: 409 });
+    }) as unknown as typeof globalThis.fetch;
+    const client = createClient({ baseUrl: 'https://a.example', fetch });
+
+    await expect(client.deleteAccount('secret')).resolves.toBeUndefined();
+    expect(bodies[0]).toEqual({ password: 'secret' });
+    await expect(client.deleteAccount('secret')).rejects.toMatchObject({ status: 409, code: 'last_owner' });
+  });
+
   it('surfaces problem details', async () => {
     const { fetch } = stub(503, { code: 'not_initialized', title: 'Not ready', requestId: 'req_1' });
     const error = await createClient({ baseUrl: 'https://a.example', fetch }).getDiscovery().catch((e: unknown) => e);

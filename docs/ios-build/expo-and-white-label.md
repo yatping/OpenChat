@@ -105,6 +105,10 @@ Files move as bytes through `expo/fetch`, because React Native's own `fetch` han
 - **Documents are sent unchanged.** The app cannot remove metadata from a PDF or an Office file, so what is inside one is the sender's choice.
 - **Picked copies** live outside the connection's folder, so they are deleted after each upload, whether it worked or not. iOS gives the app its own copy of a document, never the original, and `isPrivateCopy` refuses to delete anything outside the app's `tmp` and `Caches` folders.
 
+## Account deletion
+
+App Store rules require deleting an account from inside the app, so Settings offers it. It asks for the password and a confirmation. The account is removed from that installation only, and other connections on the phone are untouched, since each installation has its own accounts ([ADR-0010](../architecture/decisions/0010-no-global-mobile-account.md)). The last owner of a workspace is refused, and has to make someone else an owner first.
+
 ## Opening a notification
 
 ```text
