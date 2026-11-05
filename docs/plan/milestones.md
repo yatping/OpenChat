@@ -166,7 +166,8 @@ Expo app, Connection manager, discovery and compatibility check, sign-in, worksp
 | Session ended | A session that no longer exists on the server shows the sign-in screen with the address and email kept. Tested at launch. Not tested while the app is in use, when the access token stays valid until it expires |
 | Real Cloudflare | A fresh `oc deploy` passed the [API and simulator checks](../architecture/cloudflare-validation.md#milestone-2-on-real-cloudflare-2026-11-05), including priority, typing in both directions, a file just under 25 MB, and a session ending while the app was open |
 | Physical device | `fastlane ios device` makes a signed ad-hoc build, and `fastlane ios install` put it on an iPhone on iOS 27.0.1, connected by cable and unlocked. It launched and kept running. Against a fresh `oc deploy`, the owner signed in, read a visitor's message, replied, sent a photo, and returned from the background. The visitor's side was checked by script: the reply arrived, and the 3.6 MB photo downloaded intact. This was an ad-hoc Release build, while the exit criterion names a development build. One device, one session |
-| Not tested yet | Push on a device (S7), sign-out during a download, an installation upgraded with existing data on real D1, and email delivery of a new account link |
+| Push token (S7) | A throwaway ad-hoc build got a raw 64-character APNs token on the iPhone after the owner allowed notifications ([result](../architecture/cloudflare-validation.md#phase-0-spike-results)). `expo-notifications` is not in the app yet. No push has been received, because no APNs key exists |
+| Not tested yet | Receiving a push, sign-out during a download, an installation upgraded with existing data on real D1, and email delivery of a new account link |
 
 ## M3: Relay and push (L)
 

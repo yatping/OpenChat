@@ -68,7 +68,7 @@ platform :ios do
   lane :device do
     UI.user_error!('No profile. Run: fastlane ios refresh_profile') unless File.exist?(PROFILE_PATH)
     # Ad-hoc builds receive push from the production APNs environment.
-    sh("cd #{MOBILE_ROOT.shellescape} && CI=1 APP_VARIANT=#{VARIANT_ID.shellescape} APP_PROFILE=production pnpm exec expo prebuild --platform ios")
+    sh("cd #{MOBILE_ROOT.shellescape} && CI=1 APP_VARIANT=#{VARIANT_ID.shellescape} APP_PROFILE=production pnpm exec expo prebuild --platform ios --clean")
     ENV['APP_PROFILE'] = 'production'
 
     begin
