@@ -1,0 +1,100 @@
+# iOS builds on your own machine, with no EAS. See docs/ios-build/expo-and-white-label.md.
+#
+#   fastlane ios refresh_profile   Register the bundle ID if missing, and regenerate the ad-hoc profile
+#   fastlane ios device            Build a signed ad-hoc IPA, with the JavaScript inside it
+#   fastlane ios install           Install that IPA on DEVICE_UDID
+#
+# APP_VARIANT chooses the white-label variant, as for everything else. Nothing secret belongs in this file:
+# keys and passwords come from fastlane/.env, which Git ignores.
+
+require 'fileutils'
+require 'json'
+require 'shellwords'
+
+MOBILE_ROOT = File.expand_path('..', __dir__)
+VARIANT_ID = ENV['APP_VARIANT'] || 'official'
+VARIANT = JSON.parse(File.read(File.join(MOBILE_ROOT, 'variants', VARIANT_ID, 'variant.json')))
+BUNDLE_ID = VARIANT.fetch('bundleIdentifier')
+APP_NAME = VARIANT.fetch('appName')
+# expo prebuild names the Xcode project after the app, without spaces.
+SCHEME = APP_NAME.gsub(/[^A-Za-z0-9]/, '')
+PROFILE_PATH = File.join(MOBILE_ROOT, 'credentials', 'ios', "#{VARIANT_ID}-adhoc.mobileprovision")
+IPA_DIRECTORY = File.join(MOBILE_ROOT, 'build', 'ios')
+IPA_NAME = "#{SCHEME}-adhoc.ipa"
+# A throwaway keychain, deleted after each build. The password protects nothing that outlives the build.
+KEYCHAIN_NAME = 'openchat_fastlane_tmp'
+KEYCHAIN_PASSWORD = 'openchat_fastlane_tmp'
+KEYCHAIN_PATH = File.expand_path("~/Library/Keychains/#{KEYCHAIN_NAME}-db")
+SIGNING_IDENTITY = 'Apple Distribution'
+
+def required_env(name)
+  value = ENV[name]
+  UI.user_error!("#{name} is not set. Copy fastlane/.env.example to fastlane/.env") if value.nil? || value.strip.empty?
+  value
+end
+
+def required_path(name)
+  path = File.expand_path(required_env(name))
+  UI.user_error!("#{name} points at a missing file") unless File.exist?(path)
+  path
+end
+
+def api_key
+  app_store_connect_api_key(key_id: required_env('ASC_KEY_ID'), issuer_id: required_env('ASC_ISSUER_ID'), key_filepath: required_path('ASC_KEY_PATH'))
+end
+
+def delete_temporary_keychain
+  delete_keychain(name: KEYCHAIN_NAME) if File.exist?(KEYCHAIN_PATH)
+end
+
+platform :ios do
+  desc 'Register the bundle ID if missing, and regenerate the ad-hoc profile. Run again after adding a device.'
+  lane :refresh_profile do
+    key = api_key
+    Spaceship::ConnectAPI.token = Spaceship::ConnectAPI::Token.create(key_id: required_env('ASC_KEY_ID'), issuer_id: required_env('ASC_ISSUER_ID'), filepath: required_path('ASC_KEY_PATH'))
+    bundle = Spaceship::ConnectAPI::BundleId.find(BUNDLE_ID)
+    bundle ||= Spaceship::ConnectAPI::BundleId.create(name: APP_NAME, identifier: BUNDLE_ID, platform: Spaceship::ConnectAPI::BundleIdPlatform::IOS)
+    # The app has no push until M3, but enabling this now means no new profile is needed then.
+    push = Spaceship::ConnectAPI::BundleIdCapability::Type::PUSH_NOTIFICATIONS
+    bundle.create_capability(push) if bundle.get_capabilities.none? { |capability| capability.capability_type == push }
+
+    FileUtils.mkdir_p(File.dirname(PROFILE_PATH))
+    sigh(api_key: key, app_identifier: BUNDLE_ID, team_id: required_env('APPLE_TEAM_ID'), adhoc: true, force: true, skip_install: true,
+         output_path: File.dirname(PROFILE_PATH), filename: File.basename(PROFILE_PATH))
+    UI.success("Profile ready for #{BUNDLE_ID}. It lists the team's devices at this moment.")
+  end
+
+  desc 'Build a signed ad-hoc IPA, with the JavaScript inside it, so that it runs without Metro.'
+  lane :device do
+    UI.user_error!('No profile. Run: fastlane ios refresh_profile') unless File.exist?(PROFILE_PATH)
+    # Ad-hoc builds receive push from the production APNs environment.
+    sh("cd #{MOBILE_ROOT.shellescape} && CI=1 APP_VARIANT=#{VARIANT_ID.shellescape} APP_PROFILE=production pnpm exec expo prebuild --platform ios")
+    ENV['APP_PROFILE'] = 'production'
+
+    begin
+      delete_temporary_keychain
+      create_keychain(name: KEYCHAIN_NAME, password: KEYCHAIN_PASSWORD, default_keychain: false, unlock: true, timeout: 3600, add_to_search_list: true)
+      sh("security import #{required_path('IOS_P12_PATH').shellescape} -k #{KEYCHAIN_PATH.shellescape} -P #{required_env('IOS_P12_PASSWORD').shellescape} -T /usr/bin/codesign -T /usr/bin/security", log: false)
+      sh("security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k #{KEYCHAIN_PASSWORD.shellescape} #{KEYCHAIN_PATH.shellescape}", log: false)
+      install_provisioning_profile(path: PROFILE_PATH)
+      uuid = `security cms -D -i #{PROFILE_PATH.shellescape} 2>/dev/null`[%r{<key>UUID</key>\s*<string>(.*?)</string>}, 1]
+      UI.user_error!('Could not read the profile') if uuid.nil?
+
+      update_code_signing_settings(path: File.join(MOBILE_ROOT, 'ios', "#{SCHEME}.xcodeproj"), use_automatic_signing: false, team_id: required_env('APPLE_TEAM_ID'), targets: [SCHEME],
+                                   build_configurations: ['Release'], code_sign_identity: SIGNING_IDENTITY, profile_uuid: uuid, bundle_identifier: BUNDLE_ID)
+      gym(workspace: File.join(MOBILE_ROOT, 'ios', "#{SCHEME}.xcworkspace"), scheme: SCHEME, configuration: 'Release', export_method: 'ad-hoc', output_directory: IPA_DIRECTORY, output_name: IPA_NAME,
+          xcargs: %(OTHER_CODE_SIGN_FLAGS="--keychain #{KEYCHAIN_PATH}"), buildlog_path: File.join(MOBILE_ROOT, 'build', 'logs'),
+          export_options: { method: 'ad-hoc', signingStyle: 'manual', teamID: required_env('APPLE_TEAM_ID'), signingCertificate: SIGNING_IDENTITY, provisioningProfiles: { BUNDLE_ID => uuid } })
+      UI.success("Built #{File.join('build', 'ios', IPA_NAME)}")
+    ensure
+      delete_temporary_keychain
+    end
+  end
+
+  desc 'Install the IPA on the connected device named by DEVICE_UDID.'
+  lane :install do
+    ipa = File.join(IPA_DIRECTORY, IPA_NAME)
+    UI.user_error!('No IPA. Run: fastlane ios device') unless File.exist?(ipa)
+    sh("xcrun devicectl device install app --device #{required_env('DEVICE_UDID').shellescape} #{ipa.shellescape}")
+  end
+end
