@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api, errorMessage, preference, queryClient, session } from '../app-context';
 import { InboxPanel } from '../inbox/inbox-panel';
+import { NotificationsPanel } from './notifications-panel';
 import { PeoplePage } from './people-page';
 import { CopyableSnippet, WorkspacesAdminPage } from './workspaces-admin-page';
 
@@ -71,7 +72,7 @@ const WORKSPACE_PREFERENCE = 'openchat.workspace';
 export function WorkspaceApp() {
   const me = useQuery({ queryKey: ['me'], queryFn: api.getMe });
   const [selectedId, setSelectedId] = useState(() => preference.get(WORKSPACE_PREFERENCE));
-  const [tab, setTab] = useState<'inbox' | 'websites' | 'members'>('inbox');
+  const [tab, setTab] = useState<'inbox' | 'websites' | 'members' | 'notifications'>('inbox');
   const [adminPage, setAdminPage] = useState<'people' | 'workspaces' | null>(null);
   const isAdmin = me.data?.isInstallationAdmin === true;
 
@@ -111,13 +112,13 @@ export function WorkspaceApp() {
         // The key gives each workspace fresh component state, so nothing typed in one appears in another.
         <div key={current.workspace.id} className="space-y-6">
           <nav className="flex gap-2" aria-label="Sections">
-            {(['inbox', 'websites', 'members'] as const).map((name) => (
+            {(['inbox', 'websites', 'members', 'notifications'] as const).map((name) => (
               <button key={name} className={tab === name ? 'button capitalize' : 'button-quiet capitalize'} aria-current={tab === name ? 'page' : undefined} onClick={() => setTab(name)}>
                 {name}
               </button>
             ))}
           </nav>
-          {tab === 'inbox' ? <InboxWithMembers membership={current} /> : tab === 'websites' ? <WebsitesPanel membership={current} /> : <MembersPanel membership={current} />}
+          {tab === 'inbox' ? <InboxWithMembers membership={current} /> : tab === 'websites' ? <WebsitesPanel membership={current} /> : tab === 'notifications' ? <NotificationsPanel workspaceId={current.workspace.id} /> : <MembersPanel membership={current} />}
         </div>
       )}
     </div>

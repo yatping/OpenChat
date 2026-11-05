@@ -23,6 +23,7 @@ import { createLogger, toIso } from '@openchat/shared';
 import type { Context } from 'hono';
 import type { AppEnv } from './context';
 import type { Env } from './env';
+import { emailJobsFor, sweepUnanswered } from './email/alerts';
 import { pushJobsFor } from './push/fanout';
 
 const SWEEP_AGE_MS = 60_000;
@@ -79,6 +80,7 @@ async function dispatchRow(env: Env, db: Database, row: OutboxRow): Promise<void
       const room = env.CONVERSATION_ROOM.getByName(roomName(row.workspaceId, row.aggregateId));
       await Promise.all([hub.publish(event), room.publishDomainEvent(event)]);
       await pushJobsFor(env, row);
+      await emailJobsFor(env, row);
       return;
     }
     case 'member.access_changed':
@@ -141,6 +143,7 @@ async function sweepAttachments(env: Env, db: Database): Promise<void> {
 export async function sweepOutbox(env: Env, scheduledTime: number): Promise<void> {
   const db = openDatabase(env.DB);
   await dispatchRows(env, db, await staleOutbox(db, SWEEP_AGE_MS, SWEEP_LIMIT));
+  await sweepUnanswered(env, db);
   if (new Date(scheduledTime).getUTCMinutes() === 0) {
     await purgeDispatchedOutbox(db, PURGE_AGE_MS, PURGE_LIMIT);
     await sweepAttachments(env, db);

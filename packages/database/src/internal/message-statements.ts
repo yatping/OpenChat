@@ -1,6 +1,9 @@
 import { newId } from '@openchat/shared';
 import { DB_NOW_MS } from './handle';
 
+/** How long a visitor waits before members who asked are told. */
+const UNANSWERED_ALERT_AFTER_MS = 15 * 60_000;
+
 export interface MessageStatementsInput {
   id: string;
   workspaceId: string;
@@ -84,6 +87,8 @@ export function messageStatements(d1: D1Database, input: MessageStatementsInput)
                 last_message_at = ${DB_NOW_MS},
                 last_visitor_message_at = CASE WHEN ?3 = 'visitor' THEN ${DB_NOW_MS} ELSE last_visitor_message_at END,
                 last_agent_message_at = CASE WHEN ?3 = 'member' THEN ${DB_NOW_MS} ELSE last_agent_message_at END,
+                next_unanswered_alert_at = CASE WHEN ?3 = 'visitor' THEN COALESCE(next_unanswered_alert_at, ${DB_NOW_MS} + ${UNANSWERED_ALERT_AFTER_MS})
+                                                WHEN ?3 = 'member' AND ?2 = 'public' THEN NULL ELSE next_unanswered_alert_at END,
                 status = CASE WHEN ?3 = 'visitor' THEN 'open' ELSE status END,
                 version = version + 1,
                 updated_at = ${DB_NOW_MS}

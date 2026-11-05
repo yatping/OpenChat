@@ -32,7 +32,7 @@ Three queues plus DLQs, not one per job type. Few queues keep self-hosted setup 
 | Queue | Job types | `max_batch_size` | `max_batch_timeout` | `max_retries` | `max_concurrency` |
 |---|---|---|---|---|---|
 | `oc-notifications` | `notification.fanout`, `notification.dispatch`, `notification.unregister` | 25 | 1 s | 8 | 20 |
-| `oc-email` | System email (`auth.password_reset_email`, `auth.new_account_email`) | No delivery row, because the token is created at send time. Each attempt has a new token and so a new provider idempotency key, since Resend refuses a reused key with a changed body. A crash after sending can deliver two emails, and failures of any kind retry and then dead-letter. |
+| `oc-email` | Alerts to members (`email.alert`, `email.send`), which hold IDs only and read the address when sending. System email (`auth.password_reset_email`, `auth.new_account_email`) | No delivery row, because the token is created at send time. Each attempt has a new token and so a new provider idempotency key, A crash after sending can deliver two emails, and failures of any kind retry and then dead-letter. |
 | `email.send` | 10 | 5 s | 8 | 5 |
 | `oc-jobs` | `attachment.process`, `automation.evaluate`, `webhook.deliver` (later), `workspace.purge`, `analytics.rollup` | 10 | 5 s | 5 | 10 |
 | `*-dlq` | All of the above | 25 | 30 s | 3 | 1 |
@@ -90,7 +90,8 @@ Exactly-once is impossible for external effects, so each consumer aims for the n
 |---|---|---|
 | `notification.dispatch` | Relay dedupes on `notificationId` for 72 hours | None within the window |
 | `notification.unregister` | Removing nothing still succeeds at the relay | None |
-| `email.send` | Unique `email_deliveries (workspace_id, dedupe_key)`: claim, send, mark sent. Passes the idempotency key to providers that accept it | A crash between send and mark. If a row is `claimed` for over 15 minutes, the job resends only if the provider supports idempotency; otherwise it records `failed` for review, because a missed email is better than a duplicate follow-up |
+| `email.alert` | Decides who should hear, then queues one `email.send` per person. Repeating it queues the same keys | None of its own |
+| `email.send` | Unique `email_deliveries (workspace_id, dedupe_key)`: claim, send, mark sent. A row marked `failed` can be claimed again by a retry | Two. A crash between send and mark leaves the row `claimed`, and nothing sends again, because a missed email is better than a duplicate. An answer lost after Cloudflare accepted the send marks it `failed`, and the retry sends twice, because Cloudflare documents no idempotency key |
 | `automation.evaluate` | Unique `automation_runs (workspace_id, rule_id, conversation_id, trigger_key)` | None for the decision |
 | Internal state | SQL conditions per the [write patterns](data-model.md#write-patterns), or `job_receipts` | None |
 
@@ -130,9 +131,19 @@ One schedule, `* * * * *`, with a dispatcher inside. Each sweep is bounded and m
 | Attachment orphans | Hourly | Unattached and older than 24 h, `LIMIT 200` | Delete from R2, then the row |
 | Token and session expiry | Hourly | Expired, in chunks | Delete |
 | Outbox and receipt purge | Hourly | Older than 14 days, in chunks | Delete |
+| Unanswered alerts | Every minute | `next_unanswered_alert_at` is due, `LIMIT 200` | Queue `email.alert`, then clear the time. With no email provider, only clear it |
 | Heartbeat | Every minute | | Record the time for `/health/queues` |
 
 Sweeps from overlapping cron runs are harmless, because each action is idempotent. Sweep writes use small chunks, because D1 is shared with live traffic.
+
+## Alerts to members
+
+Email alerts are off until a member turns them on, per workspace, on the Notifications tab, so that a busy website cannot use up a sending allowance by surprise. They say only that something happened, with a link to the inbox, and never include what anyone wrote.
+
+- **New conversation:** the `conversation.created` outbox row queues `email.alert`, for everyone who asked.
+- **Visitor still waiting:** a visitor's message sets `next_unanswered_alert_at` to 15 minutes from now, unless a time is already set. A public reply clears it, and an internal note does not. When due, the alert goes to the assignee if there is one and they asked for it, otherwise to everyone who asked. The 15 minutes is fixed for now.
+
+`email.send` reads the member, their preference, and the conversation again just before sending, so that someone suspended, a switch turned off, or a reply since then all stop it. An unavailable provider only delays alerts: the jobs retry and then dead-letter, and messaging never waits on them.
 
 ## Why follow-ups are database-driven
 

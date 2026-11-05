@@ -1,0 +1,2 @@
+ALTER TABLE `conversations` ADD `next_unanswered_alert_at` integer;--> statement-breakpoint
+CREATE INDEX `conversations_unanswered_idx` ON `conversations` (`next_unanswered_alert_at`) WHERE "conversations"."next_unanswered_alert_at" IS NOT NULL;
