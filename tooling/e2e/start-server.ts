@@ -1,6 +1,9 @@
 /**
  * A local Worker for browser tests, with its own state and a throwaway key, so that it neither reads nor
  * changes anything from pnpm dev. Expects the dashboard to be built.
+ *
+ * E2E_PORT and E2E_NAME start a second copy beside the first. Every ID stays the same, which is how the iOS app is
+ * tested against two installations with colliding IDs.
  */
 import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -10,7 +13,9 @@ import { generateSerializedKey, hashPassword } from '@openchat/auth';
 import { AGENT, OWNER, PASSWORD, SITE_ORIGIN, STYLED_WEBSITE_KEY, STYLED_WEBSITE_SETTINGS, TURNSTILE_TEST_SECRET, TURNSTILE_TEST_SITE_KEY, TURNSTILE_WEBSITE_KEY, WEBSITE_KEY, WORKSPACE_ID } from './tests/fixtures';
 
 const api = resolve(dirname(fileURLToPath(import.meta.url)), '../../services/api');
-const state = '.wrangler/e2e';
+const port = process.env.E2E_PORT ?? '8799';
+const name = process.env.E2E_NAME ?? 'E2E';
+const state = port === '8799' ? '.wrangler/e2e' : `.wrangler/e2e-${port}`;
 rmSync(join(api, state), { recursive: true, force: true });
 mkdirSync(join(api, state), { recursive: true });
 
@@ -21,8 +26,8 @@ writeFileSync(join(api, envFile), `ENVIRONMENT=development\nEMAIL_PROVIDER=conso
 const hash = await hashPassword(PASSWORD);
 const quote = (value: string) => `'${value.replaceAll("'", "''")}'`;
 const seed = `
-INSERT INTO installation (id, name, public_base_url, created_at, updated_at) VALUES ('inst_e2e', 'E2E', 'http://localhost:8799', 1, 1);
-INSERT INTO workspaces (id, name, slug, created_at, updated_at) VALUES (${quote(WORKSPACE_ID)}, 'E2E', 'e2e', 1, 1);
+INSERT INTO installation (id, name, public_base_url, created_at, updated_at) VALUES ('inst_e2e', ${quote(name)}, ${quote(`http://localhost:${port}`)}, 1, 1);
+INSERT INTO workspaces (id, name, slug, created_at, updated_at) VALUES (${quote(WORKSPACE_ID)}, ${quote(name)}, 'e2e', 1, 1);
 INSERT INTO users (id, email, name, password_hash, created_at, updated_at) VALUES
   ('user_owner', ${quote(OWNER.email)}, ${quote(OWNER.name)}, ${quote(hash)}, 1, 1),
   ('user_agent', ${quote(AGENT.email)}, ${quote(AGENT.name)}, ${quote(hash)}, 1, 1);
@@ -44,6 +49,6 @@ execFileSync('pnpm', wrangler('d1', 'migrations', 'apply', 'DB', '--local'), qui
 execFileSync('pnpm', wrangler('d1', 'execute', 'DB', '--local', '--file', seedFile), quiet);
 execFileSync('node', ['scripts/collect-assets.mjs'], quiet);
 
-const server = spawn('pnpm', wrangler('dev', '--port', '8799', '--env-file', envFile, '--test-scheduled'), { ...quiet, stdio: 'inherit' });
+const server = spawn('pnpm', wrangler('dev', '--port', port, '--inspector-port', String(Number(port) + 1000), '--env-file', envFile, '--test-scheduled'), { ...quiet, stdio: 'inherit' });
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => server.kill(signal));
 server.on('exit', (code) => process.exit(code ?? 0));

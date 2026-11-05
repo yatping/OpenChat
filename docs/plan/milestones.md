@@ -161,7 +161,9 @@ Expo app, Connection manager, discovery and compatibility check, sign-in, worksp
 | Attachments | Tested by hand on the same simulator: picture preview, PDF through the share sheet, photo and document upload reaching the visitor, GPS removed from photos, no copies left after upload, sign-out removes downloads. Not tried: a file near the 25 MB limit, and signing out during a download |
 | Contact, tags, profile | Tested by hand on the same simulator: contact and tag edits reach the inbox. The profile is read-only, because the API has no way to change a name |
 | Account deletion | Not in the app. The owner decided on 2026-11-05 that agents should not delete their own accounts. Who may delete an account is still open, and `POST /api/v1/me/delete` still works for any signed-in user |
-| Not tested yet | Priority, switching workspace, switching between two real installations, login expiry mid-session, typing indicators, real Cloudflare, a physical device |
+| Two installations | Tested by hand on the same simulator against two local Workers with identical IDs (`E2E_PORT=8798 E2E_NAME=Bravo` in `tooling/e2e`): each shows only its own data, a live message to one does not appear in the other, switching both ways catches up, and signing out of one leaves the other signed in, including after a restart |
+| Session ended | A revoked session shows the sign-in screen, with the address and email kept. Tested at launch by revoking the session on the server. Not tested while the app is in use, when the access token is still valid until it expires |
+| Not tested yet | Priority, switching workspace, typing indicators, real Cloudflare, a physical device |
 
 ## M3: Relay and push (L)
 
