@@ -20,6 +20,7 @@ import type {
   listWebsitesRoute,
   createPushGrantRoute,
   listPushSubscriptionsRoute,
+  listEmailSuppressionsRoute,
   recordPushSubscriptionRoute,
   getNotificationPreferencesRoute,
   loginRoute,
@@ -51,6 +52,7 @@ export type Website = Json200<typeof listWebsitesRoute>['data'][number];
 export type PushGrant = Json201<typeof createPushGrantRoute>;
 export type PushSubscription = Json200<typeof listPushSubscriptionsRoute>['data'][number];
 export type PushSubscriptionInput = BodyOf<typeof recordPushSubscriptionRoute>;
+export type EmailSuppressionPage = Json200<typeof listEmailSuppressionsRoute>;
 export type NotificationPreferences = Json200<typeof getNotificationPreferencesRoute>;
 export type WebsiteInput = BodyOf<typeof createWebsiteRoute>;
 export type WebsiteUpdate = BodyOf<typeof updateWebsiteRoute>;
@@ -195,6 +197,9 @@ export function createClient(options: ClientOptions) {
     removePushSubscription: (workspaceId: string, id: string) => request<void>('DELETE', `${workspace(workspaceId)}/push/subscriptions/${encodeURIComponent(id)}`),
     getNotificationPreferences: (workspaceId: string) => get<NotificationPreferences>(`${workspace(workspaceId)}/notification-preferences`),
     setNotificationPreferences: (workspaceId: string, input: NotificationPreferences) => request<void>('PUT', `${workspace(workspaceId)}/notification-preferences`, input),
+    listEmailSuppressions: (workspaceId: string, cursor?: string) => get<EmailSuppressionPage>(`${workspace(workspaceId)}/email-suppressions?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`),
+    addEmailSuppression: (workspaceId: string, email: string) => request<void>('POST', `${workspace(workspaceId)}/email-suppressions`, { email }),
+    removeEmailSuppression: (workspaceId: string, email: string) => request<void>('POST', `${workspace(workspaceId)}/email-suppressions/remove`, { email }),
     createRealtimeTicket: (workspaceId: string) => request<RealtimeTicket>('POST', `${workspace(workspaceId)}/realtime/tickets`),
   };
 }

@@ -4,6 +4,7 @@
  */
 import { newId } from '@openchat/shared';
 import { DB_NOW_MS, rawHandle, type Database } from './internal/handle';
+import type { WorkspaceContext } from './context';
 
 /** Email is off until a member turns it on, so a busy website cannot use up a sending allowance by surprise. */
 export async function emailRecipients(database: Database, input: { workspaceId: string; eventType: string; onlyMemberId: string | null }): Promise<string[]> {
@@ -70,7 +71,7 @@ export async function claimEmailDelivery(database: Database, input: { workspaceI
   return result.meta.changes === 1;
 }
 
-export async function finishEmailDelivery(database: Database, input: { workspaceId: string; dedupeKey: string; status: 'sent' | 'failed'; providerMessageId?: string }): Promise<void> {
+export async function finishEmailDelivery(database: Database, input: { workspaceId: string; dedupeKey: string; status: 'sent' | 'failed' | 'suppressed'; providerMessageId?: string }): Promise<void> {
   await rawHandle(database)
     .prepare(`UPDATE email_deliveries SET status = ?3, provider_message_id = ?4, updated_at = ${DB_NOW_MS} WHERE workspace_id = ?1 AND dedupe_key = ?2`)
     .bind(input.workspaceId, input.dedupeKey, input.status, input.providerMessageId ?? null)
@@ -94,4 +95,68 @@ export async function clearUnansweredAlert(database: Database, workspaceId: stri
     .prepare(`UPDATE conversations SET next_unanswered_alert_at = NULL WHERE workspace_id = ?1 AND id = ?2 AND next_unanswered_alert_at = ?3`)
     .bind(workspaceId, conversationId, dueAt)
     .run();
+}
+
+/** Kept so that a link in an old email goes on working. Only a hash of its token is stored. */
+export async function createUnsubscribeLink(database: Database, input: { workspaceId: string; email: string; tokenHash: string }): Promise<void> {
+  await rawHandle(database)
+    .prepare(`INSERT INTO email_unsubscribe_links (token_hash, workspace_id, email, created_at) VALUES (?1, ?2, ?3, ${DB_NOW_MS})`)
+    .bind(input.tokenHash, input.workspaceId, input.email)
+    .run();
+}
+
+export async function unsubscribeLinkExists(database: Database, tokenHash: string): Promise<boolean> {
+  const row = await rawHandle(database).prepare(`SELECT 1 AS found FROM email_unsubscribe_links WHERE token_hash = ?1`).bind(tokenHash).first<{ found: number }>();
+  return row !== null;
+}
+
+/** The address goes on the list and loses its consent together. Pressing it twice changes nothing more. */
+export async function unsubscribeByLink(database: Database, tokenHash: string): Promise<void> {
+  const d1 = rawHandle(database);
+  await d1.batch([
+    d1
+      .prepare(
+        `INSERT INTO email_suppressions (workspace_id, email, reason, created_at)
+         SELECT workspace_id, email, 'unsubscribe', ${DB_NOW_MS} FROM email_unsubscribe_links WHERE token_hash = ?1
+         ON CONFLICT (workspace_id, email) DO UPDATE SET reason = 'unsubscribe'`,
+      )
+      .bind(tokenHash),
+    d1
+      .prepare(
+        `UPDATE contacts SET follow_up_consent_at = NULL, follow_up_consent_source = NULL, updated_at = ${DB_NOW_MS}
+          WHERE EXISTS (SELECT 1 FROM email_unsubscribe_links l WHERE l.token_hash = ?1 AND l.workspace_id = contacts.workspace_id AND l.email = contacts.email)`,
+      )
+      .bind(tokenHash),
+  ]);
+}
+
+export interface SuppressionRow {
+  email: string;
+  reason: 'unsubscribe' | 'bounce' | 'complaint' | 'manual';
+  createdAt: number;
+}
+
+export function suppressionRepository(database: Database, ctx: WorkspaceContext) {
+  const d1 = rawHandle(database);
+  const w = ctx.workspaceId;
+  return {
+    async list(input: { cursor?: string | undefined; limit: number }): Promise<{ data: SuppressionRow[]; nextCursor: string | null }> {
+      const { results } = await d1
+        .prepare(`SELECT email, reason, created_at AS createdAt FROM email_suppressions WHERE workspace_id = ?1 AND (?2 IS NULL OR email > ?2) ORDER BY email LIMIT ?3`)
+        .bind(w, input.cursor ?? null, input.limit + 1)
+        .all<SuppressionRow>();
+      const data = results.slice(0, input.limit);
+      return { data, nextCursor: results.length > input.limit ? (data.at(-1)?.email ?? null) : null };
+    },
+    /** Never replaces a reason already there, so that adding by hand cannot turn an unsubscribe into something removable. */
+    async add(email: string): Promise<void> {
+      await d1.prepare(`INSERT OR IGNORE INTO email_suppressions (workspace_id, email, reason, created_at) VALUES (?1, ?2, 'manual', ${DB_NOW_MS})`).bind(w, email).run();
+    },
+    /** False if the address is listed for a reason that is not ours to undo. */
+    async removeManual(email: string): Promise<boolean> {
+      await d1.prepare(`DELETE FROM email_suppressions WHERE workspace_id = ?1 AND email = ?2 AND reason = 'manual'`).bind(w, email).run();
+      const left = await d1.prepare(`SELECT 1 AS found FROM email_suppressions WHERE workspace_id = ?1 AND email = ?2`).bind(w, email).first<{ found: number }>();
+      return left === null;
+    },
+  };
 }

@@ -145,6 +145,15 @@ Email alerts are off until a member turns them on, per workspace, on the Notific
 
 `email.send` reads the member, their preference, and the conversation again just before sending, so that someone suspended, a switch turned off, or a reply since then all stop it. An unavailable provider only delays alerts: the jobs retry and then dead-letter, and messaging never waits on them.
 
+## Consent and unsubscribe
+
+Follow-ups need both consent and an address not on the list. [Follow-up automation](#why-follow-ups-are-database-driven) checks both just before sending.
+
+- **Consent** comes from an unticked box in the widget, stored with its time and source. It belongs to one address, so a different address, set by the visitor or by a member, clears it.
+- **An unsubscribe link** is a random token, new for each email, and only its hash is stored, in `email_unsubscribe_links`. It holds no personal data, needs no sign-in, and outlives any signing key. Opening it changes nothing, because mail scanners open links. Confirming it on the page, or one click in a mail app (RFC 8058), lists the address and clears its consent, in that workspace only.
+- **The list** is `email_suppressions`. Supervisors can see it, add to it, and remove what was added by hand. An address that unsubscribed stays, and ticking the box again does not lift it, because an address typed into the widget is unverified.
+- **Bounces and complaints** are kept by Cloudflare in a list of its own, and a send to such an address fails with `E_RECIPIENT_SUPPRESSED`. That is recorded as `suppressed` and not retried. The `bounce` and `complaint` reasons in our list are unused for now, because subscribing to Cloudflare's events is not built.
+
 ## Why follow-ups are database-driven
 
 Queue delays cap at 24 hours and cannot be cancelled. A Durable Object alarm per conversation would mean a wake per conversation. Instead:

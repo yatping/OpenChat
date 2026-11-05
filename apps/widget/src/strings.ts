@@ -28,6 +28,7 @@ export const STRINGS = {
   profileTitleOffered: 'Leave your email and we can reply there too.',
   name: 'Name',
   email: 'Email',
+  followUpConsent: 'Email me about this conversation if I leave before it is finished.',
   save: 'Save',
   start: 'Start chatting',
   notNow: 'Not now',

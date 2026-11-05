@@ -217,6 +217,10 @@ Measured on 2026-11-04 on a throwaway deployment, which was then removed.
 | `oc deploy` from nothing to verified | About 80 seconds on a laptop, including the build |
 
 
+### Cloudflare Email Service suppressions and headers, 2026-11-06
+
+From the docs, not yet seen on a real send. Cloudflare adds [suppressions](https://developers.cloudflare.com/email-service/concepts/suppressions/) for bounces and complaints, and with "Drop suppressed recipients" off, which is the default, a send fails with `E_RECIPIENT_SUPPRESSED`. [Event subscriptions](https://developers.cloudflare.com/email-service/reference/event-subscriptions/) can report delivery events to a queue, and their payload includes the recipient and subject. [`List-Unsubscribe` and `List-Unsubscribe-Post`](https://developers.cloudflare.com/email-service/reference/headers/) are allowed headers, and a header not on the allowlist makes the whole send fail.
+
 ### Cloudflare Email Service, 2026-11-04
 
 Sending from a Worker through the `send_email` binding delivered a real reset email to an outside mailbox, and its link worked. The sending domain had been enabled about three minutes earlier, with `wrangler email sending enable`, on a zone in the account. That needed a login with `email_sending:write`, which an older Wrangler login lacks and `wrangler login` grants. Cloudflare set `_dmarc` to `v=DMARC1; p=reject;` on the zone, so any other service sending as that domain must pass DMARC. Whether mail lands in the inbox or in spam, and how large the daily quota is, were not measured.

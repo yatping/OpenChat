@@ -285,14 +285,18 @@ export function visitorRepositories(database: Database, ctx: VisitorContext) {
     },
 
     profile: {
-      /** Consent keeps its first timestamp while it stays on, and withdrawing clears it. */
+      /** Consent keeps its first timestamp while it stays on, and withdrawing clears it. It was given for one address, so a new address needs it again. */
       async update(input: { name?: string | undefined; email?: string | undefined; followUpConsent?: boolean | undefined }): Promise<void> {
         const consent = input.followUpConsent === undefined ? null : input.followUpConsent ? 1 : 0;
         await d1
           .prepare(
             `UPDATE contacts SET name = COALESCE(?1, name), email = COALESCE(?2, email),
-                    follow_up_consent_at = CASE ?3 WHEN 1 THEN COALESCE(follow_up_consent_at, ${DB_NOW_MS}) WHEN 0 THEN NULL ELSE follow_up_consent_at END,
-                    follow_up_consent_source = CASE ?3 WHEN 1 THEN COALESCE(follow_up_consent_source, 'widget') WHEN 0 THEN NULL ELSE follow_up_consent_source END,
+                    follow_up_consent_at = CASE WHEN ?3 = 0 THEN NULL
+                                                WHEN ?2 IS NOT NULL AND email IS NOT ?2 THEN CASE WHEN ?3 = 1 THEN ${DB_NOW_MS} END
+                                                WHEN ?3 = 1 THEN COALESCE(follow_up_consent_at, ${DB_NOW_MS}) ELSE follow_up_consent_at END,
+                    follow_up_consent_source = CASE WHEN ?3 = 0 THEN NULL
+                                                    WHEN ?2 IS NOT NULL AND email IS NOT ?2 THEN CASE WHEN ?3 = 1 THEN 'widget' END
+                                                    WHEN ?3 = 1 THEN COALESCE(follow_up_consent_source, 'widget') ELSE follow_up_consent_source END,
                     updated_at = ${DB_NOW_MS}
               WHERE workspace_id = ?4 AND id = ?5`,
           )

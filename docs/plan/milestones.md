@@ -259,7 +259,7 @@ Provider abstraction. Templates. Agent alerts for new and unanswered conversatio
 | Slice | State |
 |---|---|
 | Email sending and alerts to members | Done, tested with a fake provider. Not yet sent through real Cloudflare, which the exit check covers |
-| Consent and unsubscribe | Not started |
+| Consent and unsubscribe | Done, tested with a fake provider. The unsubscribe links are not in any email until follow-ups send them |
 | Follow-up automation | Not started |
 | Transcripts | Not started |
 | Operations and data | Not started |

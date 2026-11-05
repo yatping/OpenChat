@@ -16,6 +16,7 @@ const CAPABILITIES = {
   'conversation.assign.others': SUPERVISORS,
   'contact.merge': SUPERVISORS,
   'tag.delete': SUPERVISORS,
+  'suppression.manage': SUPERVISORS,
 } as const satisfies Record<string, readonly Role[]>;
 
 export type Capability = keyof typeof CAPABILITIES;

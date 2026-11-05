@@ -577,6 +577,20 @@ export const emailSettings = sqliteTable('email_settings', {
   updatedAt: ts('updated_at'),
 });
 
+/** One row for each unsubscribe link sent. The address is here, and not in the link. */
+export const emailUnsubscribeLinks = sqliteTable(
+  'email_unsubscribe_links',
+  {
+    tokenHash: text('token_hash').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    email: nocase('email').notNull(),
+    createdAt: ts('created_at'),
+  },
+  (t) => [index('email_unsubscribe_links_email_idx').on(t.workspaceId, t.email)],
+);
+
 export const emailSuppressions = sqliteTable(
   'email_suppressions',
   {

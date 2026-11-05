@@ -29,6 +29,7 @@ export * from './auth-flows';
 export * from './workspaces';
 export * from './push';
 export * from './email-templates';
+export * from './email-consent';
 export * from './admin';
 export * from './messaging';
 export * from './widget';

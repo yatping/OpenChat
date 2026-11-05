@@ -123,7 +123,7 @@ export function createApi(deps: ApiDeps) {
       if (!response.ok) throw await failure(response);
       return (await response.json()) as Bootstrap;
     },
-    async updateProfile(input: { name?: string; email?: string }): Promise<void> {
+    async updateProfile(input: { name?: string; email?: string; followUpConsent?: boolean }): Promise<void> {
       await authed('PATCH', '/api/v1/widget/me', input);
     },
     async listConversations(): Promise<VisitorConversation[]> {
