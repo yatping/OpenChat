@@ -79,17 +79,20 @@ Acceptance: "switching workspaces never leaks conversation data". This relies on
 ```text
 ConnectionManager
   └── Connection (installationId + userId), keyed by a local connection ID
-        ├── Tokens           expo-secure-store, key prefix conn:<id>:
+        ├── Tokens           expo-secure-store, key prefix conn.<id>.
         ├── ApiClient        bound to one base URL and token source. There is no global client.
         ├── QueryClient      one per Connection. Never shared.
-        ├── Local cache      a SQLite file per Connection, deleted on logout
+        ├── Local files      a cache directory per Connection, deleted on logout
         └── Socket           open only for the active Connection in the foreground
 ```
 
 - Switching replaces the top-level provider with a new `key`, unmounting the whole screen tree so no component state survives.
 - A workspace is a selection inside a Connection, included in every query key.
 - Deep links name their target explicitly, and never use "current workspace".
-- A test mounts two fake installations with **identical IDs** and asserts that nothing crosses between them.
+- A test uses two fake installations with **identical IDs** and asserts that nothing crosses between them.
+- A Connection is known by a local ID, because installations choose their own IDs and can collide.
+- The list of connections is not secret and lives in app storage. Message data is held in memory, so there is no offline cache yet.
+- A simulator build must be signed, even ad hoc (`CODE_SIGN_IDENTITY=-`). Without a signature the keychain refuses every write, and sign-in fails.
 
 ## Opening a notification
 
