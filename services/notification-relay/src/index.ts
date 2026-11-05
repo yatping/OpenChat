@@ -4,8 +4,10 @@ import { Hono } from 'hono';
 import { runApnsSelfCheck } from './apns/self-check';
 import { WorkersFetchTransport } from './apns/transport';
 import type { Env } from './env';
+import { relayRoutes } from './requests/routes';
 
 export { ApnsCredential } from './apns/credential';
+export { RelayGuard } from './requests/guard';
 
 const log = createLogger();
 
@@ -14,7 +16,7 @@ async function tokenMatches(presented: string, expected: string): Promise<boolea
   return crypto.subtle.timingSafeEqual(await digest(presented), await digest(expected));
 }
 
-export function createApp(transportFor: () => ApnsTransport = () => new WorkersFetchTransport()) {
+export function createApp(transportFor: () => ApnsTransport = () => new WorkersFetchTransport(), fetcher: typeof fetch = (input, init) => fetch(input, init)) {
   const app = new Hono<{ Bindings: Env }>();
   const notFound = { code: 'not_found', status: 404, title: 'Not found', protocolVersion: RELAY_PROTOCOL_VERSION };
 
@@ -27,6 +29,8 @@ export function createApp(transportFor: () => ApnsTransport = () => new WorkersF
     if (!expected || !presented || !(await tokenMatches(presented, expected))) return c.json(notFound, 404);
     return c.json(await runApnsSelfCheck(c.env, transportFor()));
   });
+
+  app.route('/', relayRoutes(fetcher));
 
   app.notFound((c) => c.json(notFound, 404));
   return app;

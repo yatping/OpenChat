@@ -1,4 +1,4 @@
-import { cloudflareTest } from '@cloudflare/vitest-plugin';
+import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-plugin';
 import { defineConfig } from 'vitest/config';
 
 // Generated per run, so that no private key is committed, even a test one.
@@ -12,8 +12,9 @@ export default defineConfig({
     cloudflareTest({
       wrangler: { configPath: './wrangler.template.jsonc' },
       miniflare: {
-        bindings: { APNS_TEAM_ID: 'TEAM123456', APNS_KEY_ID: 'KEY1234567', APNS_PRIVATE_KEY, APNS_SELF_CHECK_TOPIC: 'com.example.app', RELAY_OPERATOR_TOKEN: 'test-operator-token', TEST_APNS_PUBLIC_KEY },
+        bindings: { APNS_TEAM_ID: 'TEAM123456', APNS_KEY_ID: 'KEY1234567', APNS_PRIVATE_KEY, APNS_SELF_CHECK_TOPIC: 'com.example.app', RELAY_OPERATOR_TOKEN: 'test-operator-token', TEST_APNS_PUBLIC_KEY, TEST_MIGRATIONS: await readD1Migrations('./migrations') },
       },
     }),
   ],
+  test: { setupFiles: ['./test/setup.ts'] },
 });

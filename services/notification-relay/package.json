@@ -14,9 +14,10 @@
     "dev": "wrangler dev -c wrangler.template.jsonc --port 8788"
   },
   "dependencies": {
-    "@openchat/shared": "workspace:*",
     "@openchat/notification-protocol": "workspace:*",
-    "hono": "^4.13.16"
+    "@openchat/shared": "workspace:*",
+    "hono": "^4.13.16",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.5.1",

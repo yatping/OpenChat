@@ -401,6 +401,18 @@ Milestone 3, slice 1, on a throwaway relay with a production key limited to one 
 
 Not shown yet: a push reaching a phone from a Worker, which comes with the app in slice 5. S7 reached one from a local script. Throughput under load is unmeasured, and the daily cron has not been seen firing on Cloudflare. A latency over 1 s would limit one invocation to about 6 sends per second.
 
+## Relay requests on real Cloudflare (2026-11-05)
+
+Milestone 3, slice 2, on a throwaway relay with real D1, against a second Worker on the same account that served a discovery document.
+
+| Check | Result |
+|---|---|
+| Domain proof between two Workers on one account, with default settings | **Fails**, answering `422`. The relay does not see why, because all such failures look alike. The protocol warned of error 1042 |
+| The same with `global_fetch_strictly_public` | Works. The APNs self-check still answers `BadDeviceToken` |
+| Registering twice, an IP address, workspace register and revoke, replay, stale timestamp, each tampered header, an unknown body field | All as designed |
+| A display name containing a direction override | Stored clean |
+| Rate limit binding, `ratelimits` in Wrangler config | Deploys, and limits in local tests. Its behaviour on real Cloudflare has not been measured |
+
 ## Milestone 2 on real Cloudflare (2026-11-05)
 
 A throwaway installation, `oc-preview-m2`, deployed from a clean start with `oc deploy` on the rules in [ADR-0016](decisions/0016-installation-admin-replaces-workspace-managers.md), and then removed. It had no email provider, so new account links came from `oc recover`.
