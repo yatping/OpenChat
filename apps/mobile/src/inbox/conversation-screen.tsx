@@ -8,6 +8,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ActionSheetIOS, ActivityIndicator, AppState, FlatList, Image, KeyboardAvoidingView, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { setConversationOnScreen } from '../push/destination';
 import { Body, Button, Problem, useTheme } from '../ui/kit';
 import { localCopy, openFile, pickDocument, pickPhoto, TooLarge, uploadPicked, type Picked } from './attachment-files';
 import { canPreview, formatSize, uploadProblem } from './attachment-rules';
@@ -164,8 +165,10 @@ export function ConversationScreen() {
 
   useEffect(() => {
     openConversation.current = conversationId;
+    setConversationOnScreen(conversationId);
     return () => {
       openConversation.current = null;
+      setConversationOnScreen(null);
     };
   }, [conversationId, openConversation]);
 

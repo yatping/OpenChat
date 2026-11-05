@@ -430,7 +430,24 @@ Milestone 3, slice 2, on a throwaway relay with real D1, against a second Worker
 
 **The API Worker needs `global_fetch_strictly_public` as well as the relay.** Without it, one Worker's `fetch` to another on the same account does not reach it over the public internet, which is what domain proof found earlier. An independent relay on the customer's own account depends on this.
 
-**Not measured:** a real phone, which is the next slice; throughput; the time from message to push.
+**Not measured:** throughput.
+
+### On a real iPhone
+
+An ad-hoc build, on one iPhone and one Apple identity, against a temporary installation and relay. The person holding the phone confirmed each result.
+
+| Check | Result |
+|---|---|
+| Sign in, and allow notifications | One device at the relay, and one opaque handle at the installation |
+| A visitor's first message, app in the background | Notification with the workspace's name and "New conversation", without the message text. Tapping it opened that conversation |
+| The conversation on screen | Messages arrive live, with no banner |
+| The inbox on screen | A banner |
+| App force-quit | Notification arrived, and tapping it opened that conversation |
+| An event turned off in Settings | Nothing reached the relay |
+| Sign out | Subscription gone at the relay and the installation, and session ended. A later conversation sent nothing |
+
+Apple accepted all six pushes, each about 7 seconds after the relay received it. The relay's delivery queue sets no batch wait, so it takes the default, which is a likely part of that. It has not been measured separately.
+
 
 ## Milestone 2 on real Cloudflare (2026-11-05)
 
