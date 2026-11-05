@@ -2,7 +2,7 @@
  * Queue consumers and cron. Phase 0 proves the pipeline end to end with one job. Rules are in
  * docs/architecture/background-jobs.md: acknowledge per message, classify errors, check notAfter.
  */
-import { INVITATION_EMAIL_JOB, NEW_ACCOUNT_EMAIL_JOB, PASSWORD_RESET_JOB, sendInvitationEmail, sendNewAccountEmail, sendPasswordResetEmail } from '@openchat/core';
+import { NEW_ACCOUNT_EMAIL_JOB, PASSWORD_RESET_JOB, sendNewAccountEmail, sendPasswordResetEmail } from '@openchat/core';
 import { claimJob, getInstallation, openDatabase, recordFailedJob } from '@openchat/database';
 import { CloudflareEmailProvider, ConsoleEmailProvider, EmailSendError, ResendEmailProvider, type EmailProvider } from '@openchat/email';
 import { AppError, createLogger, newId, retryDelaySeconds, type JobEnvelope } from '@openchat/shared';
@@ -67,9 +67,8 @@ const HANDLERS: Record<string, Handler> = {
   [NEW_ACCOUNT_EMAIL_JOB]: async (job, env, deps) => {
     await sendNewAccountEmail(await systemEmailDeps(env, deps), (job.payload as { userId: string }).userId);
   },
-  [INVITATION_EMAIL_JOB]: async (job, env, deps) => {
-    await sendInvitationEmail(await systemEmailDeps(env, deps), { workspaceId: job.workspaceId ?? '', invitationId: (job.payload as { invitationId: string }).invitationId });
-  },
+  // Queued by a Worker from before ADR-0016. Its link would lead nowhere, so it is acknowledged and dropped. Remove after one release.
+  'workspace.invitation_email': async () => undefined,
 };
 
 const isDeadLetterQueue = (queue: string) => queue.endsWith('-dlq');

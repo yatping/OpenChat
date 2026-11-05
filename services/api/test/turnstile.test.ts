@@ -63,7 +63,7 @@ beforeEach(async () => {
     env.DB.prepare(`INSERT INTO installation (id, name, public_base_url, created_at, updated_at) VALUES ('inst_test', 'Test', '${ORIGIN}', 1, 1)`),
     env.DB.prepare(`INSERT INTO workspaces (id, name, slug, created_at, updated_at) VALUES ('work_1', 'One', 'one', 1, 1)`),
     env.DB.prepare(`INSERT INTO users (id, email, name, password_hash, created_at, updated_at) VALUES ('user_a', 'agent@example.com', 'Ana', ?1, 1, 1)`).bind(hash),
-    env.DB.prepare(`INSERT INTO workspace_members (id, workspace_id, user_id, role, status, created_at, updated_at) VALUES ('mem_a', 'work_1', 'user_a', 'owner', 'active', 1, 1)`),
+    env.DB.prepare(`INSERT INTO workspace_members (id, workspace_id, user_id, role, status, created_at, updated_at) VALUES ('mem_a', 'work_1', 'user_a', 'supervisor', 'active', 1, 1)`),
     env.DB.prepare(`INSERT INTO websites (id, workspace_id, name, website_key, allowed_origins_json, settings_json, created_at, updated_at) VALUES ('site_c', 'work_1', 'Checked', 'key_checked', ?1, '{"requireTurnstile":true}', 1, 1), ('site_o', 'work_1', 'Open', 'key_open', ?1, '{}', 1, 1)`).bind(JSON.stringify([SITE])),
   ]);
 });
@@ -158,14 +158,15 @@ describe('settings', () => {
   it('will not turn it on where it could not work, which would shut out every new visitor', async () => {
     const login = await call('POST', '/api/v1/auth/login', { body: { email: 'agent@example.com', password: PASSWORD, clientType: 'mobile' } });
     const { accessToken: token } = (await login.json()) as { accessToken: string };
-    const path = '/api/v1/workspaces/work_1/websites/site_o';
+    await env.DB.prepare(`UPDATE users SET is_installation_admin = 1 WHERE id = 'user_a'`).run();
+    const path = '/api/v1/admin/workspaces/work_1/websites/site_o';
     const on = { settings: { requireTurnstile: true } };
     const refused = await call('PATCH', path, { token, body: on, env: unconfigured });
     expect(refused.status).toBe(400);
     expect(((await refused.json()) as { code: string }).code).toBe('turnstile_not_configured');
     expect((await call('PATCH', path, { token, body: on })).status).toBe(200);
     const created = { name: 'New', allowedOrigins: [SITE], ...on };
-    expect((await call('POST', '/api/v1/workspaces/work_1/websites', { token, body: created, env: unconfigured })).status).toBe(400);
-    expect((await call('POST', '/api/v1/workspaces/work_1/websites', { token, body: created })).status).toBe(201);
+    expect((await call('POST', '/api/v1/admin/workspaces/work_1/websites', { token, body: created, env: unconfigured })).status).toBe(400);
+    expect((await call('POST', '/api/v1/admin/workspaces/work_1/websites', { token, body: created })).status).toBe(201);
   });
 });

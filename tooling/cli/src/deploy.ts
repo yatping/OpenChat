@@ -257,7 +257,7 @@ export function createDeployer(root: string) {
         console.log(`\nSet the owner's password within one hour. This link is shown only once:\n${ownerLink}`);
       }
       if (!process.env.RESEND_API_KEY && !state.cloudflareEmailFrom) {
-        console.log('\nNo email provider was set in this run. Without one, resets and invitations are not delivered.');
+        console.log('\nNo email provider was set in this run. Without one, resets and new account links are not delivered.');
         console.log(`Use --cloudflare-email, or RESEND_API_KEY, with --email-from, then deploy again. Until then: pnpm oc recover --env ${options.name} --email <address>`);
       }
     },

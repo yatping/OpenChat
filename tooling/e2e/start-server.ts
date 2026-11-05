@@ -27,7 +27,7 @@ INSERT INTO users (id, email, name, password_hash, is_installation_admin, create
   ('user_owner', ${quote(OWNER.email)}, ${quote(OWNER.name)}, ${quote(hash)}, 1, 1, 1),
   ('user_agent', ${quote(AGENT.email)}, ${quote(AGENT.name)}, ${quote(hash)}, 0, 1, 1);
 INSERT INTO workspace_members (id, workspace_id, user_id, role, status, created_at, updated_at) VALUES
-  (${quote(OWNER.memberId)}, ${quote(WORKSPACE_ID)}, 'user_owner', 'owner', 'active', 1, 1),
+  (${quote(OWNER.memberId)}, ${quote(WORKSPACE_ID)}, 'user_owner', 'supervisor', 'active', 1, 1),
   (${quote(AGENT.memberId)}, ${quote(WORKSPACE_ID)}, 'user_agent', 'agent', 'active', 1, 1);
 INSERT INTO websites (id, workspace_id, name, website_key, allowed_origins_json, created_at, updated_at) VALUES
   ('site_e2e', ${quote(WORKSPACE_ID)}, 'Shop', ${quote(WEBSITE_KEY)}, ${quote(JSON.stringify([SITE_ORIGIN]))}, 1, 1);

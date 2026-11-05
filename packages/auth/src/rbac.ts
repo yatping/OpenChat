@@ -1,30 +1,21 @@
-/** The role table from docs/architecture/security.md, as data. Membership is read per request. */
-export const ROLES = ['owner', 'admin', 'supervisor', 'agent'] as const;
+/**
+ * The roles inside a workspace, as data. Membership is read per request. Everything else, from people to
+ * websites, belongs to the installation admin, who is not a workspace role. See ADR-0016.
+ */
+export const ROLES = ['supervisor', 'agent'] as const;
 export type Role = (typeof ROLES)[number];
 
 const ALL: readonly Role[] = ROLES;
-const MANAGERS: readonly Role[] = ['owner', 'admin'];
-const LEADS: readonly Role[] = ['owner', 'admin', 'supervisor'];
-const OWNER: readonly Role[] = ['owner'];
+const SUPERVISORS: readonly Role[] = ['supervisor'];
 
 const CAPABILITIES = {
   'conversation.view': ALL,
   'conversation.reply': ALL,
   'conversation.note': ALL,
   'conversation.assign.self': ALL,
-  'conversation.assign.others': LEADS,
-  'contact.merge': LEADS,
-  'contact.export': MANAGERS,
-  'contact.delete': MANAGERS,
-  'website.manage': MANAGERS,
-  'automation.manage': MANAGERS,
-  'email.manage': MANAGERS,
-  'member.invite': MANAGERS,
-  'member.remove': MANAGERS,
-  'workspace.manage': MANAGERS,
-  'workspace.security': OWNER,
-  'workspace.delete': OWNER,
-  'workspace.transfer': OWNER,
+  'conversation.assign.others': SUPERVISORS,
+  'contact.merge': SUPERVISORS,
+  'tag.delete': SUPERVISORS,
 } as const satisfies Record<string, readonly Role[]>;
 
 export type Capability = keyof typeof CAPABILITIES;
@@ -40,12 +31,3 @@ export function canAssignConversation(role: Role, input: { actorMemberId: string
   if (input.currentAssigneeId === input.actorMemberId) return true;
   return input.newAssigneeId === input.actorMemberId && input.currentAssigneeId === null;
 }
-
-/** Admins can manage anyone but owners. Nobody below admin manages members. */
-export function canManageMember(actor: Role, target: Role): boolean {
-  if (actor === 'owner') return true;
-  return actor === 'admin' && target !== 'owner';
-}
-
-/** Granting a role follows the same rule: an admin cannot create an owner. */
-export const canGrantRole = canManageMember;

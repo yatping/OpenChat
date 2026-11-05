@@ -55,7 +55,7 @@ const person = async (response: Response, status = 200) => {
   return (await response.json()) as Person;
 };
 const code = async (response: Response) => ((await response.json()) as { code: string }).code;
-const auditActions = async () => (await env.DB.prepare(`SELECT action FROM audit_log WHERE action LIKE 'person.%' ORDER BY created_at, id`).all<{ action: string }>()).results.map((r) => r.action);
+const auditActions = async () => (await env.DB.prepare(`SELECT action FROM audit_log WHERE action LIKE 'person.%' OR action LIKE 'workspace.%' OR action LIKE 'website.%' ORDER BY created_at, id`).all<{ action: string }>()).results.map((r) => r.action);
 
 const tokens: Record<string, string> = {};
 
@@ -69,8 +69,8 @@ beforeEach(async () => {
     ...users.map((u) => env.DB.prepare(`INSERT INTO users (id, email, name, password_hash, is_installation_admin, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, 1, 1)`).bind(`user_${u}`, `${u}@example.com`, u, hash, u === 'boss' ? 1 : 0)),
     env.DB.prepare(
       `INSERT INTO workspace_members (id, workspace_id, user_id, role, status, created_at, updated_at) VALUES
-       ('mem_owner', 'work_1', 'user_owner', 'owner', 'active', 1, 1), ('mem_agent', 'work_1', 'user_agent', 'agent', 'active', 1, 1),
-       ('mem_outsider', 'work_2', 'user_outsider', 'owner', 'active', 1, 1)`,
+       ('mem_owner', 'work_1', 'user_owner', 'supervisor', 'active', 1, 1), ('mem_agent', 'work_1', 'user_agent', 'agent', 'active', 1, 1),
+       ('mem_outsider', 'work_2', 'user_outsider', 'supervisor', 'active', 1, 1)`,
     ),
     env.DB.prepare(`INSERT INTO websites (id, workspace_id, name, website_key, allowed_origins_json, created_at, updated_at) VALUES ('site_1', 'work_1', 'Shop', 'key_1', ?1, 1, 1)`).bind(JSON.stringify([SITE])),
     env.DB.prepare(`UPDATE websites SET settings_json = '{"showAgentNames":true}'`),
@@ -102,13 +102,18 @@ describe('who can reach the admin routes', () => {
     ['PUT', `${PEOPLE}/user_agent/workspaces/work_2`, { role: 'agent' }],
     ['DELETE', `${PEOPLE}/user_agent/workspaces/work_1`],
     ['GET', '/api/v1/admin/workspaces'],
+    ['POST', '/api/v1/admin/workspaces', { name: 'New' }],
+    ['PATCH', '/api/v1/admin/workspaces/work_1', { name: 'New' }],
+    ['GET', '/api/v1/admin/workspaces/work_1/websites'],
+    ['POST', '/api/v1/admin/workspaces/work_1/websites', { name: 'New', allowedOrigins: [] }],
+    ['PATCH', '/api/v1/admin/workspaces/work_1/websites/site_1', { name: 'New' }],
   ];
 
   it('needs a token', async () => {
     for (const [method, path, body] of routes) expect((await call(method, path, undefined, body)).status).toBe(401);
   });
 
-  it('answers 404 to anyone else, including a workspace owner, and changes nothing', async () => {
+  it('answers 404 to anyone else, including a supervisor, and changes nothing', async () => {
     for (const token of [tokens.agent, tokens.owner]) {
       for (const [method, path, body] of routes) expect((await call(method, path, token, body)).status).toBe(404);
     }
@@ -148,9 +153,75 @@ describe('what an admin can see', () => {
     expect(await auditActions()).toEqual(['person.assigned']);
   });
 
-  it('may create a workspace on an invite-only installation, where an agent may not', async () => {
-    expect((await call('POST', '/api/v1/workspaces', tokens.boss, { name: 'New team' })).status).toBe(201);
-    expect((await call('POST', '/api/v1/workspaces', tokens.agent, { name: 'Mine' })).status).toBe(403);
+});
+
+describe('managing workspaces and websites', () => {
+  const ADMIN_WORKSPACES = '/api/v1/admin/workspaces';
+
+  it('creates a workspace that nobody has joined, so that an admin still has no way in', async () => {
+    const created = await call('POST', ADMIN_WORKSPACES, tokens.boss, { name: 'Ünï Çode & Co!' });
+    expect(created.status).toBe(201);
+    const { id, slug } = (await created.json()) as { id: string; slug: string };
+    expect(slug).toMatch(/^[a-z0-9-]+$/);
+    expect((await call('GET', `/api/v1/workspaces/${id}`, tokens.boss)).status).toBe(404);
+    const me = (await (await call('GET', '/api/v1/me', tokens.boss)).json()) as { memberships: unknown[] };
+    expect(me.memberships).toEqual([]);
+    expect(await auditActions()).toEqual(['workspace.created']);
+  });
+
+  it('refuses a workspace name with control characters, which could reach an email subject', async () => {
+    expect((await call('POST', ADMIN_WORKSPACES, tokens.boss, { name: 'a\r\nBcc: x@example.com' })).status).toBe(400);
+  });
+
+  it('renames a workspace without joining it, and gives 404 for an unknown one', async () => {
+    const renamed = await call('PATCH', `${ADMIN_WORKSPACES}/work_1`, tokens.boss, { name: 'Renamed' });
+    expect(await renamed.json()).toMatchObject({ id: 'work_1', name: 'Renamed' });
+    expect((await call('PATCH', `${ADMIN_WORKSPACES}/work_none`, tokens.boss, { name: 'x' })).status).toBe(404);
+    expect(await auditActions()).toEqual(['workspace.updated']);
+  });
+
+  it('manages websites without joining, and members see the result', async () => {
+    const created = await call('POST', `${ADMIN_WORKSPACES}/work_1/websites`, tokens.boss, { name: 'Blog', allowedOrigins: ['https://blog.example.org'], settings: { welcomeMessage: 'Hi' } });
+    expect(created.status).toBe(201);
+    const { id, websiteKey } = (await created.json()) as { id: string; websiteKey: string };
+    expect(websiteKey).toMatch(/^wk_.{32,}/);
+
+    const updated = await call('PATCH', `${ADMIN_WORKSPACES}/work_1/websites/${id}`, tokens.boss, { name: 'Renamed' });
+    expect(await updated.json()).toMatchObject({ name: 'Renamed', allowedOrigins: ['https://blog.example.org'], settings: { welcomeMessage: 'Hi' } });
+    expect((await call('PATCH', `${ADMIN_WORKSPACES}/work_1/websites/site_none`, tokens.boss, { name: 'x' })).status).toBe(404);
+    expect((await call('PATCH', `${ADMIN_WORKSPACES}/work_2/websites/${id}`, tokens.boss, { name: 'x' })).status).toBe(404);
+
+    const forAdmin = (await (await call('GET', `${ADMIN_WORKSPACES}/work_1/websites`, tokens.boss)).json()) as { data: { id: string }[] };
+    expect(forAdmin.data.map((w) => w.id)).toContain(id);
+    const forAgent = (await (await call('GET', '/api/v1/workspaces/work_1/websites', tokens.agent)).json()) as { data: { id: string; name: string }[] };
+    expect(forAgent.data.find((w) => w.id === id)?.name).toBe('Renamed');
+    expect((await call('GET', `${ADMIN_WORKSPACES}/work_none/websites`, tokens.boss)).status).toBe(404);
+    expect(await auditActions()).toEqual(['website.created', 'website.updated']);
+  });
+
+  it.each(['https://*.example.org', 'http://example.org', 'https://example.org/path', 'javascript:alert(1)', 'not a url', 'https://example.org/'])('refuses the origin %s', async (origin) => {
+    expect((await call('POST', `${ADMIN_WORKSPACES}/work_1/websites`, tokens.boss, { name: 'x', allowedOrigins: [origin] })).status).toBe(400);
+  });
+
+  it('accepts plain HTTP only on the local machine, and refuses unknown settings', async () => {
+    expect((await call('POST', `${ADMIN_WORKSPACES}/work_1/websites`, tokens.boss, { name: 'x', allowedOrigins: ['http://localhost:5173'] })).status).toBe(201);
+    expect((await call('POST', `${ADMIN_WORKSPACES}/work_1/websites`, tokens.boss, { name: 'x', allowedOrigins: [], settings: { script: '<x>' } })).status).toBe(400);
+  });
+
+  it('has no routes left inside a workspace for what moved here', async () => {
+    const W = '/api/v1/workspaces/work_1';
+    for (const [method, path, body] of [
+      ['POST', '/api/v1/workspaces', { name: 'x' }],
+      ['PATCH', W, { name: 'x' }],
+      ['POST', `${W}/websites`, { name: 'x', allowedOrigins: [] }],
+      ['PATCH', `${W}/websites/site_1`, { name: 'x' }],
+      ['PATCH', `${W}/members/mem_agent`, { role: 'agent' }],
+      ['DELETE', `${W}/members/mem_agent`],
+      ['POST', `${W}/invitations`, { email: 'x@example.com', role: 'agent' }],
+      ['POST', '/api/v1/invitations/accept', { token: 'x' }],
+    ] as const) {
+      expect([method, path, (await call(method, path, tokens.boss, body)).status]).toEqual([method, path, 404]);
+    }
   });
 });
 
@@ -187,18 +258,13 @@ describe('assigning to a workspace', () => {
     const assigned = await person(await call('PUT', `${PEOPLE}/user_agent/workspaces/work_2`, tokens.boss, { role: 'supervisor' }));
     expect(assigned.memberships.map((m) => [m.workspaceId, m.role])).toEqual(expect.arrayContaining([['work_1', 'agent'], ['work_2', 'supervisor']]));
     expect((await call('GET', '/api/v1/workspaces/work_2', tokens.agent)).status).toBe(200);
-    expect(await env.DB.prepare(`SELECT COUNT(*) AS n FROM invitations`).first('n')).toBe(0);
   });
 
-  it('changes a role, can make an owner, and keeps a workspace from losing its only owner', async () => {
-    await person(await call('PUT', `${PEOPLE}/user_agent/workspaces/work_1`, tokens.boss, { role: 'owner' }));
-    expect((await call('DELETE', `${PEOPLE}/user_owner/workspaces/work_1`, tokens.boss)).status).toBe(200);
-    const demote = await call('PUT', `${PEOPLE}/user_agent/workspaces/work_1`, tokens.boss, { role: 'agent' });
-    expect(demote.status).toBe(409);
-    expect(await code(demote)).toBe('last_owner');
-    const remove = await call('DELETE', `${PEOPLE}/user_agent/workspaces/work_1`, tokens.boss);
-    expect(remove.status).toBe(409);
-    expect(await code(remove)).toBe('last_owner');
+  it('has only the workspace roles, and a workspace may end up with nobody in it', async () => {
+    for (const role of ['owner', 'admin']) expect((await call('PUT', `${PEOPLE}/user_agent/workspaces/work_1`, tokens.boss, { role })).status).toBe(400);
+    await person(await call('DELETE', `${PEOPLE}/user_owner/workspaces/work_1`, tokens.boss));
+    await person(await call('DELETE', `${PEOPLE}/user_agent/workspaces/work_1`, tokens.boss));
+    expect(await env.DB.prepare(`SELECT COUNT(*) AS n FROM workspace_members WHERE workspace_id = 'work_1' AND status = 'active'`).first('n')).toBe(0);
   });
 
   it('gives 404 for someone or somewhere unknown', async () => {
@@ -216,56 +282,44 @@ describe('assigning to a workspace', () => {
 });
 
 describe('removing from a workspace', () => {
-  for (const [how, remove] of [
-    ['by an installation admin', () => call('DELETE', `${PEOPLE}/user_agent/workspaces/work_1`, tokens.boss)],
-    ['by a workspace owner', () => call('DELETE', '/api/v1/workspaces/work_1/members/mem_agent', tokens.owner)],
-  ] as const) {
-    it(`${how}: ends access, keeps their name on messages, and shows the team they were removed`, async () => {
-      const { path, visitor, visitorPath } = await conversationWithReply();
-      await env.DB.prepare(`UPDATE conversations SET assigned_member_id = 'mem_agent'`).run();
-      expect(await agentSender(path)).toEqual({ type: 'member', id: 'mem_agent', displayName: 'agent' });
+  it('ends access, keeps their name on messages, and shows the team they were removed', async () => {
+    const { path, visitor, visitorPath } = await conversationWithReply();
+    await env.DB.prepare(`UPDATE conversations SET assigned_member_id = 'mem_agent'`).run();
+    expect(await agentSender(path)).toEqual({ type: 'member', id: 'mem_agent', displayName: 'agent' });
 
-      expect((await remove()).status).toBeLessThan(300);
+    await person(await call('DELETE', `${PEOPLE}/user_agent/workspaces/work_1`, tokens.boss));
 
-      expect((await call('GET', '/api/v1/workspaces/work_1', tokens.agent)).status).toBe(404);
-      expect(await agentSender(path)).toEqual({ type: 'member', id: 'mem_agent', displayName: 'agent', removed: true });
-      expect(await env.DB.prepare(`SELECT assigned_member_id AS a FROM conversations`).first('a')).toBeNull();
-      const members = (await (await call('GET', '/api/v1/workspaces/work_1/members', tokens.owner)).json()) as { data: { id: string; status: string }[] };
-      expect(members.data.find((m) => m.id === 'mem_agent')?.status).toBe('removed');
+    expect((await call('GET', '/api/v1/workspaces/work_1', tokens.agent)).status).toBe(404);
+    expect(await agentSender(path)).toEqual({ type: 'member', id: 'mem_agent', displayName: 'agent', removed: true });
+    expect(await env.DB.prepare(`SELECT assigned_member_id AS a FROM conversations`).first('a')).toBeNull();
+    const members = (await (await call('GET', '/api/v1/workspaces/work_1/members', tokens.owner)).json()) as { data: { id: string; status: string }[] };
+    expect(members.data.find((m) => m.id === 'mem_agent')?.status).toBe('removed');
 
-      // The visitor still sees who answered, and nothing about the team.
-      const seen = (await (await call('GET', `${visitorPath}/messages`, visitor, undefined, SITE)).json()) as { data: { sender: Sender }[] };
-      expect(seen.data.find((message) => message.sender.type === 'member')?.sender).toEqual({ type: 'member', displayName: 'agent' });
-    });
-  }
+    // The visitor still sees who answered, and nothing about the team.
+    const seen = (await (await call('GET', `${visitorPath}/messages`, visitor, undefined, SITE)).json()) as { data: { sender: Sender }[] };
+    expect(seen.data.find((message) => message.sender.type === 'member')?.sender).toEqual({ type: 'member', displayName: 'agent' });
+  });
 
   it('does not count as assignable', async () => {
     const { path } = await conversationWithReply();
-    expect((await call('DELETE', '/api/v1/workspaces/work_1/members/mem_agent', tokens.owner)).status).toBe(204);
+    await person(await call('DELETE', `${PEOPLE}/user_agent/workspaces/work_1`, tokens.boss));
     const { version } = (await (await call('GET', path, tokens.owner)).json()) as { version: number };
     expect((await call('PATCH', path, tokens.owner, { assignedMemberId: 'mem_agent', expectedVersion: version })).status).not.toBe(200);
   });
 
-  it('can be undone by the workspace, with the same member and name', async () => {
+  it('can be undone by an admin assigning them, with the same member and name', async () => {
     const { path } = await conversationWithReply();
-    expect((await call('DELETE', '/api/v1/workspaces/work_1/members/mem_agent', tokens.owner)).status).toBe(204);
-    const back = await call('PATCH', '/api/v1/workspaces/work_1/members/mem_agent', tokens.owner, { status: 'active' });
-    expect(await back.json()).toMatchObject({ id: 'mem_agent', status: 'active', role: 'agent' });
+    await person(await call('DELETE', `${PEOPLE}/user_agent/workspaces/work_1`, tokens.boss));
+    const assigned = await person(await call('PUT', `${PEOPLE}/user_agent/workspaces/work_1`, tokens.boss, { role: 'supervisor' }));
+    expect(assigned.memberships).toEqual([expect.objectContaining({ memberId: 'mem_agent', role: 'supervisor', status: 'active' })]);
     expect((await call('GET', '/api/v1/workspaces/work_1', tokens.agent)).status).toBe(200);
     expect(await agentSender(path)).toEqual({ type: 'member', id: 'mem_agent', displayName: 'agent' });
   });
 
-  it('can be undone by an admin assigning them, with the same member', async () => {
-    await person(await call('DELETE', `${PEOPLE}/user_agent/workspaces/work_1`, tokens.boss));
-    const assigned = await person(await call('PUT', `${PEOPLE}/user_agent/workspaces/work_1`, tokens.boss, { role: 'supervisor' }));
-    expect(assigned.memberships).toEqual([expect.objectContaining({ memberId: 'mem_agent', role: 'supervisor', status: 'active' })]);
-  });
-
-  it('refuses to invite someone removed, and says what to do instead', async () => {
-    expect((await call('DELETE', '/api/v1/workspaces/work_1/members/mem_agent', tokens.owner)).status).toBe(204);
-    const invited = await call('POST', '/api/v1/workspaces/work_1/invitations', tokens.owner, { email: 'agent@example.com', role: 'agent' });
-    expect(invited.status).toBe(409);
-    expect(((await invited.json()) as { title: string }).title).toContain('Reactivate');
+  it('can bring back someone suspended before suspending was removed', async () => {
+    await env.DB.prepare(`UPDATE workspace_members SET status = 'suspended' WHERE id = 'mem_agent'`).run();
+    const assigned = await person(await call('PUT', `${PEOPLE}/user_agent/workspaces/work_1`, tokens.boss, { role: 'agent' }));
+    expect(assigned.memberships).toEqual([expect.objectContaining({ memberId: 'mem_agent', status: 'active' })]);
   });
 });
 
@@ -305,21 +359,6 @@ describe('deactivating and reactivating', () => {
     expect(response.status).toBe(409);
     expect(await code(response)).toBe('cannot_deactivate_self');
     expect((await call('GET', '/api/v1/me', tokens.boss)).status).toBe(200);
-  });
-
-  it('refuses the only owner of a workspace, counting a deactivated owner as none', async () => {
-    const only = await call('POST', `${PEOPLE}/user_owner/deactivate`, tokens.boss);
-    expect(only.status).toBe(409);
-    expect(await code(only)).toBe('last_owner');
-
-    await person(await call('PUT', `${PEOPLE}/user_agent/workspaces/work_1`, tokens.boss, { role: 'owner' }));
-    await person(await call('POST', `${PEOPLE}/user_owner/deactivate`, tokens.boss));
-    const second = await call('POST', `${PEOPLE}/user_agent/deactivate`, tokens.boss);
-    expect(second.status).toBe(409);
-    expect(await code(second)).toBe('last_owner');
-    // The same rule for a workspace owner acting from inside the workspace.
-    const agent = await signIn('agent@example.com');
-    expect((await call('DELETE', '/api/v1/workspaces/work_1/members/mem_agent', agent)).status).toBe(409);
   });
 
   it('gives 404 for an unknown person', async () => {

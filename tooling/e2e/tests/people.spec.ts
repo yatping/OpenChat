@@ -55,10 +55,14 @@ test.describe('People', () => {
     const reply = `Answered ${Date.now()}`;
     const question = await conversationAnsweredByAgent(reply);
     await signIn(page, OWNER);
+    await openPeople(page);
+    const person = card(page, AGENT.name);
+    await person.getByRole('button', { name: 'Remove', exact: true }).click();
+    await expect(person.getByLabel(`Role for ${AGENT.name} in E2E`)).toBeHidden();
+
+    await page.getByRole('button', { name: 'People', exact: true }).click();
     await page.getByRole('button', { name: 'members' }).click();
-    const row = page.getByRole('listitem').filter({ hasText: AGENT.email });
-    await row.getByRole('button', { name: 'Remove' }).click();
-    await expect(row.getByText('Removed', { exact: true })).toBeVisible();
+    await expect(page.getByRole('listitem').filter({ hasText: AGENT.email }).getByText('Removed', { exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: 'inbox' }).click();
     // Newest first, and this one has just had a message.
@@ -66,9 +70,44 @@ test.describe('People', () => {
     await expect(page.getByText(question)).toBeVisible();
     await expect(page.getByText(`${AGENT.name} (Removed)`).first()).toBeVisible();
 
+    await openPeople(page);
+    await person.getByRole('button', { name: 'Add to workspace' }).click();
+    await expect(person.getByLabel(`Role for ${AGENT.name} in E2E`)).toHaveValue('agent');
+  });
+
+  test('an admin creates a workspace and adds a website, with no way into its inbox until they join', async ({ page }) => {
+    await signIn(page, OWNER);
+    await page.getByRole('button', { name: 'Workspaces', exact: true }).click();
+    const name = `Team ${Date.now()}`;
+    await page.getByLabel('New workspace name').fill(name);
+    await page.getByRole('button', { name: 'Create workspace' }).click();
+    await expect(page.getByLabel('Workspace to manage')).toHaveValue(/.+/);
+    await expect(page.getByLabel('Workspace name', { exact: true })).toHaveValue(name);
+
+    const manage = page.getByRole('region', { name: 'Manage workspaces' });
+    await manage.getByLabel('Name', { exact: true }).last().fill('Team site');
+    await manage.getByRole('button', { name: 'Add website' }).click();
+    await expect(manage.getByRole('heading', { name: 'Team site' })).toBeVisible();
+
+    // Not in the list of workspaces this admin can open.
+    await expect(page.getByLabel('Workspace', { exact: true }).getByRole('option', { name })).toHaveCount(0);
+    await openPeople(page);
+    const me = card(page, OWNER.name);
+    await me.getByLabel(`Workspace to add ${OWNER.name} to`).selectOption({ label: name });
+    await me.getByRole('button', { name: 'Add to workspace' }).click();
+    await expect(page.getByLabel('Workspace', { exact: true }).getByRole('option', { name })).toHaveCount(1);
+  });
+
+  test('an agent has no admin pages, and sees members and websites without any controls', async ({ page }) => {
+    await signIn(page, AGENT);
+    await expect(page.getByRole('button', { name: 'People', exact: true })).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Workspaces', exact: true })).toBeHidden();
     await page.getByRole('button', { name: 'members' }).click();
-    await row.getByRole('button', { name: 'Reactivate' }).click();
-    await expect(row.getByText('Removed', { exact: true })).toBeHidden();
+    await expect(page.getByRole('listitem').filter({ hasText: OWNER.email })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: /Role for/ })).toHaveCount(0);
+    await page.getByRole('button', { name: 'websites', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Shop' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(0);
   });
 
   test('a deactivated account cannot sign in until it is reactivated', async ({ page, browser }) => {

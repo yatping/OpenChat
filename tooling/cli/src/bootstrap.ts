@@ -32,7 +32,8 @@ export interface BootstrapInput {
 }
 
 /**
- * The owner is the first installation admin, and starts with an unusable password hash and sets one through a reset link, so no password passes
+ * The owner is the first installation admin, and a supervisor of the first workspace so that they can use its
+ * inbox. They start with an unusable password hash and set one through a reset link, so no password passes
  * through a command line or a shell history. Each row depends on the installation row being new.
  */
 export function bootstrapSql(input: BootstrapInput): string {
@@ -51,7 +52,7 @@ export function bootstrapSql(input: BootstrapInput): string {
     `INSERT INTO installation (id, name, public_base_url, signup_policy, created_at, updated_at) SELECT ${quote(installation)}, ${quote(input.installationName)}, ${quote(input.publicBaseUrl)}, 'invite_only', ${NOW}, ${NOW} WHERE NOT EXISTS (SELECT 1 FROM installation)`,
     `INSERT INTO users (id, email, name, password_hash, is_installation_admin, created_at, updated_at) SELECT ${quote(user)}, ${quote(input.ownerEmail)}, ${quote(input.ownerName)}, '!', 1, ${NOW}, ${NOW} WHERE ${isNew}`,
     `INSERT INTO workspaces (id, name, slug, created_at, updated_at) SELECT ${quote(workspace)}, ${quote(input.workspaceName)}, ${quote(slug)}, ${NOW}, ${NOW} WHERE ${isNew}`,
-    `INSERT INTO workspace_members (id, workspace_id, user_id, role, status, created_at, updated_at) SELECT ${quote(member)}, ${quote(workspace)}, ${quote(user)}, 'owner', 'active', ${NOW}, ${NOW} WHERE ${isNew}`,
+    `INSERT INTO workspace_members (id, workspace_id, user_id, role, status, created_at, updated_at) SELECT ${quote(member)}, ${quote(workspace)}, ${quote(user)}, 'supervisor', 'active', ${NOW}, ${NOW} WHERE ${isNew}`,
     `INSERT INTO auth_tokens (token_hash, user_id, purpose, expires_at) SELECT ${quote(input.ownerTokenHash)}, ${quote(user)}, 'password_reset', ${NOW} + ${OWNER_LINK_TTL_MS} WHERE ${isNew}`,
   ].join('; ');
 }

@@ -29,6 +29,13 @@
       "when": 1793853387889,
       "tag": "0003_bouncy_morgan_stark",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793860916139,
+      "tag": "0004_workspace_roles_to_supervisor",
+      "breakpoints": true
     }
   ]
 }

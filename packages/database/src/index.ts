@@ -1,6 +1,5 @@
 export { openDatabase, type Database } from './internal/handle';
 export * from './auth-repository';
-export * from './workspace-repository';
 export * from './admin-repository';
 export * from './visitor-repository';
 export * from './outbox-repository';
@@ -16,8 +15,6 @@ export {
   type ConversationPriority,
   type ConversationRow, type ContactRow, type TagRow,
   type ConversationStatus,
-  type InvitationResult,
-  type MemberChange,
   type MemberRow,
   type Repositories,
   type SendMessageInput,
@@ -27,5 +24,6 @@ export {
   type NewAttachment,
   attachmentKey,
   type WebsiteRow,
+  type WorkspaceRow,
 } from './repositories';
 export type { AttachmentJson } from './internal/message-statements';

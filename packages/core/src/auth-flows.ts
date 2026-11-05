@@ -70,7 +70,7 @@ export const LIMITS = {
   resetEmail: { limit: 3, windowSeconds: 60 * 60 },
   resetIp: { limit: 20, windowSeconds: 60 * 60 },
   confirmIp: { limit: 20, windowSeconds: 15 * 60 },
-  invitationsPerWorkspace: { limit: 30, windowSeconds: 60 * 60 },
+  newPeoplePerAdmin: { limit: 30, windowSeconds: 60 * 60 },
   visitorSessionIp: { limit: 30, windowSeconds: 60 * 60 },
   visitorSessionWebsite: { limit: 3000, windowSeconds: 60 * 60 },
   visitorMessage: { limit: 20, windowSeconds: 60 },

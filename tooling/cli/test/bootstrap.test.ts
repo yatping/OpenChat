@@ -30,7 +30,7 @@ describe('bootstrapSql', () => {
     expect(db.prepare('SELECT name, public_base_url AS url, signup_policy AS policy FROM installation').get()).toEqual({ name: 'Acme', url: 'https://chat.example.com', policy: 'invite_only' });
     expect(db.prepare('SELECT email, password_hash AS hash FROM users').get()).toEqual({ email: 'owner@example.com', hash: '!' });
     const member = db.prepare('SELECT m.role, m.status, w.name, w.slug FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id').get() as { role: string; status: string; name: string; slug: string };
-    expect(member).toMatchObject({ role: 'owner', status: 'active', name: 'Support team' });
+    expect(member).toMatchObject({ role: 'supervisor', status: 'active', name: 'Support team' });
     expect(member.slug).toMatch(/^support-team-[a-z0-9]{8}$/);
     const token = db.prepare('SELECT purpose, expires_at AS e FROM auth_tokens WHERE token_hash = ?').get('hash-1') as { purpose: string; e: number };
     expect(token.purpose).toBe('password_reset');

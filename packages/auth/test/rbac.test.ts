@@ -1,26 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { ALL_CAPABILITIES, can, canAssignConversation, canGrantRole, canManageMember, ROLES, type Capability, type Role } from '../src/index';
+import { ALL_CAPABILITIES, can, canAssignConversation, ROLES, type Capability, type Role } from '../src/index';
 
 // A copy of the table in docs/architecture/security.md. Written out in full so a change to one has to be
 // made deliberately in both, and every combination is asserted.
-const TABLE: Record<Capability, [owner: boolean, admin: boolean, supervisor: boolean, agent: boolean]> = {
-  'conversation.view': [true, true, true, true],
-  'conversation.reply': [true, true, true, true],
-  'conversation.note': [true, true, true, true],
-  'conversation.assign.self': [true, true, true, true],
-  'conversation.assign.others': [true, true, true, false],
-  'contact.merge': [true, true, true, false],
-  'contact.export': [true, true, false, false],
-  'contact.delete': [true, true, false, false],
-  'website.manage': [true, true, false, false],
-  'automation.manage': [true, true, false, false],
-  'email.manage': [true, true, false, false],
-  'member.invite': [true, true, false, false],
-  'member.remove': [true, true, false, false],
-  'workspace.manage': [true, true, false, false],
-  'workspace.security': [true, false, false, false],
-  'workspace.delete': [true, false, false, false],
-  'workspace.transfer': [true, false, false, false],
+const TABLE: Record<Capability, [supervisor: boolean, agent: boolean]> = {
+  'conversation.view': [true, true],
+  'conversation.reply': [true, true],
+  'conversation.note': [true, true],
+  'conversation.assign.self': [true, true],
+  'conversation.assign.others': [true, false],
+  'contact.merge': [true, false],
+  'tag.delete': [true, false],
 };
 
 describe('role table', () => {
@@ -40,24 +30,7 @@ describe('canAssignConversation', () => {
     ['agent', 'gives an unassigned one away', null, 'them', false],
     ['agent', "moves someone else's", 'them', 'other', false],
     ['supervisor', "moves someone else's", 'them', 'other', true],
-    ['admin', "moves someone else's", 'them', 'other', true],
-    ['owner', "moves someone else's", 'them', 'other', true],
   ] as const)('%s %s', (role, _name, currentAssigneeId, newAssigneeId, expected) => {
     expect(canAssignConversation(role, { actorMemberId, currentAssigneeId, newAssigneeId })).toBe(expected);
-  });
-});
-
-describe('canManageMember', () => {
-  it.each([
-    ['owner', 'owner', true],
-    ['owner', 'admin', true],
-    ['admin', 'owner', false],
-    ['admin', 'admin', true],
-    ['admin', 'agent', true],
-    ['supervisor', 'agent', false],
-    ['agent', 'agent', false],
-  ] as const)('%s managing %s: %s', (actor, target, expected) => {
-    expect(canManageMember(actor, target)).toBe(expected);
-    expect(canGrantRole(actor, target)).toBe(expected);
   });
 });

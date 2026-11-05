@@ -218,7 +218,7 @@ export async function createTag(db: Database, ctx: WorkspaceContext, name: strin
 }
 
 export async function deleteTag(db: Database, ctx: WorkspaceContext, tagId: string) {
-  requireCapability(ctx, 'workspace.manage');
+  requireCapability(ctx, 'tag.delete');
   if (!(await repositories(db, ctx).tags.delete(tagId))) throw notFound();
 }
 

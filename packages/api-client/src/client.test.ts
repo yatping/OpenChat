@@ -79,7 +79,7 @@ describe('when a token has expired', () => {
 
   it('handles an empty success, and encodes IDs in paths', async () => {
     const fetcher = vi.fn<typeof fetch>(() => Promise.resolve(new Response(null, { status: 204 })));
-    await createClient({ baseUrl: 'https://x.test', fetch: fetcher }).removeMember('w/1', 'm 2');
-    expect(fetcher.mock.calls[0]![0]).toBe('https://x.test/api/v1/workspaces/w%2F1/members/m%202');
+    await createClient({ baseUrl: 'https://x.test', fetch: fetcher }).unassignPerson('u/1', 'w 2');
+    expect(fetcher.mock.calls[0]![0]).toBe('https://x.test/api/v1/admin/people/u%2F1/workspaces/w%202');
   });
 });

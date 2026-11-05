@@ -1,13 +1,15 @@
 /**
- * Installation admins manage people across workspaces, so these queries have no tenant scope. They touch
- * accounts and memberships, and never conversations, contacts, or messages. Being an admin gives no way to read
- * a workspace: that needs a membership, and adding one is audited. See ADR-0015. In each batch the audit row is
+ * Installation admins manage people, workspaces, and websites, so these queries have no tenant scope of their
+ * own. They never touch conversations, contacts, or messages. Being an admin gives no way to read those: that
+ * needs a membership, and adding one is audited. See ADR-0015 and ADR-0016. In each batch the audit row is
  * written first, under the conditions that decide the action, and later statements check that it exists.
  */
 import { newId } from '@openchat/shared';
 import type { Role } from './context';
 import { DB_NOW_MS, rawHandle, type Database } from './internal/handle';
 import { removeMembershipStatements } from './internal/member-statements';
+import { effectiveRole } from './internal/roles';
+import { toWebsite, WEBSITE_COLUMNS, type RawWebsite, type WebsiteRow, type WorkspaceRow } from './repositories';
 
 declare const adminBrand: unique symbol;
 
@@ -48,12 +50,11 @@ export type PersonChange =
   | { outcome: 'email_taken' }
   | { outcome: 'self' }
   | { outcome: 'deactivated' }
-  | { outcome: 'last_owner' }
   | { outcome: 'last_admin' }
   | { outcome: 'forbidden' };
 
 const PERSON_SELECT = `SELECT u.id, u.name, u.email, u.is_installation_admin AS isAdmin, u.disabled_at IS NOT NULL AS deactivated,
-    (SELECT json_group_array(json_object('memberId', m.id, 'workspaceId', w.id, 'workspaceName', w.name, 'role', m.role,
+    (SELECT json_group_array(json_object('memberId', m.id, 'workspaceId', w.id, 'workspaceName', w.name, 'role', ${effectiveRole('m')},
                                          'status', CASE WHEN m.removed_at IS NOT NULL THEN 'removed' ELSE m.status END))
        FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id WHERE m.user_id = u.id) AS membershipsJson
   FROM users u`;
@@ -79,12 +80,7 @@ const toPerson = (row: RawPerson): PersonRow => ({
 /** Checked at commit, because an admin may lose the role after this request was authorised. */
 const actorIsAdmin = (actor: string) => `EXISTS (SELECT 1 FROM users a WHERE a.id = ${actor} AND a.is_installation_admin = 1 AND a.disabled_at IS NULL)`;
 
-/** Whether the user is the only working owner of a workspace. Someone deactivated cannot act as an owner. */
-const isOnlyOwner = (user: string, workspaceFilter = '') => `EXISTS (
-  SELECT 1 FROM workspace_members m
-   WHERE m.user_id = ${user} AND m.role = 'owner' AND m.status = 'active' ${workspaceFilter}
-     AND NOT EXISTS (SELECT 1 FROM workspace_members o JOIN users ou ON ou.id = o.user_id
-                      WHERE o.workspace_id = m.workspace_id AND o.id <> m.id AND o.role = 'owner' AND o.status = 'active' AND ou.disabled_at IS NULL))`;
+const WORKSPACE_COLUMNS = `id, name, slug, created_at AS createdAt`;
 
 const otherAdminExists = (user: string) => `EXISTS (SELECT 1 FROM users o WHERE o.id <> ${user} AND o.is_installation_admin = 1 AND o.disabled_at IS NULL)`;
 
@@ -171,7 +167,7 @@ export function adminRepository(database: Database, ctx: AdminContext) {
             `INSERT INTO audit_log (id, workspace_id, actor_type, actor_id, action, target_type, target_id, created_at)
              SELECT ?1, NULL, 'user', ?2, 'person.deactivated', 'user', u.id, ${DB_NOW_MS}
                FROM users u
-              WHERE u.id = ?3 AND u.disabled_at IS NULL AND ${actorIsAdmin('?2')} AND NOT ${isOnlyOwner('u.id')}`,
+              WHERE u.id = ?3 AND u.disabled_at IS NULL AND ${actorIsAdmin('?2')}`,
           )
           .bind(audit, actor, userId),
         d1
@@ -199,7 +195,7 @@ export function adminRepository(database: Database, ctx: AdminContext) {
       const person = await get(userId);
       if (!person) return { outcome: 'not_found' };
       if (person.deactivated) return { outcome: 'done', person };
-      return (await authorizeInstallationAdmin(database, actor)) ? { outcome: 'last_owner' } : { outcome: 'forbidden' };
+      return { outcome: 'forbidden' };
     },
 
     async reactivate(userId: string): Promise<PersonChange> {
@@ -228,8 +224,7 @@ export function adminRepository(database: Database, ctx: AdminContext) {
             `INSERT INTO audit_log (id, workspace_id, actor_type, actor_id, action, target_type, target_id, metadata_json, created_at)
              SELECT ?1, w.id, 'user', ?2, 'person.assigned', 'user', u.id, json_object('role', ?5), ${DB_NOW_MS}
                FROM users u, workspaces w
-              WHERE u.id = ?3 AND w.id = ?4 AND u.disabled_at IS NULL AND ${actorIsAdmin('?2')}
-                AND (?5 = 'owner' OR NOT ${isOnlyOwner('u.id', 'AND m.workspace_id = w.id')})`,
+              WHERE u.id = ?3 AND w.id = ?4 AND u.disabled_at IS NULL AND ${actorIsAdmin('?2')}`,
           )
           .bind(audit, actor, userId, workspaceId, role),
         d1
@@ -252,7 +247,7 @@ export function adminRepository(database: Database, ctx: AdminContext) {
       const workspace = await d1.prepare(`SELECT id FROM workspaces WHERE id = ?1`).bind(workspaceId).first();
       if (!person || !workspace) return { outcome: 'not_found' };
       if (!(await authorizeInstallationAdmin(database, actor))) return { outcome: 'forbidden' };
-      return person.deactivated ? { outcome: 'deactivated' } : { outcome: 'last_owner' };
+      return person.deactivated ? { outcome: 'deactivated' } : { outcome: 'forbidden' };
     },
 
     async unassign(userId: string, workspaceId: string): Promise<PersonChange> {
@@ -265,14 +260,106 @@ export function adminRepository(database: Database, ctx: AdminContext) {
             `INSERT INTO audit_log (id, workspace_id, actor_type, actor_id, action, target_type, target_id, created_at)
              SELECT ?1, t.workspace_id, 'user', ?2, 'person.unassigned', 'member', t.id, ${DB_NOW_MS}
                FROM workspace_members t
-              WHERE t.workspace_id = ?3 AND t.id = ?4 AND ${actorIsAdmin('?2')}
-                AND NOT ${isOnlyOwner('t.user_id', 'AND m.workspace_id = t.workspace_id')}`,
+              WHERE t.workspace_id = ?3 AND t.id = ?4 AND ${actorIsAdmin('?2')}`,
           )
           .bind(audit, actor, workspaceId, member.id),
         ...removeMembershipStatements(d1, workspaceId, member.id, audit),
       ]);
       if (allowed?.meta.changes === 1) return done(userId);
-      return (await authorizeInstallationAdmin(database, actor)) ? { outcome: 'last_owner' } : { outcome: 'forbidden' };
+      return { outcome: 'forbidden' };
+    },
+
+    /** Nobody joins it by creating it. Reading its conversations takes a separate, audited assignment. */
+    async createWorkspace(input: { name: string; slug: string }): Promise<WorkspaceRow | null> {
+      const id = newId('workspace');
+      const [inserted] = await d1.batch([
+        d1
+          .prepare(
+            `INSERT INTO workspaces (id, name, slug, created_at, updated_at)
+             SELECT ?1, ?2, ?3, ${DB_NOW_MS}, ${DB_NOW_MS} WHERE ${actorIsAdmin('?4')}`,
+          )
+          .bind(id, input.name, input.slug, actor),
+        d1
+          .prepare(
+            `INSERT INTO audit_log (id, workspace_id, actor_type, actor_id, action, target_type, target_id, created_at)
+             SELECT ?1, w.id, 'user', ?2, 'workspace.created', 'workspace', w.id, ${DB_NOW_MS} FROM workspaces w WHERE w.id = ?3`,
+          )
+          .bind(newId('audit'), actor, id),
+      ]);
+      return inserted?.meta.changes === 1 ? d1.prepare(`SELECT ${WORKSPACE_COLUMNS} FROM workspaces WHERE id = ?1`).bind(id).first<WorkspaceRow>() : null;
+    },
+
+    async updateWorkspace(workspaceId: string, input: { name?: string | undefined }): Promise<WorkspaceRow | null> {
+      const audit = newId('audit');
+      const [allowed] = await d1.batch([
+        d1
+          .prepare(
+            `INSERT INTO audit_log (id, workspace_id, actor_type, actor_id, action, target_type, target_id, created_at)
+             SELECT ?1, w.id, 'user', ?2, 'workspace.updated', 'workspace', w.id, ${DB_NOW_MS} FROM workspaces w WHERE w.id = ?3 AND ${actorIsAdmin('?2')}`,
+          )
+          .bind(audit, actor, workspaceId),
+        d1
+          .prepare(`UPDATE workspaces SET name = COALESCE(?1, name), updated_at = ${DB_NOW_MS} WHERE id = ?2 AND EXISTS (SELECT 1 FROM audit_log WHERE id = ?3)`)
+          .bind(input.name ?? null, workspaceId, audit),
+      ]);
+      return allowed?.meta.changes === 1 ? d1.prepare(`SELECT ${WORKSPACE_COLUMNS} FROM workspaces WHERE id = ?1`).bind(workspaceId).first<WorkspaceRow>() : null;
+    },
+
+    /** Null if the workspace does not exist. */
+    async listWebsites(workspaceId: string): Promise<WebsiteRow[] | null> {
+      const workspace = await d1.prepare(`SELECT id FROM workspaces WHERE id = ?1`).bind(workspaceId).first();
+      if (!workspace) return null;
+      const { results } = await d1.prepare(`SELECT ${WEBSITE_COLUMNS} FROM websites WHERE workspace_id = ?1 ORDER BY id`).bind(workspaceId).all<RawWebsite>();
+      return results.map(toWebsite);
+    },
+
+    async createWebsite(workspaceId: string, input: { name: string; websiteKey: string; allowedOrigins: string[]; settings?: Record<string, unknown> | undefined }): Promise<WebsiteRow | null> {
+      const audit = newId('audit');
+      const id = newId('website');
+      const settings = input.settings ?? {};
+      const [allowed] = await d1.batch([
+        d1
+          .prepare(
+            `INSERT INTO audit_log (id, workspace_id, actor_type, actor_id, action, target_type, target_id, created_at)
+             SELECT ?1, w.id, 'user', ?2, 'website.created', 'website', ?4, ${DB_NOW_MS} FROM workspaces w WHERE w.id = ?3 AND ${actorIsAdmin('?2')}`,
+          )
+          .bind(audit, actor, workspaceId, id),
+        d1
+          .prepare(
+            `INSERT INTO websites (id, workspace_id, name, website_key, allowed_origins_json, settings_json, created_at, updated_at)
+             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ${DB_NOW_MS}, ${DB_NOW_MS} WHERE EXISTS (SELECT 1 FROM audit_log WHERE id = ?7)`,
+          )
+          .bind(id, workspaceId, input.name, input.websiteKey, JSON.stringify(input.allowedOrigins), JSON.stringify(settings), audit),
+      ]);
+      return allowed?.meta.changes === 1 ? { id, name: input.name, websiteKey: input.websiteKey, allowedOrigins: input.allowedOrigins, settings } : null;
+    },
+
+    /** The workspace is part of the match, so a website named under the wrong workspace is not found. */
+    async updateWebsite(
+      workspaceId: string,
+      websiteId: string,
+      input: { name?: string | undefined; allowedOrigins?: string[] | undefined; settings?: Record<string, unknown> | undefined },
+    ): Promise<WebsiteRow | null> {
+      const audit = newId('audit');
+      const [allowed] = await d1.batch([
+        d1
+          .prepare(
+            `INSERT INTO audit_log (id, workspace_id, actor_type, actor_id, action, target_type, target_id, created_at)
+             SELECT ?1, s.workspace_id, 'user', ?2, 'website.updated', 'website', s.id, ${DB_NOW_MS}
+               FROM websites s WHERE s.workspace_id = ?3 AND s.id = ?4 AND ${actorIsAdmin('?2')}`,
+          )
+          .bind(audit, actor, workspaceId, websiteId),
+        d1
+          .prepare(
+            `UPDATE websites SET name = COALESCE(?1, name), allowed_origins_json = COALESCE(?2, allowed_origins_json),
+                                 settings_json = COALESCE(?3, settings_json), updated_at = ${DB_NOW_MS}
+              WHERE workspace_id = ?4 AND id = ?5 AND EXISTS (SELECT 1 FROM audit_log WHERE id = ?6)`,
+          )
+          .bind(input.name ?? null, input.allowedOrigins ? JSON.stringify(input.allowedOrigins) : null, input.settings ? JSON.stringify(input.settings) : null, workspaceId, websiteId, audit),
+      ]);
+      if (allowed?.meta.changes !== 1) return null;
+      const row = await d1.prepare(`SELECT ${WEBSITE_COLUMNS} FROM websites WHERE workspace_id = ?1 AND id = ?2`).bind(workspaceId, websiteId).first<RawWebsite>();
+      return row ? toWebsite(row) : null;
     },
   };
 }

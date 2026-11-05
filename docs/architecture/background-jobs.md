@@ -32,7 +32,7 @@ Three queues plus DLQs, not one per job type. Few queues keep self-hosted setup 
 | Queue | Job types | `max_batch_size` | `max_batch_timeout` | `max_retries` | `max_concurrency` |
 |---|---|---|---|---|---|
 | `oc-notifications` | `notification.fanout`, `notification.dispatch` | 25 | 1 s | 8 | 20 |
-| `oc-email` | System email (`auth.password_reset_email`, `workspace.invitation_email`) | No delivery row, because the token is created at send time. Each attempt has a new token and so a new provider idempotency key, since Resend refuses a reused key with a changed body. A crash after sending can deliver two emails, and failures of any kind retry and then dead-letter. |
+| `oc-email` | System email (`auth.password_reset_email`, `auth.new_account_email`) | No delivery row, because the token is created at send time. Each attempt has a new token and so a new provider idempotency key, since Resend refuses a reused key with a changed body. A crash after sending can deliver two emails, and failures of any kind retry and then dead-letter. |
 | `email.send` | 10 | 5 s | 8 | 5 |
 | `oc-jobs` | `attachment.process`, `automation.evaluate`, `webhook.deliver` (later), `workspace.purge`, `analytics.rollup` | 10 | 5 s | 5 | 10 |
 | `*-dlq` | All of the above | 25 | 30 s | 3 | 1 |

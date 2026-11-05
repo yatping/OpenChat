@@ -364,14 +364,14 @@ describe('access', () => {
       env.DB.prepare(`INSERT INTO workspaces (id, name, slug, created_at, updated_at) VALUES ('ws_a','Alpha','alpha',1,1), ('ws_b','Beta','beta',2,2), ('ws_c','Gamma','gamma',3,3)`),
       env.DB.prepare(
         `INSERT INTO workspace_members (id, workspace_id, user_id, role, status, created_at, updated_at) VALUES
-         ('mem_a','ws_a',?1,'owner','active',1,1), ('mem_b','ws_b',?2,'owner','active',1,1), ('mem_c','ws_c',?1,'agent','suspended',1,1)`,
+         ('mem_a','ws_a',?1,'supervisor','active',1,1), ('mem_b','ws_b',?2,'supervisor','active',1,1), ('mem_c','ws_c',?1,'agent','suspended',1,1)`,
       ).bind(mine, other),
     ]);
     const { accessToken } = await mobileLogin();
     const body = (await (await me(accessToken)).json()) as { email: string; memberships: { memberId: string; role: string; workspace: { slug: string; createdAt: string } }[] };
     expect(body.email).toBe(email);
     expect(body.memberships).toEqual([
-      { memberId: 'mem_a', role: 'owner', workspace: { id: 'ws_a', name: 'Alpha', slug: 'alpha', createdAt: new Date(1).toISOString() } },
+      { memberId: 'mem_a', role: 'supervisor', workspace: { id: 'ws_a', name: 'Alpha', slug: 'alpha', createdAt: new Date(1).toISOString() } },
     ]);
   });
 

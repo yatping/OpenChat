@@ -20,7 +20,7 @@
     },
     {
       "name": "workspaces",
-      "description": "Workspaces, members, and invitations."
+      "description": "Workspaces and their members."
     },
     {
       "name": "websites",
@@ -2184,8 +2184,6 @@
       "Role": {
         "type": "string",
         "enum": [
-          "owner",
-          "admin",
           "supervisor",
           "agent"
         ]
@@ -2291,6 +2289,37 @@
           "name"
         ]
       },
+      "Website": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "websiteKey": {
+            "type": "string",
+            "description": "Public identifier embedded in page source. Not a credential."
+          },
+          "allowedOrigins": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "settings": {
+            "$ref": "#/components/schemas/WidgetSettings"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "websiteKey",
+          "allowedOrigins",
+          "settings"
+        ]
+      },
       "Member": {
         "type": "object",
         "properties": {
@@ -2321,65 +2350,6 @@
           "email",
           "role",
           "status"
-        ]
-      },
-      "Invitation": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "email": {
-            "type": "string"
-          },
-          "role": {
-            "type": "string",
-            "enum": [
-              "admin",
-              "supervisor",
-              "agent"
-            ]
-          },
-          "expiresAt": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "email",
-          "role",
-          "expiresAt"
-        ]
-      },
-      "Website": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "websiteKey": {
-            "type": "string",
-            "description": "Public identifier embedded in page source. Not a credential."
-          },
-          "allowedOrigins": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "settings": {
-            "$ref": "#/components/schemas/WidgetSettings"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "websiteKey",
-          "allowedOrigins",
-          "settings"
         ]
       }
     },
@@ -5128,7 +5098,7 @@
           }
         ],
         "operationId": "deactivatePerson",
-        "summary": "End all access, keeping the account and its memberships. Refused for yourself, and for the only owner of a workspace.",
+        "summary": "End all access, keeping the account and its memberships. Refused for yourself.",
         "parameters": [
           {
             "schema": {
@@ -5220,7 +5190,7 @@
           }
         ],
         "operationId": "assignPerson",
-        "summary": "Put someone in a workspace with a role, or change their role there. Brings back a removed member. Needs no invitation.",
+        "summary": "Put someone in a workspace with a role, or change their role there. Brings back a removed or suspended member. An admin who adds themselves can then read the workspace, and this is audited.",
         "parameters": [
           {
             "schema": {
@@ -5291,7 +5261,7 @@
           }
         ],
         "operationId": "unassignPerson",
-        "summary": "Remove someone from a workspace. Their messages keep their name. A workspace must keep one active owner.",
+        "summary": "Remove someone from a workspace. Their messages keep their name.",
         "parameters": [
           {
             "schema": {
@@ -5345,7 +5315,7 @@
           }
         ],
         "operationId": "listAdminWorkspaces",
-        "summary": "List every workspace by name, to assign people to. Gives no access to what is inside.",
+        "summary": "List every workspace by name. Gives no access to its conversations.",
         "parameters": [
           {
             "schema": {
@@ -5407,20 +5377,18 @@
             }
           }
         }
-      }
-    },
-    "/api/v1/workspaces": {
+      },
       "post": {
         "tags": [
-          "workspaces"
+          "admin"
         ],
-        "operationId": "createWorkspace",
-        "summary": "Create a workspace, subject to the installation signup policy",
         "security": [
           {
             "bearerAuth": []
           }
         ],
+        "operationId": "createWorkspace",
+        "summary": "Create a workspace. Nobody joins it by creating it, so assign people to it afterwards.",
         "requestBody": {
           "required": true,
           "content": {
@@ -5450,6 +5418,141 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Workspace"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/workspaces/{workspaceId}/websites": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "operationId": "listAdminWebsites",
+        "summary": "List the websites of any workspace, without being a member of it",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Websites",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Website"
+                      }
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "operationId": "createWebsite",
+        "summary": "Register a website and obtain its public key",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^\\P{Cc}*$/u"
+                  },
+                  "allowedOrigins": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 300
+                    },
+                    "maxItems": 50
+                  },
+                  "settings": {
+                    "$ref": "#/components/schemas/WidgetSettings"
+                  }
+                },
+                "required": [
+                  "name",
+                  "allowedOrigins"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Website"
                 }
               }
             }
@@ -5511,18 +5614,20 @@
             }
           }
         }
-      },
+      }
+    },
+    "/api/v1/admin/workspaces/{workspaceId}": {
       "patch": {
         "tags": [
-          "workspaces"
+          "admin"
         ],
-        "operationId": "updateWorkspace",
-        "summary": "Update workspace settings",
         "security": [
           {
             "bearerAuth": []
           }
         ],
+        "operationId": "updateWorkspace",
+        "summary": "Update workspace settings",
         "parameters": [
           {
             "schema": {
@@ -5582,7 +5687,7 @@
           "workspaces"
         ],
         "operationId": "listMembers",
-        "summary": "List members",
+        "summary": "List members. People are changed by an installation admin, under /api/v1/admin.",
         "security": [
           {
             "bearerAuth": []
@@ -5659,281 +5764,13 @@
         }
       }
     },
-    "/api/v1/workspaces/{workspaceId}/members/{memberId}": {
-      "patch": {
-        "tags": [
-          "workspaces"
-        ],
-        "operationId": "updateMember",
-        "summary": "Change a role or status. Setting active also brings back a removed member. A workspace must keep one active owner.",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "workspaceId",
-            "in": "path"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "memberId",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "role": {
-                    "$ref": "#/components/schemas/Role"
-                  },
-                  "status": {
-                    "type": "string",
-                    "enum": [
-                      "active",
-                      "suspended"
-                    ]
-                  }
-                },
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Updated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Member"
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "RFC 9457 problem details",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "workspaces"
-        ],
-        "operationId": "removeMember",
-        "summary": "Remove a member and their push subscriptions. Their messages keep their name, and the member can be brought back.",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "workspaceId",
-            "in": "path"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "memberId",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Removed"
-          },
-          "default": {
-            "description": "RFC 9457 problem details",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/workspaces/{workspaceId}/invitations": {
-      "post": {
-        "tags": [
-          "workspaces"
-        ],
-        "operationId": "createInvitation",
-        "summary": "Invite someone by email. Replaces any pending invitation for the address.",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "workspaceId",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "email": {
-                    "type": "string",
-                    "maxLength": 320
-                  },
-                  "role": {
-                    "type": "string",
-                    "enum": [
-                      "admin",
-                      "supervisor",
-                      "agent"
-                    ]
-                  }
-                },
-                "required": [
-                  "email",
-                  "role"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Invitation queued",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Invitation"
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "RFC 9457 problem details",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/invitations/accept": {
-      "post": {
-        "tags": [
-          "workspaces"
-        ],
-        "operationId": "acceptInvitation",
-        "summary": "Accept an invitation. A new account needs a name and password; an existing account keeps its own.",
-        "security": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "token": {
-                    "type": "string",
-                    "maxLength": 256
-                  },
-                  "name": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 100,
-                    "pattern": "^\\P{Cc}*$/u"
-                  },
-                  "password": {
-                    "type": "string",
-                    "minLength": 10,
-                    "maxLength": 1024
-                  }
-                },
-                "required": [
-                  "token"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Accepted",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "workspaceId": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "workspaceId"
-                  ]
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "RFC 9457 problem details",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/workspaces/{workspaceId}/websites": {
       "get": {
         "tags": [
           "websites"
         ],
         "operationId": "listWebsites",
-        "summary": "List websites",
+        "summary": "List websites. They are changed by an installation admin, under /api/v1/admin.",
         "security": [
           {
             "bearerAuth": []
@@ -5982,98 +5819,20 @@
             }
           }
         }
-      },
-      "post": {
+      }
+    },
+    "/api/v1/admin/workspaces/{workspaceId}/websites/{websiteId}": {
+      "patch": {
         "tags": [
-          "websites"
+          "admin"
         ],
-        "operationId": "createWebsite",
-        "summary": "Register a website and obtain its public key",
         "security": [
           {
             "bearerAuth": []
           }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "workspaceId",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 100,
-                    "pattern": "^\\P{Cc}*$/u"
-                  },
-                  "allowedOrigins": {
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 300
-                    },
-                    "maxItems": 50
-                  },
-                  "settings": {
-                    "$ref": "#/components/schemas/WidgetSettings"
-                  }
-                },
-                "required": [
-                  "name",
-                  "allowedOrigins"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Website"
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "RFC 9457 problem details",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/workspaces/{workspaceId}/websites/{websiteId}": {
-      "patch": {
-        "tags": [
-          "websites"
         ],
         "operationId": "updateWebsite",
         "summary": "Update a website",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
         "parameters": [
           {
             "schema": {

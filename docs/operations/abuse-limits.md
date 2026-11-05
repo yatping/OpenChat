@@ -99,7 +99,7 @@ These are not settings. They are in `LIMITS` in `packages/core/src/auth-flows.ts
 | Password reset requests per email | 3 per hour |
 | Password reset requests per address | 20 per hour |
 | Token confirmations per address | 20 per 15 minutes |
-| Invitations per workspace | 30 per hour |
+| New accounts per installation admin | 30 per hour |
 | New visitor sessions per address | 30 per hour |
 | New visitor sessions per website | 3,000 per hour |
 | Messages per visitor | 20 per minute |
