@@ -164,7 +164,8 @@ Expo app, Connection manager, discovery and compatibility check, sign-in, worksp
 | Administration | Installation admins manage people, workspaces, and websites from the dashboard, and workspaces have only supervisors and agents. No invitations ([ADR-0016](../architecture/decisions/0016-installation-admin-replaces-workspace-managers.md)). Replaces the invitation flow that M1a was checked against |
 | One installation, switching workspace | No way to add a second installation ([ADR-0014](../architecture/decisions/0014-one-installation-in-the-app.md)). Tested by hand on the simulator against a local server: two workspaces each show only their own conversation, switching works both ways, and sign-out returns to the address screen |
 | Session ended | A session that no longer exists on the server shows the sign-in screen with the address and email kept. Tested at launch. Not tested while the app is in use, when the access token stays valid until it expires |
-| Not tested yet | Priority, typing indicators, real Cloudflare, a physical device |
+| Real Cloudflare | A fresh `oc deploy` passed the [API and simulator checks](../architecture/cloudflare-validation.md#milestone-2-on-real-cloudflare-2026-11-05), including priority, typing in both directions, a file just under 25 MB, and a session ending while the app was open |
+| Not tested yet | A physical device, sign-out during a download, an installation upgraded with existing data on real D1, and email delivery of a new account link |
 
 ## M3: Relay and push (L)
 
