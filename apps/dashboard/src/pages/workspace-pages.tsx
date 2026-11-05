@@ -111,7 +111,7 @@ export function WorkspaceApp() {
       {current && !adminPage && (
         // The key gives each workspace fresh component state, so nothing typed in one appears in another.
         <div key={current.workspace.id} className="space-y-6">
-          <nav className="flex gap-2" aria-label="Sections">
+          <nav className="flex flex-wrap gap-2" aria-label="Sections">
             {(['inbox', 'websites', 'members', 'notifications'] as const).map((name) => (
               <button key={name} className={tab === name ? 'button capitalize' : 'button-quiet capitalize'} aria-current={tab === name ? 'page' : undefined} onClick={() => setTab(name)}>
                 {name}

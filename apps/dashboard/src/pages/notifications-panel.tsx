@@ -14,12 +14,13 @@ export function NotificationsPanel({ workspaceId }: { workspaceId: string }) {
   const preferences = useQuery({ queryKey: key, queryFn: () => api.getNotificationPreferences(workspaceId) });
   const save = useMutation({
     mutationFn: (next: NotificationPreferences) => api.setNotificationPreferences(workspaceId, next),
-    onMutate: (next) => client.setQueryData(key, next),
     onError: () => client.invalidateQueries({ queryKey: key }),
   });
   const toggle = (eventType: (typeof CHOICES)[number]['eventType'], enabled: boolean) => {
     const others = (preferences.data?.preferences ?? []).filter((p) => !(p.channel === 'email' && p.eventType === eventType));
-    save.mutate({ preferences: [...others, { eventType, channel: 'email', enabled }] });
+    const next: NotificationPreferences = { preferences: [...others, { eventType, channel: 'email', enabled }] };
+    client.setQueryData(key, next);
+    save.mutate(next);
   };
   return (
     <section className="card space-y-3" aria-label="Notifications">
