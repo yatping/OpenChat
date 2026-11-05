@@ -28,6 +28,10 @@ playwright-report/
 apps/mobile/android/
 apps/mobile/fastlane/.env
 apps/mobile/credentials/
+apps/mobile/build/
+apps/mobile/fastlane/README.md
+apps/mobile/fastlane/report.xml
+apps/mobile/fastlane/test_output/
 *.mobileprovision
 *.p8
 *.p12

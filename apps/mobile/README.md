@@ -9,3 +9,5 @@ pnpm start
 ```
 
 Then build and run `ios/OpenChat.xcworkspace` in Xcode. Signing files never go in this repository.
+
+To build for a registered iPhone, see [the fastlane lanes](../../docs/ios-build/expo-and-white-label.md).
