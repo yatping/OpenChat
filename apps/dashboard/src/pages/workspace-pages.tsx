@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api, errorMessage, preference, queryClient, session } from '../app-context';
 import { InboxPanel } from '../inbox/inbox-panel';
+import { PeoplePage } from './people-page';
 
 type Membership = Me['memberships'][number];
 type Role = Member['role'];
@@ -212,6 +213,7 @@ function MembersPanel({ membership }: { membership: Membership }) {
               <div className="text-xs break-all text-slate-600 dark:text-slate-400">{member.email}</div>
             </div>
             {member.status === 'suspended' && <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Suspended</span>}
+            {member.status === 'removed' && <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Removed</span>}
             {manageable(member) ? (
               <>
                 <select aria-label={`Role for ${member.name}`} className="field w-auto" value={member.role} onChange={(e) => update.mutate({ id: member.id, role: e.target.value as Role })}>
@@ -220,7 +222,7 @@ function MembersPanel({ membership }: { membership: Membership }) {
                 <button className="button-quiet" onClick={() => update.mutate({ id: member.id, status: member.status === 'active' ? 'suspended' : 'active' })}>
                   {member.status === 'active' ? 'Suspend' : 'Reactivate'}
                 </button>
-                <button className="button-quiet" onClick={() => window.confirm(`Remove ${member.name} from this workspace?`) && remove.mutate(member.id)}>Remove</button>
+                {member.status !== 'removed' && <button className="button-quiet" onClick={() => window.confirm(`Remove ${member.name} from this workspace? Their messages stay, and you can bring them back.`) && remove.mutate(member.id)}>Remove</button>}
               </>
             ) : (
               <span className="text-sm capitalize">{member.role}</span>
@@ -286,6 +288,8 @@ export function WorkspaceApp() {
   const me = useQuery({ queryKey: ['me'], queryFn: api.getMe });
   const [selectedId, setSelectedId] = useState(() => preference.get(WORKSPACE_PREFERENCE));
   const [tab, setTab] = useState<'inbox' | 'websites' | 'members'>('inbox');
+  const [showPeople, setShowPeople] = useState(false);
+  const isAdmin = me.data?.isInstallationAdmin === true;
 
   const memberships = me.data?.memberships ?? [];
   // A remembered workspace may be gone, or belong to someone else who used this browser.
@@ -296,7 +300,7 @@ export function WorkspaceApp() {
   };
 
   return (
-    <div className={`mx-auto space-y-6 px-4 py-6 ${tab === 'inbox' ? 'max-w-6xl' : 'max-w-3xl'}`}>
+    <div className={`mx-auto space-y-6 px-4 py-6 ${tab === 'inbox' && !showPeople ? 'max-w-6xl' : 'max-w-3xl'}`}>
       <header className="flex flex-wrap items-center gap-3">
         <h1 className="flex-1 text-lg font-semibold">OpenChat</h1>
         {memberships.length > 0 && current && (
@@ -304,12 +308,15 @@ export function WorkspaceApp() {
             {memberships.map((m) => <option key={m.workspace.id} value={m.workspace.id}>{m.workspace.name}</option>)}
           </select>
         )}
+        {isAdmin && <button className={showPeople ? 'button' : 'button-quiet'} aria-current={showPeople ? 'page' : undefined} onClick={() => setShowPeople(!showPeople)}>People</button>}
         <span className="text-sm text-slate-600 dark:text-slate-400">{me.data?.name}</span>
         <button className="button-quiet" onClick={() => void signOut()}>Sign out</button>
       </header>
       <Failure error={me.error} />
-      {me.data && !current && <p className="card text-sm">You are not a member of any workspace yet. Ask an owner to invite you.</p>}
-      {current && (
+      {isAdmin && showPeople && <PeoplePage myId={me.data?.id} />}
+      {isAdmin && !current && !showPeople && <NewWorkspace onCreated={select} />}
+      {me.data && !current && !showPeople && <p className="card text-sm">You are not in a workspace yet. Ask your administrator to add you.</p>}
+      {current && !showPeople && (
         // The key gives each workspace fresh component state, so nothing typed in one appears in another.
         <div key={current.workspace.id} className="space-y-6">
           <nav className="flex gap-2" aria-label="Sections">
@@ -320,7 +327,7 @@ export function WorkspaceApp() {
             ))}
           </nav>
           {tab === 'inbox' ? <InboxWithMembers membership={current} /> : tab === 'websites' ? <WebsitesPanel membership={current} /> : <MembersPanel membership={current} />}
-          {memberships.some((m) => m.role === 'owner') && <NewWorkspace onCreated={select} />}
+          {(isAdmin || memberships.some((m) => m.role === 'owner')) && <NewWorkspace onCreated={select} />}
         </div>
       )}
     </div>

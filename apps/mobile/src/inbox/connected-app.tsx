@@ -95,7 +95,7 @@ function Loaded({ connection, api, client }: { connection: ConnectionView; api: 
   return (
     <Screen>
       <Title>{connection.installationName}</Title>
-      {memberships?.length === 0 ? <Body>You are not in a workspace on this installation yet. Ask its administrator to invite you.</Body> : <Body muted>Loading…</Body>}
+      {memberships?.length === 0 ? <Body>You are not in a workspace on this installation yet. Ask its administrator to add you.</Body> : <Body muted>Loading…</Body>}
       {memberships?.length === 0 && signOut}
     </Screen>
   );
