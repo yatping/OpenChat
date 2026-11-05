@@ -437,6 +437,12 @@ describe('when the relay answers badly', () => {
     expect((await settle()).acked).toBe(false);
   });
 
+  it('retries a 404, which is what a relay that has gone away answers', async () => {
+    relayAnswer = (path) => (path === '/v1/notifications/batch' ? new Response('<html>Not found</html>', { status: 404 }) : new Response('{}', { status: 201 }));
+    expect((await settle()).acked).toBe(false);
+    expect((await env.DB.prepare(`SELECT COUNT(*) AS n FROM failed_jobs`).first<{ n: number }>())!.n).toBe(0);
+  });
+
   it('records a request the relay calls malformed, and does not retry it', async () => {
     relayAnswer = (path) => (path === '/v1/notifications/batch' ? new Response('{"code":"malformed_request"}', { status: 400 }) : new Response('{}', { status: 201 }));
     expect((await settle()).acked).toBe(true);

@@ -1,6 +1,6 @@
 # Notification relay protocol
 
-Version 1, design draft. Machine-readable: [openapi.draft.yaml](openapi.draft.yaml) and [protocol.draft.ts](protocol.draft.ts). Decisions: [ADR-0005](../architecture/decisions/0005-relay-trust-model.md), [ADR-0006](../architecture/decisions/0006-apns-transport.md).
+Version 1, implemented. Machine-readable: [openapi.draft.yaml](openapi.draft.yaml) and [protocol.draft.ts](protocol.draft.ts). Decisions: [ADR-0005](../architecture/decisions/0005-relay-trust-model.md), [ADR-0006](../architecture/decisions/0006-apns-transport.md).
 
 ## Goals
 
@@ -332,7 +332,7 @@ An installation may support both one day. `push_subscriptions.relay_id` and `rel
 | Workspace ID collision or spoofing | All keys scoped by `installationId`; verified against the signature |
 | Stolen grant | Short-lived, single-use, audience-bound. It needs a token to be useful, and the worst outcome is a subscription for the thief's own device under that member; the member's installation controls grant issuance |
 | Stolen device secret | Changes only that device's token. Delete and re-register to rotate |
-| Stolen installation key | Revoke through the operator, then re-register after rotating. Limited to pushing to that installation's own subscribers |
+| Stolen installation key | The operator revokes it, by hand in D1 for now. Rotation is not built, so recovery means a new installation ID. Limited to pushing to that installation's own subscribers |
 | Compromised relay | It could send pushes to registered devices, but has no content and no way to read installations. Apps always authenticate separately to fetch |
 | App impersonation for registration (later) | App Attest in a future version |
 

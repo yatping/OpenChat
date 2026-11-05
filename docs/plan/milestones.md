@@ -203,7 +203,7 @@ Push is M3, so an agent gets no alert while the app is closed. Before anyone rel
 **Depends on:** S1 result, Q5, Q7, Q8.
 
 <a id="m3-status"></a>
-**Status: in progress.** Six slices are planned, and the first five are done. Q5 and Q7 are [answered](../architecture/open-questions.md), and Q8 waits for App Store submission.
+**Status: exit criteria met, except a second Apple identity**, with the limits in the [exit check](#m3-exit-check). Q5 and Q7 are [answered](../architecture/open-questions.md), and Q8 waits for App Store submission.
 
 | Part | State |
 |---|---|
@@ -213,9 +213,32 @@ Push is M3, so an agent gets no alert while the app is closed. Before anyone rel
 | Relay delivery | Accepting notifications, quotas, the queue, retries, each APNs answer, and the fixed payload, on the relay. Tested on a real queue and real APNs with a fake device token, so nothing has reached a phone from a Worker yet |
 | Installation side | Signing key, discovery, lazy registration, grants, subscriptions, preferences, [fan-out](../architecture/background-jobs.md#push), and removal on losing access. [Tested on real Cloudflare](../architecture/cloudflare-validation.md#push-from-an-installation-on-real-cloudflare-2026-11-05) with fake device tokens. Nothing triggers `conversation_transferred`, `mention`, or `conversation_updated` yet: mentions do not exist in the product, and a transfer is sent as `conversation_assigned`. Subscriptions are not tied to a session, so ending one session leaves that device subscribed while another session lives |
 | App | Registration with a build-time relay allowlist, token changes, opening a conversation from a notification, hiding a banner for the conversation on screen, notification settings, and unregistering on sign-out. [Tested on one real iPhone](../architecture/cloudflare-validation.md#on-a-real-iphone). The official variant keeps push off until a managed relay exists. Not exercised on a phone: a real token change, a sign-out while offline, and several devices. Those are covered by tests with fakes |
-| Exit check | Not started |
+| Exit check | [Done](#m3-exit-check) |
 
-**Security review:** full relay threat model, ideally external.
+**Security review:** full relay threat model, ideally external. Not done.
+
+<a id="m3-exit-check"></a>
+### M3 exit check
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| A visitor message yields a push on the correct devices | **Met on one iPhone.** Several devices and two installations are shown with fake tokens and tests, not real phones | [iPhone](../architecture/cloudflare-validation.md#on-a-real-iphone), [live checks](../architecture/cloudflare-validation.md#relay-offline-private-mode-and-a-second-installation), `delivery.test.ts` |
+| Invalid tokens removed, transient failures retried | **Met**, with the mock for each APNs reason, and production APNs for a fake token | `delivery.test.ts`, [APNs check](../architecture/cloudflare-validation.md#apns-from-a-worker-with-a-real-key-2026-11-05) |
+| Replayed, stale, tampered, and unsigned requests rejected, one test per signed field | **Met** | `requests.test.ts` |
+| Reused grant rejected. Non-allowlisted relay refused by the app | **Met**. The reused grant also on real Cloudflare | `devices.test.ts`, `registrar.test.ts` |
+| A schema test proves the relay cannot hold content | **Met** | `requests.test.ts`, `devices.test.ts`, `delivery.test.ts` |
+| Relay offline: messaging works and pushes catch up, or expire | **Met.** Catching up on real Cloudflare, expiry in tests | [Live checks](../architecture/cloudflare-validation.md#relay-offline-private-mode-and-a-second-installation), `push.test.ts` |
+| The same relay build in `private` mode, against a test Apple identity | **Partly met.** Private mode works on real Cloudflare, but with the same Apple key. A second identity needs a second Apple Developer account, or an independent reviewer's | [Live checks](../architecture/cloudflare-validation.md#relay-offline-private-mode-and-a-second-installation) |
+
+**Limits**
+
+- **No managed relay is running**, so the official app has push off. Running one needs a decision on its address, then legal review of terms and a privacy policy before public launch ([Q5](../architecture/open-questions.md)).
+- **Not built:** rotating an installation's signing key or `RELAY_TOKEN_KEY`; `/health/notifications`; delivery metrics for the operator; an operator route to revoke an installation, which today means editing the relay's D1 by hand.
+- **Triggers missing:** `mention`, because mentions do not exist; `conversation_transferred`, sent as `conversation_assigned`; `conversation_updated`.
+- **Not measured:** throughput; the relay's rate limit bindings on real Cloudflare; the daily self-check firing from cron.
+- **Not exercised on a phone:** a real token change, sign-out while offline, and more than one device.
+- Subscriptions are not tied to a session, so ending one session leaves that device subscribed while another session lives.
+- Push text is English only.
 
 ## M4: Email and automation (L)
 

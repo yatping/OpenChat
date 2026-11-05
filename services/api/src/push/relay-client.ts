@@ -36,7 +36,10 @@ export function discoveryRelay(env: Env) {
 }
 
 export class RelayError extends Error {
-  /** `permanent` means the request itself is wrong. Anything else may succeed later, so it is retried. */
+  /**
+   * `permanent` means the request itself is wrong. Anything else may succeed later, so it is retried. That includes a
+   * 404, which is what the platform answers for a relay that is gone or misrouted, and which no relay POST route sends.
+   */
   constructor(
     readonly status: number,
     readonly code: string,
@@ -46,7 +49,7 @@ export class RelayError extends Error {
     this.name = 'RelayError';
   }
   get permanent(): boolean {
-    return [400, 404, 409, 413, 422].includes(this.status);
+    return [400, 409, 413, 422].includes(this.status);
   }
   /** The relay does not know this installation or workspace, as after it lost its data. */
   get unrecognised(): boolean {

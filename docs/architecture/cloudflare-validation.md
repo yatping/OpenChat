@@ -432,6 +432,21 @@ Milestone 3, slice 2, on a throwaway relay with real D1, against a second Worker
 
 **Not measured:** throughput.
 
+### Relay offline, private mode, and a second installation
+
+Two temporary installations and one temporary relay, with fake device tokens. All deleted afterwards.
+
+| Check | Result |
+|---|---|
+| Relay's address turned off, so that it answers `404` | A visitor started a conversation, an agent replied, and the inbox read both |
+| About 45 seconds later | Nothing at the relay, as expected |
+| Relay back | The push caught up 32 seconds later, for both of one member's devices, and both fake tokens were reported invalid |
+| Private mode, installation not on the list | Grant answers `503`, the installation is not registered, and its messaging works |
+| The same installation added to the list | Registers, and its push goes through under its own ID |
+| An installation registered before the switch to private mode | Keeps working |
+
+This found a bug: a `404` was treated as permanent, so pushes were dropped. A relay that has gone away answers exactly that, so it is now retried.
+
 ### On a real iPhone
 
 An ad-hoc build, on one iPhone and one Apple identity, against a temporary installation and relay. The person holding the phone confirmed each result.
