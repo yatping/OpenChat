@@ -54,7 +54,7 @@ function Bubble({ message, memberId }: { message: Message; memberId: string }) {
   const note = message.visibility === 'internal';
   const mine = message.sender.type === 'member' && message.sender.id === memberId;
   const member = message.sender.type === 'member';
-  const sender = message.sender.displayName || (member ? 'A teammate' : 'Visitor');
+  const sender = `${message.sender.displayName || (member ? 'A teammate' : 'Visitor')}${message.sender.removed ? ' (Removed)' : ''}`;
   return (
     <View style={[styles.bubble, { alignSelf: member ? 'flex-end' : 'flex-start', backgroundColor: note ? '#fef3c7' : mine ? theme.primary : theme.surface }]}>
       <Text style={{ fontSize: 13, fontWeight: '600', color: note ? '#78350f' : mine ? theme.onPrimary : theme.muted }}>

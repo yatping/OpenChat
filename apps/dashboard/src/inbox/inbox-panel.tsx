@@ -300,7 +300,7 @@ function AttachmentView({ file }: { file: Message['attachments'][number] }) {
 function MessageBubble({ message }: { message: Message }) {
   const note = message.visibility === 'internal';
   const fromTeam = message.sender.type === 'member';
-  const sender = message.sender.type === 'visitor' ? 'Visitor' : message.sender.type === 'system' ? 'System' : (message.sender.displayName ?? 'Agent');
+  const sender = message.sender.type === 'visitor' ? 'Visitor' : message.sender.type === 'system' ? 'System' : `${message.sender.displayName ?? 'Agent'}${message.sender.removed ? ' (Removed)' : ''}`;
   return (
     <li className={`flex ${fromTeam ? 'justify-end' : 'justify-start'}`} data-seq={message.seq}>
       <div className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${note ? 'border border-amber-400 bg-amber-50 text-amber-950 dark:bg-amber-950 dark:text-amber-100' : fromTeam ? 'bg-blue-700 text-white' : 'bg-slate-200 dark:bg-slate-800'}`}>
