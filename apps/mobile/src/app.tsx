@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { connections } from './connections/native';
+import { startPushListeners } from './push/native';
 import { useConnections } from './connections/use-connections';
 import { ConnectedApp } from './inbox/connected-app';
 import { ConnectScreen, type Found } from './screens/connect';
@@ -17,6 +18,7 @@ function Gate() {
   const active = all.find((connection) => connection.id === activeId) ?? null;
 
   useEffect(() => {
+    startPushListeners();
     void connections.start();
   }, []);
 

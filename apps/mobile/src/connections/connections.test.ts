@@ -316,4 +316,18 @@ describe('refreshing', () => {
     await expect(pending).resolves.toBe(false);
     expect(secure.values.has(refreshTokenKey('c1'))).toBe(false);
   });
+
+  it('stops push while the session still works, and before signing out of it', async () => {
+    const { a, deps } = setup();
+    const seen: { hadClient: boolean; loggedOut: number }[] = [];
+    const manager = createConnectionManager({ ...deps, forgetPush: async (_id, client) => void seen.push({ hadClient: client !== null, loggedOut: a.state.loggedOut }) });
+    await manager.start();
+    const found = await manager.discover('https://a.example');
+    if (!found.ok) throw new Error('unreachable');
+    const signedIn = await manager.signIn('https://a.example', found.discovery, { email: 'a', password: 'right' });
+    if (!signedIn.ok) throw new Error('sign-in failed');
+    await manager.signOut(signedIn.connectionId);
+    expect(seen[0]).toEqual({ hadClient: true, loggedOut: 0 });
+    expect(a.state.loggedOut).toBe(1);
+  });
 });

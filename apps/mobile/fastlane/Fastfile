@@ -54,7 +54,7 @@ platform :ios do
     Spaceship::ConnectAPI.token = Spaceship::ConnectAPI::Token.create(key_id: required_env('ASC_KEY_ID'), issuer_id: required_env('ASC_ISSUER_ID'), filepath: required_path('ASC_KEY_PATH'))
     bundle = Spaceship::ConnectAPI::BundleId.find(BUNDLE_ID)
     bundle ||= Spaceship::ConnectAPI::BundleId.create(name: APP_NAME, identifier: BUNDLE_ID, platform: Spaceship::ConnectAPI::BundleIdPlatform::IOS)
-    # The app has no push until M3, but enabling this now means no new profile is needed then.
+    # Needed by any variant with push on, and harmless for one without it.
     push = Spaceship::ConnectAPI::BundleIdCapability::Type::PUSH_NOTIFICATIONS
     bundle.create_capability(push) if bundle.get_capabilities.none? { |capability| capability.capability_type == push }
 

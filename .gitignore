@@ -35,3 +35,5 @@ apps/mobile/fastlane/test_output/
 *.mobileprovision
 *.p8
 *.p12
+# A build for testing against a temporary relay. See docs/ios-build/expo-and-white-label.md.
+apps/mobile/variants/local/

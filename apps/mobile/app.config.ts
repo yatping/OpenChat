@@ -14,6 +14,9 @@ function loadVariant(id: string): AppVariant {
 const variant = loadVariant(process.env.APP_VARIANT ?? 'official');
 const profile = process.env.APP_PROFILE ?? 'development';
 
+// Sets the aps-environment entitlement, which must match the environment the app tells the relay.
+const pushPlugin: [string, { mode: string }][] = variant.push.enabled ? [['expo-notifications', { mode: profile === 'development' ? 'development' : 'production' }]] : [];
+
 // Nothing secret belongs in `extra`: it is embedded in the app, and anyone can read it.
 export default (): ExpoConfig => ({
   name: variant.appName,
@@ -29,7 +32,7 @@ export default (): ExpoConfig => ({
     supportsTablet: true,
     config: { usesNonExemptEncryption: false },
   },
-  plugins: ['expo-secure-store', 'expo-sqlite', 'expo-sharing', 'expo-document-picker', ['expo-image-picker', { photosPermission: 'Choose a photo to send in a conversation.', cameraPermission: false, microphonePermission: false }], ['expo-splash-screen', { image: variant.assets.splash, backgroundColor: variant.branding.primaryColor, imageWidth: 200 }]],
+  plugins: ['expo-secure-store', 'expo-sqlite', 'expo-sharing', 'expo-document-picker', ['expo-image-picker', { photosPermission: 'Choose a photo to send in a conversation.', cameraPermission: false, microphonePermission: false }], ['expo-splash-screen', { image: variant.assets.splash, backgroundColor: variant.branding.primaryColor, imageWidth: 200 }], ...pushPlugin],
   extra: {
     variant: variant.id,
     push: {

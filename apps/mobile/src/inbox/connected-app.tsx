@@ -3,13 +3,15 @@
  * it, including the query cache, the socket, and the navigation stack. Nothing has to remember to filter.
  */
 import { ApiError, type ApiClient, type Me } from '@openchat/api-client';
-import { DarkTheme, DefaultTheme, NavigationContainer, NavigationIndependentTree } from '@react-navigation/native';
+import { DarkTheme, DefaultTheme, NavigationContainer, NavigationIndependentTree, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import { useColorScheme } from 'react-native';
+import { Alert, useColorScheme } from 'react-native';
 import type { ConnectionView } from '../connections/manager';
 import { connections } from '../connections/native';
+import { destination } from '../push/destination';
+import { pushRegistrar } from '../push/native';
 import { Body, Button, Problem, Screen, Title } from '../ui/kit';
 import { createInboxCache, type InboxCache } from './cache';
 import { ConversationScreen } from './conversation-screen';
@@ -53,10 +55,33 @@ function Workspace({ connection, workspaceId, me, api, client }: { connection: C
   const live = useLive(api, workspaceId, cache, openConversation);
   const membership = me.memberships.find((candidate) => candidate.workspace.id === workspaceId)!;
   const scope: WorkspaceScope = { api, connection, workspaceId, me, memberId: membership.memberId, cache, live, openConversation };
+  const navigation = useNavigationContainerRef<Routes>();
+  const [navigationReady, setNavigationReady] = useState(false);
+
+  // A notification names its own installation and workspace, and is never read as "the current one".
+  useEffect(() => {
+    if (!navigationReady) return;
+    const follow = () => {
+      const target = destination.get();
+      if (!target) return;
+      if (target.installationId !== connection.installationId || !me.memberships.some((m) => m.workspace.id === target.workspaceId)) {
+        destination.set(null);
+        Alert.alert('Cannot open this notification', 'It is for an account or workspace that you no longer have here.');
+        return;
+      }
+      // This remounts everything here, and the destination is followed again from the new workspace.
+      if (target.workspaceId !== workspaceId) return void connections.selectWorkspace(connection.id, target.workspaceId);
+      destination.set(null);
+      navigation.navigate('Conversation', { conversationId: target.conversationId });
+    };
+    follow();
+    return destination.subscribe(follow);
+  }, [connection.id, connection.installationId, me.memberships, navigation, navigationReady, workspaceId]);
+
   return (
     <Scope.Provider value={scope}>
       <NavigationIndependentTree>
-        <NavigationContainer theme={scheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <NavigationContainer ref={navigation} onReady={() => setNavigationReady(true)} theme={scheme === 'dark' ? DarkTheme : DefaultTheme}>
           <Stack.Navigator>
             <Stack.Screen name="Inbox" component={InboxScreen} options={{ title: membership.workspace.name }} />
             <Stack.Screen name="Conversation" component={ConversationScreen} options={{ title: '' }} />
@@ -78,6 +103,15 @@ function Loaded({ connection, api, client }: { connection: ConnectionView; api: 
   useEffect(() => {
     if (memberships && !held && memberships[0]) void connections.selectWorkspace(connection.id, memberships[0].workspace.id);
   }, [connection.id, held, memberships]);
+
+  // Every workspace this person holds can notify them, not only the one on screen. Messaging does not wait for this.
+  const workspaceIds = memberships?.map((membership) => membership.workspace.id).join(',');
+  useEffect(() => {
+    if (!workspaceIds) return;
+    void connections.discover(connection.baseUrl).then((found) => {
+      if (found.ok) return pushRegistrar.sync({ connectionId: connection.id, api, relay: found.discovery.relay, workspaceIds: workspaceIds.split(',') });
+    });
+  }, [api, connection.baseUrl, connection.id, workspaceIds]);
 
   if (me.data && held) return <Workspace connection={connection} workspaceId={connection.workspaceId!} me={me.data} api={api} client={client} />;
 

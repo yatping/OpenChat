@@ -43,6 +43,8 @@ export interface ManagerDeps {
   clientLabel: string;
   /** Removes anything kept on disk for a connection, such as downloaded files. */
   wipeFiles: (connectionId: string) => Promise<void>;
+  /** Stops push for a connection. It gets a client only while there is a session to use it with. */
+  forgetPush?: (connectionId: string, client: Session['client'] | null) => Promise<void>;
 }
 
 export type SignInError = 'wrong_credentials' | 'rate_limited' | 'unreachable' | 'failed';
@@ -103,6 +105,8 @@ export function createConnectionManager(deps: ManagerDeps) {
   /** Removes everything this device holds for a connection. Each step runs even if another fails. */
   const wipe = async (id: string) => {
     const session = sessionFor(id);
+    // Before the session goes, and whatever else fails. No device should keep being told about someone who left.
+    await deps.forgetPush?.(id, session.status() === 'signed_in' ? session.client : null).catch(() => undefined);
     await Promise.allSettled([session.wipe(), deps.wipeFiles(id)]);
     sessions.delete(id);
     expired.delete(id);
@@ -117,7 +121,10 @@ export function createConnectionManager(deps: ManagerDeps) {
   /** Ends the session on the installation if it can be reached, and wipes this device either way. */
   const signOut = async (id: string) => {
     const session = sessionFor(id);
-    if (session.status() === 'signed_in') await session.client.logout().catch(() => undefined);
+    if (session.status() === 'signed_in') {
+      await deps.forgetPush?.(id, session.client).catch(() => undefined);
+      await session.client.logout().catch(() => undefined);
+    }
     await wipe(id);
   };
 

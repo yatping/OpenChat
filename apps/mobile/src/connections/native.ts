@@ -4,6 +4,7 @@ import { fetch as binaryFetch } from 'expo/fetch';
 import { Directory, Paths } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
 import Storage from 'expo-sqlite/kv-store';
+import { pushRegistrar } from '../push/native';
 import { createConnectionManager } from './manager';
 
 const REGISTRY_KEY = 'connections';
@@ -34,6 +35,7 @@ export const connections = createConnectionManager({
   },
   newId: randomUUID,
   clientLabel: 'iOS app',
+  forgetPush: (connectionId, client) => pushRegistrar.forget(connectionId, client),
   wipeFiles: async (connectionId) => {
     const directory = connectionFiles(connectionId);
     if (directory.exists) directory.delete();
