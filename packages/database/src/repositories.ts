@@ -329,10 +329,10 @@ export function repositories(database: Database, ctx: WorkspaceContext) {
           d1
             .prepare(
               `INSERT INTO outbox (id, workspace_id, topic, aggregate_id, payload_json, created_at)
-               SELECT ?1, workspace_id, 'conversation.updated', id, json_object('conversationId', id, 'version', version), ${DB_NOW_MS}
+               SELECT ?1, workspace_id, 'conversation.updated', id, json_object('conversationId', id, 'version', version, 'assignedTo', ?5, 'actorId', ?6), ${DB_NOW_MS}
                  FROM conversations WHERE workspace_id = ?2 AND id = ?3 AND last_mutation_id = ?4`,
             )
-            .bind(newId('outbox'), w, conversationId, mutation),
+            .bind(newId('outbox'), w, conversationId, mutation, assignee, ctx.memberId),
         ]);
         if (update?.meta.changes === 1) return { outcome: 'updated', version: expectedVersion + 1 };
         const current = await this.get(conversationId);

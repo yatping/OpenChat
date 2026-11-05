@@ -35,6 +35,8 @@ export const installation = sqliteTable(
     singleton: integer('singleton').notNull().default(1).unique(),
     name: text('name').notNull(),
     publicBaseUrl: text('public_base_url').notNull(),
+    /** The relay that has accepted this installation. Compared with the configured one, so that a change registers again. */
+    relayRegisteredId: text('relay_registered_id'),
     signupPolicy: text('signup_policy', { enum: ['invite_only', 'open'] }).notNull().default('invite_only'),
     systemEmailEnc: text('system_email_enc'),
     createdAt: ts('created_at'),
@@ -116,6 +118,8 @@ export const workspaces = sqliteTable(
     relayWorkspaceStatus: text('relay_workspace_status', { enum: ['unregistered', 'registered', 'revoked'] })
       .notNull()
       .default('unregistered'),
+    /** The name the relay holds, which it shows as the notification title. A rename is sent with the next notification. */
+    relayDisplayName: text('relay_display_name'),
     createdAt: ts('created_at'),
     updatedAt: ts('updated_at'),
   },

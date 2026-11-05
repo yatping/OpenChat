@@ -23,7 +23,7 @@ Beyond the spec's entities, the schema adds what stated requirements need:
 
 | Addition | Requirement it serves |
 |---|---|
-| `installation` | Relay identity, public URL. `signup_policy` is no longer read ([ADR-0016](decisions/0016-installation-admin-replaces-workspace-managers.md)) |
+| `installation` | Which relay has accepted it, public URL. `signup_policy` is no longer read ([ADR-0016](decisions/0016-installation-admin-replaces-workspace-managers.md)) |
 | `auth_sessions`, `auth_tokens` | Sessions, refresh tokens, reset, verification. `invitations` is unused, and stays until a later migration removes it |
 | `visitors` | Multiple devices per contact; contact merge |
 | `messages.seq`, `public_seq`, `visibility`, `client_message_id` | Ordering, note isolation, idempotency |

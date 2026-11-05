@@ -1393,7 +1393,7 @@ components:
               eventType:
                 type: string
                 enum: [new_conversation, new_message, conversation_assigned, conversation_transferred, mention, conversation_updated]
-              channel: { type: string, enum: [push, email] }
+              channel: { type: string, enum: [push], description: 'email joins with email follow-ups, as an additive change.' }
               enabled: { type: boolean }
     WidgetBootstrap:
       type: object

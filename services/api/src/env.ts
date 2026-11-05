@@ -19,6 +19,13 @@ export interface Env {
   /** The sending address for system email, on a domain verified with the provider. */
   SYSTEM_EMAIL_FROM?: string;
   NOTIFICATIONS_QUEUE: Queue;
+  /** Optional, all four together: with any missing, this installation has no push and messaging is unaffected. */
+  RELAY_URL?: string;
+  RELAY_ID?: string;
+  /** Comma-separated. The apps this relay can reach, which the app compares with its own. */
+  RELAY_BUNDLE_IDS?: string;
+  /** JSON: { active: { kid, privateKey, publicKey } }. Worker secret. Signs requests and grants to the relay. */
+  RELAY_SIGNING_KEY?: string;
   EMAIL_QUEUE: Queue;
   JOBS_QUEUE: Queue;
   /** Worker secret, with its pair. Without both, no website can require Turnstile. */

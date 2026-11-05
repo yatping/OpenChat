@@ -23,6 +23,7 @@ import { createLogger, toIso } from '@openchat/shared';
 import type { Context } from 'hono';
 import type { AppEnv } from './context';
 import type { Env } from './env';
+import { pushJobsFor } from './push/fanout';
 
 const SWEEP_AGE_MS = 60_000;
 const SWEEP_LIMIT = 200;
@@ -68,6 +69,7 @@ async function dispatchRow(env: Env, db: Database, row: OutboxRow): Promise<void
       };
       const room = env.CONVERSATION_ROOM.getByName(roomName(row.workspaceId, message.conversationId));
       await Promise.all([hub.publish(event), room.publishDomainEvent(event, { showAgentNames: message.showAgentNames })]);
+      await pushJobsFor(env, row);
       return;
     }
     case 'conversation.created':
@@ -76,11 +78,16 @@ async function dispatchRow(env: Env, db: Database, row: OutboxRow): Promise<void
       if (!event) return;
       const room = env.CONVERSATION_ROOM.getByName(roomName(row.workspaceId, row.aggregateId));
       await Promise.all([hub.publish(event), room.publishDomainEvent(event)]);
+      await pushJobsFor(env, row);
       return;
     }
     case 'member.access_changed':
       // The member reconnects with fresh permissions, or fails to.
       await hub.revokeMember(row.aggregateId);
+      await pushJobsFor(env, row);
+      return;
+    case 'push.subscription_removed':
+      await pushJobsFor(env, row);
       return;
     default:
       // A newer Worker's row, read by an older one during a deploy. It stays for a Worker that knows it.

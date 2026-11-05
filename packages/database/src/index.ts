@@ -3,6 +3,7 @@ export * from './auth-repository';
 export * from './admin-repository';
 export * from './visitor-repository';
 export * from './outbox-repository';
+export * from './push-repository';
 export { authorizeWorkspaceMember, type Role, type WorkspaceContext } from './context';
 export {
   claimJob,

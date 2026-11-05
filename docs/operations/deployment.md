@@ -18,7 +18,7 @@ Run `pnpm oc preflight` to check them. It only reads, and `oc deploy` runs the s
 | Analytics Engine | With `--analytics` | Enable once in the dashboard | Confirm yourself |
 | Custom domain | With `--public-url` | A zone on Cloudflare, attached to the Worker. A domain is recommended, but `workers.dev` also works | Confirm yourself |
 | Email | To deliver new account links and resets | Cloudflare Email Sending (a domain on Cloudflare DNS in this account, onboarded with `wrangler email sending enable <domain>`, and a login with `email_sending:write`), or a Resend API key and verified domain. Without either, use `oc recover` | Cloudflare: the domain is listed as onboarded. Resend: `--email-from` is present, and Resend is not contacted |
-| Push | Later, in M3 | Nothing for the managed relay, or an Apple Developer account for independent mode | Not checked yet |
+| Push | With `--relay-url`, `--relay-id`, and `--relay-bundle-ids`, all three together. There is no managed relay to point at yet | Nothing for the managed relay, or an Apple Developer account for independent mode | Not checked yet |
 
 A brand-new account has not been tried yet, so this list comes from Cloudflare's documentation and Wrangler's source, and may be incomplete.
 
@@ -96,7 +96,7 @@ Delivered in basic form in Milestone 1, and polished in Milestone 5. Each step i
 | 7 | Build and deploy | Dashboard and widget, then Worker | 5 |
 | 8 | Domain | `--public-url` for a domain you attached. Attaching it *(M5)* | 7 |
 | 9 | Initialise | `wrangler d1 execute`: creates the installation, first owner, and workspace, guarded so a repeat adds nothing. The owner has no password until they use the printed link | 8 |
-| 10 | Register with relay | If push is enabled *(M3)* | |
+| 10 | Relay signing key | If a relay was given: generated once, as the secret `RELAY_SIGNING_KEY`. The Worker registers itself when the first device asks for a grant, not during the deploy | |
 | 11 | Verify | Health, discovery, and a login probe that proves the signing key loads. A synthetic visitor message *(M1b)* | 9 |
 | 12 | Print | Dashboard URL and the owner's link. Widget snippet and restore command *(M5)* | 10 |
 

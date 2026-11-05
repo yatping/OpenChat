@@ -368,6 +368,9 @@ importers:
       '@hono/zod-openapi':
         specifier: ^1.6.3
         version: 1.6.3(hono@4.13.16)(zod@4.6.7)
+      '@openchat/notification-protocol':
+        specifier: workspace:*
+        version: link:../notification-protocol
       hono:
         specifier: ^4.13.16
         version: 4.13.16
@@ -436,6 +439,9 @@ importers:
       '@openchat/email':
         specifier: workspace:*
         version: link:../email
+      '@openchat/notification-protocol':
+        specifier: workspace:*
+        version: link:../notification-protocol
       '@openchat/shared':
         specifier: workspace:*
         version: link:../shared

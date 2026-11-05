@@ -1491,6 +1491,87 @@
         ],
         "description": "Connect to `url` within 30 seconds. The ticket is good for one purpose only, and grants nothing over REST."
       },
+      "PushSubscription": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "relaySubscriptionId": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "ios"
+            ]
+          },
+          "deviceLabel": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "relaySubscriptionId",
+          "platform",
+          "deviceLabel",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "NotificationPreferences": {
+        "type": "object",
+        "properties": {
+          "preferences": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "eventType": {
+                  "type": "string",
+                  "enum": [
+                    "new_conversation",
+                    "new_message",
+                    "conversation_assigned",
+                    "conversation_transferred",
+                    "mention",
+                    "conversation_updated"
+                  ]
+                },
+                "channel": {
+                  "type": "string",
+                  "enum": [
+                    "push"
+                  ]
+                },
+                "enabled": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "eventType",
+                "channel",
+                "enabled"
+              ]
+            },
+            "maxItems": 6
+          }
+        },
+        "required": [
+          "preferences"
+        ]
+      },
       "WidgetBootstrap": {
         "type": "object",
         "properties": {
@@ -2867,6 +2948,333 @@
         "responses": {
           "101": {
             "description": "Switching protocols"
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/push/grants": {
+      "post": {
+        "tags": [
+          "push"
+        ],
+        "operationId": "createPushGrant",
+        "summary": "Issue a short-lived, single-use grant for the device to present to the relay",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Grant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "grant": {
+                      "type": "string"
+                    },
+                    "relayUrl": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "grant",
+                    "relayUrl",
+                    "expiresAt"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/push/subscriptions": {
+      "get": {
+        "tags": [
+          "push"
+        ],
+        "operationId": "listMyPushSubscriptions",
+        "summary": "The caller's registered devices",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Subscriptions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PushSubscription"
+                      }
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "push"
+        ],
+        "operationId": "recordPushSubscription",
+        "summary": "Store the opaque handle returned by the relay. No device token is sent here.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "relaySubscriptionId": {
+                    "type": "string",
+                    "pattern": "^sub_[A-Za-z0-9_-]{1,64}$"
+                  },
+                  "deviceLabel": {
+                    "type": "string",
+                    "maxLength": 100
+                  }
+                },
+                "required": [
+                  "relaySubscriptionId"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushSubscription"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/push/subscriptions/{subscriptionId}": {
+      "delete": {
+        "tags": [
+          "push"
+        ],
+        "operationId": "removePushSubscription",
+        "summary": "Remove a device, and unregister it at the relay",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "subscriptionId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed"
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/notification-preferences": {
+      "get": {
+        "tags": [
+          "push"
+        ],
+        "operationId": "getNotificationPreferences",
+        "summary": "The caller's preferences. An event with no choice made is on.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Preferences",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferences"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "push"
+        ],
+        "operationId": "setNotificationPreferences",
+        "summary": "Replace the caller's preferences",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationPreferences"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Updated"
           },
           "default": {
             "description": "RFC 9457 problem details",

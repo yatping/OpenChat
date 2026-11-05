@@ -23,7 +23,7 @@ D1 batch: domain write + outbox row       (atomic)
 
 Duplicates are possible at every arrow, and consumers must tolerate them. Sockets dedupe by message ID, and the relay and email layers by dedupe key.
 
-Until push arrives in M3, dispatch means publishing to Durable Objects only. The fast path finds rows by the ID of what was just written, so replaying a send also finishes a dispatch that died.
+With a relay configured, dispatch also queues the [push jobs](#push). Without one, it only publishes to Durable Objects. The fast path finds rows by the ID of what was just written, so replaying a send also finishes a dispatch that died.
 
 ## Queues
 
@@ -31,7 +31,7 @@ Three queues plus DLQs, not one per job type. Few queues keep self-hosted setup 
 
 | Queue | Job types | `max_batch_size` | `max_batch_timeout` | `max_retries` | `max_concurrency` |
 |---|---|---|---|---|---|
-| `oc-notifications` | `notification.fanout`, `notification.dispatch` | 25 | 1 s | 8 | 20 |
+| `oc-notifications` | `notification.fanout`, `notification.dispatch`, `notification.unregister` | 25 | 1 s | 8 | 20 |
 | `oc-email` | System email (`auth.password_reset_email`, `auth.new_account_email`) | No delivery row, because the token is created at send time. Each attempt has a new token and so a new provider idempotency key, since Resend refuses a reused key with a changed body. A crash after sending can deliver two emails, and failures of any kind retry and then dead-letter. |
 | `email.send` | 10 | 5 s | 8 | 5 |
 | `oc-jobs` | `attachment.process`, `automation.evaluate`, `webhook.deliver` (later), `workspace.purge`, `analytics.rollup` | 10 | 5 s | 5 | 10 |
@@ -89,9 +89,35 @@ Exactly-once is impossible for external effects, so each consumer aims for the n
 | Job | Mechanism | Remaining duplicate risk |
 |---|---|---|
 | `notification.dispatch` | Relay dedupes on `notificationId` for 72 hours | None within the window |
+| `notification.unregister` | Removing nothing still succeeds at the relay | None |
 | `email.send` | Unique `email_deliveries (workspace_id, dedupe_key)`: claim, send, mark sent. Passes the idempotency key to providers that accept it | A crash between send and mark. If a row is `claimed` for over 15 minutes, the job resends only if the provider supports idempotency; otherwise it records `failed` for review, because a missed email is better than a duplicate follow-up |
 | `automation.evaluate` | Unique `automation_runs (workspace_id, rule_id, conversation_id, trigger_key)` | None for the decision |
 | Internal state | SQL conditions per the [write patterns](data-model.md#write-patterns), or `job_receipts` | None |
+
+<a id="push"></a>
+## Push
+
+```text
+outbox row -> dispatch -> notification.fanout -> notification.dispatch -> relay
+                          (reads D1, decides)    (up to 50 people each)
+```
+
+A job lives for one hour, by `notAfter`. Each step may run twice, because `notificationId` is a hash of the event, its type, and the member, so the relay drops a repeat. Fan-out reads what is true when it runs, and carries IDs only.
+
+| Event | Who gets a push | Type |
+|---|---|---|
+| A visitor's message | Whoever has the conversation, or every member if nobody does | `new_conversation` for the first message, otherwise `new_message` |
+| A member's reply or internal note | Whoever has the conversation, unless they wrote it. Nobody, if nobody has it | `new_message` |
+| An assignment | The person assigned, unless they did it themselves or it has changed since | `conversation_assigned` |
+| A system message, or any other change | Nobody | |
+
+Recipients are active members, with an active account and a device, who have not turned that event off. A member with no preference row gets everything. The text is generic, and composed by the relay.
+
+**Registration is lazy.** The first grant registers the installation and workspace with the relay, and a sending job repeats whichever part is missing or out of date. So a rename reaches the notification title with the next push. A `401` or `403` from the relay on sending forgets the registration, so that the retry registers again, in case the relay lost its data.
+
+**Losing access.** `member.access_changed` queues `notification.unregister`. If the member is no longer active, or has no live session, the job deletes their rows and tells the relay to remove them by recipient. Removing one device goes through an outbox row, `push.subscription_removed`, because the row with the handle is deleted in the same commit.
+
+A relay that is down delays pushes and refuses new grants with `503`. Messaging does not call the relay at any point. A `429` retries after the relay's `Retry-After`, a request the relay calls malformed is recorded in `failed_jobs`, and anything else retries with backoff.
 
 ## Cron
 

@@ -58,6 +58,13 @@ describe('renderConfig', () => {
     expect(rendered.d1_databases?.[0]?.migrations_dir).toBe('../../services/api/../../packages/database/migrations');
   });
 
+  it('renders a relay only for a deployment that chose one, and never its key', () => {
+    expect((renderConfig(source, state, '.').vars as Record<string, string> | undefined)?.RELAY_URL).toBeUndefined();
+    const rendered = renderConfig(source, { ...state, relay: { url: 'https://relay.example.org', id: 'managed', bundleIds: 'org.example.app' } }, '.');
+    expect(rendered.vars).toMatchObject({ RELAY_URL: 'https://relay.example.org', RELAY_ID: 'managed', RELAY_BUNDLE_IDS: 'org.example.app' });
+    expect(JSON.stringify(rendered)).not.toContain('RELAY_SIGNING_KEY');
+  });
+
   it('does not change the template', () => {
     expect(parseTemplate(source).name).toBe('oc-local');
   });

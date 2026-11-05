@@ -9,7 +9,9 @@ import { registerConversationRoutes } from './routes/conversations';
 import { registerRealtimeRoutes } from './routes/realtime';
 import { registerWidgetRoutes } from './routes/widget';
 import { registerAdminRoutes } from './routes/admin';
+import { registerPushRoutes } from './routes/push';
 import { registerWorkspaceRoutes } from './routes/workspaces';
+import { discoveryRelay } from './push/relay-client';
 
 const OVERLOAD_RETRY_SECONDS = 2;
 
@@ -79,7 +81,7 @@ export function createApp() {
         name: installation.name,
         api: { versions: ['v1'], minor: API_MINOR_VERSION },
         realtime: { protocolVersions: [REALTIME_PROTOCOL_VERSION] },
-        relay: null,
+        relay: discoveryRelay(c.env),
         // Accounts come only from an installation admin. See ADR-0016.
         auth: { signup: 'invite_only' as const },
       },
@@ -98,6 +100,7 @@ export function createApp() {
 
   registerAuthRoutes(app);
   registerWorkspaceRoutes(app);
+  registerPushRoutes(app);
   registerAdminRoutes(app);
   registerConversationRoutes(app);
   registerWidgetRoutes(app);

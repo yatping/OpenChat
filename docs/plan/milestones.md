@@ -203,7 +203,7 @@ Push is M3, so an agent gets no alert while the app is closed. Before anyone rel
 **Depends on:** S1 result, Q5, Q7, Q8.
 
 <a id="m3-status"></a>
-**Status: in progress.** Six slices are planned, and the first three are done. Q5 and Q7 are [answered](../architecture/open-questions.md), and Q8 waits for App Store submission.
+**Status: in progress.** Six slices are planned, and the first four are done. Q5 and Q7 are [answered](../architecture/open-questions.md), and Q8 waits for App Store submission.
 
 | Part | State |
 |---|---|
@@ -211,7 +211,8 @@ Push is M3, so an agent gets no alert while the app is closed. Before anyone rel
 | Relay requests | Signed request checks, `RelayGuard`, and registering installations and workspaces, [tested on real Cloudflare](../architecture/cloudflare-validation.md#relay-requests-on-real-cloudflare-2026-11-05). Key rotation is not built |
 | Devices | Single-use grants, device registration, token rotation, and unregistering, on the relay. Tokens are encrypted at rest. Tested on real Cloudflare with fake tokens. The installation does not issue grants yet |
 | Relay delivery | Accepting notifications, quotas, the queue, retries, each APNs answer, and the fixed payload, on the relay. Tested on a real queue and real APNs with a fake device token, so nothing has reached a phone from a Worker yet |
-| Installation fan-out, app, exit check | Not started |
+| Installation side | Signing key, discovery, lazy registration, grants, subscriptions, preferences, [fan-out](../architecture/background-jobs.md#push), and removal on losing access. [Tested on real Cloudflare](../architecture/cloudflare-validation.md#push-from-an-installation-on-real-cloudflare-2026-11-05) with fake device tokens. Nothing triggers `conversation_transferred`, `mention`, or `conversation_updated` yet: mentions do not exist in the product, and a transfer is sent as `conversation_assigned`. Subscriptions are not tied to a session, so ending one session leaves that device subscribed while another session lives |
+| App, exit check | Not started |
 
 **Security review:** full relay threat model, ideally external.
 

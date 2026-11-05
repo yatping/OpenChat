@@ -5,7 +5,7 @@
   "name": "oc-local",
   "main": "./src/index.ts",
   "compatibility_date": "2026-10-30",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "observability": { "enabled": true },
   "placement": { "mode": "smart" },
   "assets": {

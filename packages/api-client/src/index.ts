@@ -18,6 +18,10 @@ import type {
   listMembersRoute,
   listMessagesRoute,
   listWebsitesRoute,
+  createPushGrantRoute,
+  listPushSubscriptionsRoute,
+  recordPushSubscriptionRoute,
+  getNotificationPreferencesRoute,
   loginRoute,
   sendMessageRoute,
   AttachmentSchema,
@@ -44,6 +48,10 @@ export type Workspace = Json200<typeof updateWorkspaceRoute>;
 export type MemberPage = Json200<typeof listMembersRoute>;
 export type Member = MemberPage['data'][number];
 export type Website = Json200<typeof listWebsitesRoute>['data'][number];
+export type PushGrant = Json201<typeof createPushGrantRoute>;
+export type PushSubscription = Json200<typeof listPushSubscriptionsRoute>['data'][number];
+export type PushSubscriptionInput = BodyOf<typeof recordPushSubscriptionRoute>;
+export type NotificationPreferences = Json200<typeof getNotificationPreferencesRoute>;
 export type WebsiteInput = BodyOf<typeof createWebsiteRoute>;
 export type WebsiteUpdate = BodyOf<typeof updateWebsiteRoute>;
 export type Person = Json201<typeof createPersonRoute>;
@@ -181,6 +189,12 @@ export function createClient(options: ClientOptions) {
     listTags: (workspaceId: string) => get<{ data: Tag[] }>(`${workspace(workspaceId)}/tags`),
     createTag: (workspaceId: string, name: string) => request<Tag>('POST', `${workspace(workspaceId)}/tags`, { name }),
     setConversationTags: (workspaceId: string, id: string, tagIds: string[]) => request<void>('PUT', `${conversation(workspaceId, id)}/tags`, { tagIds }),
+    createPushGrant: (workspaceId: string) => request<PushGrant>('POST', `${workspace(workspaceId)}/push/grants`),
+    listPushSubscriptions: (workspaceId: string) => get<{ data: PushSubscription[] }>(`${workspace(workspaceId)}/push/subscriptions`),
+    recordPushSubscription: (workspaceId: string, input: PushSubscriptionInput) => request<PushSubscription>('POST', `${workspace(workspaceId)}/push/subscriptions`, input),
+    removePushSubscription: (workspaceId: string, id: string) => request<void>('DELETE', `${workspace(workspaceId)}/push/subscriptions/${encodeURIComponent(id)}`),
+    getNotificationPreferences: (workspaceId: string) => get<NotificationPreferences>(`${workspace(workspaceId)}/notification-preferences`),
+    setNotificationPreferences: (workspaceId: string, input: NotificationPreferences) => request<void>('PUT', `${workspace(workspaceId)}/notification-preferences`, input),
     createRealtimeTicket: (workspaceId: string) => request<RealtimeTicket>('POST', `${workspace(workspaceId)}/realtime/tickets`),
   };
 }
