@@ -167,7 +167,7 @@ describe('adding someone', () => {
     await handleQueue(batch as never, env as unknown as Env, { email: { send: async (m) => (emails.push(m), { messageId: 'x' }) } });
     expect(emails[0]).toMatchObject({ to: 'new@example.com' });
     expect(emails[0]!.text).toContain('seven days');
-    const token = /#token=([^\s]+)/.exec(emails[0]!.text)![1]!;
+    const token = /#token=([^\s]+)/.exec(emails[0]!.text ?? '')![1]!;
 
     expect((await call('POST', '/api/v1/auth/password-reset/confirm', undefined, { token, password: PASSWORD })).status).toBe(204);
     expect((await login('new@example.com')).status).toBe(200);
