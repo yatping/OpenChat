@@ -22,7 +22,7 @@ import {
   type ConversationPages,
   type ConversationPatch,
   type InboxFilter,
-} from './state';
+} from '@openchat/api-client/inbox-state';
 
 type Membership = Me['memberships'][number];
 

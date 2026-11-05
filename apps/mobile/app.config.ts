@@ -29,8 +29,7 @@ export default (): ExpoConfig => ({
     supportsTablet: true,
     config: { usesNonExemptEncryption: false },
   },
-  plugins: ['expo-router', 'expo-secure-store', 'expo-sqlite', ['expo-splash-screen', { image: variant.assets.splash, backgroundColor: variant.branding.primaryColor, imageWidth: 200 }]],
-  experiments: { typedRoutes: false },
+  plugins: ['expo-secure-store', 'expo-sqlite', ['expo-splash-screen', { image: variant.assets.splash, backgroundColor: variant.branding.primaryColor, imageWidth: 200 }]],
   extra: {
     variant: variant.id,
     push: {

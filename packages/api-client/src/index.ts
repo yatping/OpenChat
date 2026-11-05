@@ -119,9 +119,9 @@ export function createClient(options: ClientOptions) {
   const workspace = (id: string) => `/api/v1/workspaces/${encodeURIComponent(id)}`;
   const conversation = (workspaceId: string, id: string) => `${workspace(workspaceId)}/conversations/${encodeURIComponent(id)}`;
   const query = (values: Record<string, string | number | undefined>) => {
-    const params = new URLSearchParams();
-    for (const [key, value] of Object.entries(values)) if (value !== undefined) params.set(key, String(value));
-    return params.size > 0 ? `?${params}` : '';
+    // By hand, because React Native's URLSearchParams has no `size`, which would silently drop the query.
+    const params = Object.entries(values).flatMap(([key, value]) => (value === undefined ? [] : [`${encodeURIComponent(key)}=${encodeURIComponent(value)}`]));
+    return params.length > 0 ? `?${params.join('&')}` : '';
   };
 
   return {

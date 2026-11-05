@@ -53,6 +53,8 @@ Set `APP_PROFILE` to anything other than `development` for a release build. Gett
 
 A customer can also use EAS to build a variant, but nothing in the app needs it.
 
+The round gear labelled "Tools" that floats over the top right corner of a development build comes from the development client. It is not part of the app, and it does not appear in a release build.
+
 ## Push registration in the app
 
 ```text
@@ -81,13 +83,12 @@ ConnectionManager
   └── Connection (installationId + userId), keyed by a local connection ID
         ├── Tokens           expo-secure-store, key prefix conn.<id>.
         ├── ApiClient        bound to one base URL and token source. There is no global client.
-        ├── QueryClient      one per Connection. Never shared.
+        ├── QueryClient      one per Connection and workspace. Never shared.
         ├── Local files      a cache directory per Connection, deleted on logout
         └── Socket           open only for the active Connection in the foreground
 ```
 
-- Switching replaces the top-level provider with a new `key`, unmounting the whole screen tree so no component state survives.
-- A workspace is a selection inside a Connection, included in every query key.
+- Switching connection or workspace replaces the top-level provider with a new `key`, unmounting the screens, query client, socket, and navigator together, so no state survives ([ADR-0013](../architecture/decisions/0013-react-navigation-not-expo-router.md)).
 - Deep links name their target explicitly, and never use "current workspace".
 - A test uses two fake installations with **identical IDs** and asserts that nothing crosses between them.
 - A Connection is known by a local ID, because installations choose their own IDs and can collide.
