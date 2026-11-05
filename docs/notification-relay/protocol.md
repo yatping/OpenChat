@@ -49,9 +49,11 @@ Installation                                        Relay
                                      <--- 201 ------
 ```
 
-The document fetch proves control of the domain. The fetch is restricted: HTTPS, port 443, no redirects, 64 KB, 5-second timeout, and a block on IP-literal hosts.
+The document must list the key under `relay.publicKeys`. The fetch proves control of the domain and is restricted: HTTPS, port 443, no redirects, 64 KB, 5-second timeout, and a block on IP addresses, single-label names, and `.local`, `.localhost`, and `.internal` names. All its failures answer the same `422`, so it cannot be used to probe networks.
 
-Key rotation is a signed request by the current key adding a new key, which is also confirmed through the well-known document.
+The first registration of an ID wins, and an address holds one ID. A different key answers `409` and changes nothing. Because of that, someone who learns an installation's ID before it registers could claim it from their own domain and lock it out, until the operator removes the claim. They gain no access to its devices, as these need grants signed by the real key.
+
+Key rotation is a signed request by the current key adding a new key, which is also confirmed through the well-known document. Not built yet.
 
 ### 2. Register a workspace
 
@@ -136,11 +138,13 @@ OCRELAY-V1
 
 1. All headers present and well-formed, body size within the limit.
 2. Timestamp within ±300 seconds.
-3. Installation and key known and not revoked, read through a short-lived cache.
+3. Installation and key known and not revoked, read through a 30-second cache, so a revocation takes up to that long. An unknown key answers the same as a bad signature.
 4. Signature valid.
 5. Workspace registered under this installation.
 6. In `RelayGuard` (one Durable Object per installation): request ID unseen for 10 minutes, and rate limit not exceeded.
 7. Parse the body against a closed schema.
+
+Registering an installation differs, because its key arrives in the body: the body is parsed first, a per-IP limit applies, and the signature is checked against that key. Bodies are limited to 16 KB. Signed requests of any kind are limited to a burst of 300 and 5 per second for each installation, and a refused request can be retried with the same ID.
 
 Replay protection uses a Durable Object because it requires strong consistency, which neither KV nor the rate limit binding provides. Nonces outlive the timestamp window, so an old request cannot be replayed once forgotten. Each installation has its own object, so one cannot exhaust another's capacity.
 
@@ -294,7 +298,7 @@ An exceeded quota returns 429 with `Retry-After`. The installation's queue consu
 | Registration | Proof of domain control; quotas | Allowlist of installation IDs |
 | APNs key | Project's, in the operator's secrets. **Never distributed.** | Customer's |
 | Bundle IDs | Official app | Customer's |
-| Reachability | Public URL | URL, or a **service binding** if on the same account. Plain `fetch` between Workers on one zone can return error 1042 |
+| Reachability | Public URL | Public URL, on the same account or not. The relay sets `global_fetch_strictly_public`, because without it, domain proof failed between two Workers on one account |
 
 **Which app works with which relay:**
 

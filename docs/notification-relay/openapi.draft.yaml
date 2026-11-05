@@ -77,6 +77,9 @@ paths:
       responses:
         '201': { description: Registered }
         '200': { description: Already registered with the same key }
+        '403': { description: Private mode, and this installation is not on the allowlist }
+        '409': { description: This ID is registered with another key or address, or this address holds another ID }
+        '422': { description: The discovery document could not be read, or does not list this ID and key }
         default: { $ref: '#/components/responses/Problem' }
   /v1/workspaces/register:
     post:
