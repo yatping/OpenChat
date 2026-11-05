@@ -412,6 +412,7 @@ Milestone 3, slice 2, on a throwaway relay with real D1, against a second Worker
 | Registering twice, an IP address, workspace register and revoke, replay, stale timestamp, each tampered header, an unknown body field | All as designed |
 | A display name containing a direction override | Stored clean |
 | Rate limit binding, `ratelimits` in Wrangler config | Deploys, and limits in local tests. Its behaviour on real Cloudflare has not been measured |
+| Slice 3, with fake device tokens: device registration, a reused grant, wrong audience, wrong bundle, wrong environment, an unknown field, a returning device, token rotation, a wrong secret, and both forms of unregister | All as designed. Stored tokens are all encrypted |
 
 ## Milestone 2 on real Cloudflare (2026-11-05)
 

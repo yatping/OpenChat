@@ -203,13 +203,14 @@ Push is M3, so an agent gets no alert while the app is closed. Before anyone rel
 **Depends on:** S1 result, Q5, Q7, Q8.
 
 <a id="m3-status"></a>
-**Status: in progress.** Six slices are planned, and the first two are done. Q5 and Q7 are [answered](../architecture/open-questions.md), and Q8 waits for App Store submission.
+**Status: in progress.** Six slices are planned, and the first three are done. Q5 and Q7 are [answered](../architecture/open-questions.md), and Q8 waits for App Store submission.
 
 | Part | State |
 |---|---|
 | APNs transport | Transports, `ApnsCredential`, handling of each APNs answer, and a self-check. [Tested on real APNs](../architecture/cloudflare-validation.md#apns-from-a-worker-with-a-real-key-2026-11-05) with a fake device token, so nothing has reached a phone from a Worker yet |
 | Relay requests | Signed request checks, `RelayGuard`, and registering installations and workspaces, [tested on real Cloudflare](../architecture/cloudflare-validation.md#relay-requests-on-real-cloudflare-2026-11-05). Key rotation is not built |
-| Devices, delivery, fan-out, app, exit check | Not started |
+| Devices | Single-use grants, device registration, token rotation, and unregistering, on the relay. Tokens are encrypted at rest. Tested on real Cloudflare with fake tokens. The installation does not issue grants yet |
+| Delivery, fan-out, app, exit check | Not started |
 
 **Security review:** full relay threat model, ideally external.
 
