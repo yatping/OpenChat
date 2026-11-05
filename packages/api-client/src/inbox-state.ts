@@ -2,7 +2,7 @@
  * How events combine with what is on screen. Events may repeat or arrive out of order, so everything here
  * merges by ID, sequence, and version, and converges whatever the order. See docs/architecture/realtime.md.
  */
-import type { Conversation, ConversationPage, Message } from '@openchat/api-client';
+import type { Conversation, ConversationPage, Message } from './index';
 
 export interface ConversationPages {
   pages: ConversationPage[];

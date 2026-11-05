@@ -1,19 +1,25 @@
+import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import { connections } from '../src/connections/native';
-import { useConnections } from '../src/connections/use-connections';
-import { ConnectScreen, type Found } from '../src/screens/connect';
-import { HomeScreen } from '../src/screens/home';
-import { SignInScreen } from '../src/screens/sign-in';
-import { UpgradeMessage } from '../src/screens/upgrade';
-import { Button, Screen, Title, useTheme } from '../src/ui/kit';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { connections } from './connections/native';
+import { useConnections } from './connections/use-connections';
+import { ConnectedApp } from './inbox/connected-app';
+import { ConnectScreen, type Found } from './screens/connect';
+import { SignInScreen } from './screens/sign-in';
+import { UpgradeMessage } from './screens/upgrade';
+import { Button, Screen, Title, useTheme } from './ui/kit';
 
-export default function Index() {
+function Gate() {
   const { ready, connections: all, activeId } = useConnections();
   const theme = useTheme();
   const [adding, setAdding] = useState(false);
   const [found, setFound] = useState<Found | null>(null);
   const active = all.find((connection) => connection.id === activeId) ?? null;
+
+  useEffect(() => {
+    void connections.start();
+  }, []);
 
   // A successful sign-in changes the active connection, which ends the flow that led to it.
   useEffect(() => {
@@ -55,6 +61,15 @@ export default function Index() {
       />
     );
   }
-  // The key is what guarantees that no state from one connection survives into another.
-  return <HomeScreen key={active.id} connection={active} onAdd={() => setAdding(true)} />;
+  // The key is what guarantees that no state from one connection or workspace survives into another.
+  return <ConnectedApp key={`${active.id}/${active.workspaceId ?? ''}`} connection={active} onAdd={() => setAdding(true)} />;
+}
+
+export function App() {
+  return (
+    <SafeAreaProvider>
+      <StatusBar style="auto" />
+      <Gate />
+    </SafeAreaProvider>
+  );
 }

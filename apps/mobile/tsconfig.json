@@ -8,5 +8,5 @@
     "moduleResolution": "bundler",
     "noEmit": true
   },
-  "include": ["app", "src", "config", "app.config.ts"]
+  "include": ["index.ts", "src", "config", "app.config.ts"]
 }

@@ -6,7 +6,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./realtime": "./src/realtime.ts"
+    "./realtime": "./src/realtime.ts",
+    "./inbox-state": "./src/inbox-state.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",

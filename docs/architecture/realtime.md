@@ -56,7 +56,7 @@ Client                     Worker                         Durable Object
 ```
 
 - **Why a ticket.** Browsers cannot set headers on a WebSocket, and a long-lived token in a URL would end up in logs. A ticket lasts 30 seconds and names one scope. It can be used more than once in that time, so a room also allows only ten sockets per visitor. Our logger never records it, but it is in the URL, so Cloudflare's own request logs may.
-- **Which page.** A ticket records the `Origin` that asked for it, and the connection must carry the same one, or none for a client with no page. Tickets are signed with the same key as access tokens, under their own audience, so neither can stand in for the other.
+- **Which page.** A ticket records the `Origin` that asked for it, and the connection must carry the same one, or none for a client with no page. iOS always adds the server's own origin to a WebSocket and cannot remove it, so the app asks for its ticket with that same origin. Tickets are signed with the same key as access tokens, under their own audience, so neither can stand in for the other.
 - **Room names** include the workspace, `conversation:<workspaceId>:<id>`, so an ID from another tenant reaches an empty room.
 - **Tags:** `member:<id>`, `role:<role>` for hubs, `visitor:<id>` for rooms. Maximum 10 per socket.
 - **Attachment:** `{ kind, principalId, role, expiresAt, connectedAt, protocolVersion }`. Well within the 16 KB limit. It survives hibernation.

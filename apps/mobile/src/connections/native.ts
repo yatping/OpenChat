@@ -21,7 +21,14 @@ export const connections = createConnectionManager({
     set: (key, value) => SecureStore.setItemAsync(key, value, KEYCHAIN),
     remove: (key) => SecureStore.deleteItemAsync(key, KEYCHAIN),
   },
-  fetch: (input, init) => globalThis.fetch(input, init),
+  fetch: (input, init) => {
+    const url = String(input);
+    if (!url.endsWith('/realtime/tickets')) return globalThis.fetch(input, init);
+    // iOS always puts the server's own origin on a WebSocket, and a ticket must name the origin that will use it.
+    const headers = new Headers(init?.headers);
+    headers.set('origin', /^https?:\/\/[^/]+/.exec(url)![0]);
+    return globalThis.fetch(input, { ...init, headers });
+  },
   newId: randomUUID,
   clientLabel: 'iOS app',
   wipeFiles: async (connectionId) => {

@@ -1,6 +1,6 @@
-import type { Conversation, Message } from '@openchat/api-client';
+import type { Conversation, Message } from './index';
 import { describe, expect, it } from 'vitest';
-import { applyPatch, hasGap, markReadInPages, matchesFilter, mergeMessages, patchPages, recordNewMessage, shouldSendTyping, unreadCount, type ConversationPages } from './state';
+import { applyPatch, hasGap, markReadInPages, matchesFilter, mergeMessages, patchPages, recordNewMessage, shouldSendTyping, unreadCount, type ConversationPages } from './inbox-state';
 
 const message = (seq: number, content = `m${seq}`): Message => ({
   id: `msg_${seq}`,

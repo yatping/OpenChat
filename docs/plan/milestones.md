@@ -151,6 +151,16 @@ Expo app, Connection manager, discovery and compatibility check, sign-in, worksp
 
 **Depends on:** Apple Developer account for device builds.
 
+<a id="m2-status"></a>
+**Status: in progress.** Exit criteria are not met yet.
+
+| Part | State |
+|---|---|
+| App skeleton, connections, sign-in, upgrade message | Merged, with unit tests including colliding IDs |
+| Inbox and conversation | Tested by hand on an iPhone 17 simulator against a local server: live messages, reply, internal note kept from the visitor, status, assignee, restart keeps the session, sign-out clears local files |
+| Not tested yet | Priority, switching workspace, switching between two real installations, login expiry mid-session, typing indicators, real Cloudflare, a physical device |
+| Not built yet | Viewing and uploading attachments, contact details, profile and account deletion |
+
 ## M3: Relay and push (L)
 
 `packages/notification-protocol`. Relay Worker, with D1, `RelayGuard`, `ApnsCredential`, delivery queue, and APNs transports. Registration, grants, tokens. Installation fan-out and preferences. App registration, relay allowlist, and deep links. Relay operator metrics.
