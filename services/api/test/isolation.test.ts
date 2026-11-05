@@ -22,7 +22,9 @@ type Scoped = {
 type Unscoped = { kind: 'public' | 'self'; reason: string };
 /** Needs a visitor's token. `ownerStatus` is what the owning visitor gets. */
 type VisitorScoped = { kind: 'visitor'; body?: Record<string, unknown>; ownerStatus: number };
-type Case = Scoped | Unscoped | VisitorScoped;
+/** For installation admins only, across workspaces. Everyone else gets 404, as if the route were not there. ADR-0015. */
+type InstallationAdmin = { kind: 'installation'; body?: Record<string, unknown> };
+type Case = Scoped | Unscoped | VisitorScoped | InstallationAdmin;
 
 /** Stands for a file in the cases below: the harness sends these bytes as the body. */
 const UPLOAD = { __file: true };
@@ -40,7 +42,14 @@ const CASES: Record<string, Case> = {
   acceptInvitation: { kind: 'public', reason: 'Acts only on the workspace of the presented token' },
   logout: { kind: 'self', reason: 'Revokes the caller’s own session' },
   getMe: { kind: 'self', reason: 'Filtered to the caller’s own memberships. Covered in auth.test.ts' },
-  deleteMe: { kind: 'self', reason: 'Acts on the caller’s own account' },
+  listPeople: { kind: 'installation' },
+  createPerson: { kind: 'installation', body: { name: 'New', email: 'created@example.com' } },
+  updatePerson: { kind: 'installation', body: { isInstallationAdmin: true } },
+  deactivatePerson: { kind: 'installation' },
+  reactivatePerson: { kind: 'installation' },
+  assignPerson: { kind: 'installation', body: { role: 'agent' } },
+  unassignPerson: { kind: 'installation' },
+  listAdminWorkspaces: { kind: 'installation' },
   createWorkspace: { kind: 'self', reason: 'Creates a new workspace. Reads no existing one' },
   getWorkspace: { kind: 'workspace', ownerStatus: 200 },
   updateWorkspace: { kind: 'workspace', body: { name: 'Taken over' }, ownerStatus: 200 },
@@ -132,7 +141,7 @@ describe('every route is accounted for', () => {
   });
 
   it('treats every route with a workspace in its path as scoped', () => {
-    for (const route of contractRoutes) expect([route.id, route.path.includes('{workspaceId}')]).toEqual([route.id, CASES[route.id]?.kind === 'workspace']);
+    for (const route of contractRoutes.filter((r) => CASES[r.id]?.kind !== 'installation')) expect([route.id, route.path.includes('{workspaceId}')]).toEqual([route.id, CASES[route.id]?.kind === 'workspace']);
   });
 });
 
@@ -144,8 +153,8 @@ const testEnv = { ...env, EMAIL_QUEUE: { send: async (_job: JobEnvelope) => unde
 
 /** Resources in each workspace, by the name of the path parameter that holds them. */
 const RESOURCES: Record<'a' | 'b', Record<string, string>> = {
-  a: { workspaceId: 'work_a', memberId: 'mem_a_agent', websiteId: 'site_a', conversationId: 'conv_a', contactId: 'cont_a', tagId: 'tag_a', attachmentId: 'att_a' },
-  b: { workspaceId: 'work_b', memberId: 'mem_b_agent', websiteId: 'site_b', conversationId: 'conv_b', contactId: 'cont_b', tagId: 'tag_b', attachmentId: 'att_b' },
+  a: { userId: 'user_a_agent', workspaceId: 'work_a', memberId: 'mem_a_agent', websiteId: 'site_a', conversationId: 'conv_a', contactId: 'cont_a', tagId: 'tag_a', attachmentId: 'att_a' },
+  b: { userId: 'user_b_agent', workspaceId: 'work_b', memberId: 'mem_b_agent', websiteId: 'site_b', conversationId: 'conv_b', contactId: 'cont_b', tagId: 'tag_b', attachmentId: 'att_b' },
 };
 
 function urlFor(path: string, ...sources: Record<string, string>[]): string {
@@ -292,9 +301,9 @@ describe('between visitors', () => {
 
   it('refuses a visitor token on every agent route', async () => {
     const before = await snapshotOfA();
-    for (const { method, path, id } of contractRoutes.filter((r) => ['workspace', 'self'].includes(CASES[r.id]?.kind ?? ''))) {
+    for (const { method, path, id } of contractRoutes.filter((r) => ['workspace', 'self', 'installation'].includes(CASES[r.id]?.kind ?? ''))) {
       const c = CASES[id];
-      const body = c?.kind === 'workspace' ? c.body : undefined;
+      const body = c?.kind === 'workspace' || c?.kind === 'installation' ? c.body : undefined;
       expect([id, (await request(method, urlFor(path, RESOURCES.a), owner, body)).status]).toEqual([id, 401]);
     }
     expect(await snapshotOfA()).toBe(before);
@@ -354,4 +363,14 @@ describe('across tenants', () => {
     const response = await request(method, urlFor(path, RESOURCES.a), tokens.ownerA, bodyOf(id));
     expect(response.status).toBe((CASES[id] as Scoped).ownerStatus);
   });
+});
+
+describe('installation admin routes', () => {
+  for (const { method, path, id } of contractRoutes.filter((r) => CASES[r.id]?.kind === 'installation')) {
+    it(`${id} answers a workspace owner as if it were not there`, async () => {
+      const c = CASES[id] as InstallationAdmin;
+      const response = await request(method, urlFor(path, RESOURCES.a), tokens.ownerB, c.body);
+      expect(response.status).toBe(404);
+    });
+  }
 });

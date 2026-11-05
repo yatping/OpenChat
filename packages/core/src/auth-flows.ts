@@ -21,7 +21,7 @@ import {
   confirmEmailVerification,
   confirmPasswordReset,
   createSession,
-  deleteAccount,
+  authorizeInstallationAdmin,
   findActiveUserId,
   findUserForLogin,
   getUserContact,
@@ -212,31 +212,13 @@ export async function getMe(deps: Pick<AuthDeps, 'db'>, principal: Principal) {
     id: principal.userId,
     email: principal.email,
     name: principal.name,
+    isInstallationAdmin: (await authorizeInstallationAdmin(deps.db, principal.userId)) !== null,
     memberships: memberships.map((m) => ({
       memberId: m.memberId,
       role: m.role,
       workspace: { id: m.workspaceId, name: m.workspaceName, slug: m.workspaceSlug, createdAt: toIso(m.workspaceCreatedAt) },
     })),
   };
-}
-
-/**
- * The password is checked first because deleting cannot be undone, and an access token alone can be stolen.
- * Attempts use the login limits, so that the token gives no extra way to guess the password.
- */
-export async function deleteMe(deps: Pick<AuthDeps, 'db' | 'limiter' | 'limits'>, principal: Principal, input: { password: string; ip: string }): Promise<void> {
-  const accountKey = await limitKey('login-account', principal.email);
-  await enforce(deps.limiter, await limitKeyForIp(deps, 'login-ip', input.ip), LIMITS.loginIp);
-  await enforce(deps.limiter, accountKey, LIMITS.loginAccount);
-
-  const user = await findUserForLogin(deps.db, principal.email);
-  const verified = user && isUsableHash(user.passwordHash) ? await verifyPassword(input.password, user.passwordHash) : await verifyAgainstDummy(input.password);
-  if (!user || user.id !== principal.userId || !verified) throw new AppError(403, 'password_incorrect', 'The password is incorrect');
-  await deps.limiter.reset(accountKey);
-
-  if (!(await deleteAccount(deps.db, principal.userId))) {
-    throw new AppError(409, 'last_owner', 'Transfer or delete the workspaces you are the only owner of first');
-  }
 }
 
 export function passwordResetJob(userId: string): JobEnvelope<{ userId: string }> {

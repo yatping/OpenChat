@@ -45,6 +45,8 @@ Beyond the spec's entities, the schema adds what stated requirements need:
 
 Users are global to an installation, because one person can be a member of several workspaces.
 
+Neither users nor members are deleted, because messages find their author through them. `users.disabled_at` marks a deactivated account and `workspace_members.removed_at` a removed member, whose `status` is also `suspended` so that every access check refuses them. Both can be undone ([ADR-0015](decisions/0015-installation-admin-and-reversible-removal.md)).
+
 ## Write patterns
 
 D1 has no interactive transactions. A `batch()` commits atomically, but JavaScript cannot act between its statements. Therefore **all conditions must be expressed in SQL**, and a statement must be able to tell whether an earlier one in the batch took effect.

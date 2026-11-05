@@ -108,7 +108,7 @@ export async function inviteMember(deps: Pick<AuthDeps, 'db' | 'limiter' | 'emai
   const placeholderTokenHash = await hashOpaqueToken(generateOpaqueToken());
   const result = await repositories(deps.db, ctx).invitations.create({ ...input, placeholderTokenHash, ttlMs: INVITATION_TTL_MS });
   if (result.outcome === 'forbidden') throw forbidden();
-  if (result.outcome === 'already_member') throw new AppError(409, 'already_member', 'This person is already a member');
+  if (result.outcome === 'already_member') throw new AppError(409, 'already_member', 'This person is already a member, or was removed. Reactivate them instead.');
   await deps.emailJobs.send(invitationEmailJob(ctx.workspaceId, result.invitation.id));
   return { ...result.invitation, role: input.role, expiresAt: toIso(result.invitation.expiresAt) };
 }

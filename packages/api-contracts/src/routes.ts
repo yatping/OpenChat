@@ -75,6 +75,7 @@ export const MeSchema = z
     id: z.string(),
     email: z.string(),
     name: z.string(),
+    isInstallationAdmin: z.boolean(),
     memberships: z.array(z.object({ memberId: z.string(), role: RoleSchema, workspace: WorkspaceSchema })),
   })
   .openapi('Me');
@@ -168,25 +169,13 @@ export const getMeRoute = createRoute({
   responses: { 200: { description: 'Current user', ...json(MeSchema) }, default: problemResponse },
 });
 
-export const deleteMeRoute = createRoute({
-  method: 'post',
-  path: '/api/v1/me/delete',
-  tags: ['auth'],
-  operationId: 'deleteMe',
-  summary: 'Anonymise the account and leave all workspaces. Needs the password. Refused for the last owner of a workspace.',
-  description: 'A POST, because the password travels in the body and a DELETE body has no defined meaning. A wrong password answers 403, not 401, since the access token is valid and a client must not refresh and retry. Attempts share the login limit for the account.',
-  security: bearer,
-  request: { body: { required: true, ...json(z.strictObject({ password: z.string().min(1).max(1024) })) } },
-  responses: { 204: { description: 'Deleted' }, default: problemResponse },
-});
-
 // ---------- Workspaces ----------
 
 const workspaceParams = z.object({ workspaceId: z.string() });
 const memberParams = workspaceParams.extend({ memberId: z.string() });
 const websiteParams = workspaceParams.extend({ websiteId: z.string() });
 
-export const MemberStatusSchema = z.enum(['active', 'suspended']);
+export const MemberStatusSchema = z.enum(['active', 'suspended', 'removed']);
 export const MemberSchema = z
   .object({ id: z.string(), name: z.string(), email: z.string(), role: RoleSchema, status: MemberStatusSchema })
   .openapi('Member');
@@ -240,7 +229,7 @@ export const updateMemberRoute = createRoute({
   path: '/api/v1/workspaces/{workspaceId}/members/{memberId}',
   tags: ['workspaces'],
   operationId: 'updateMember',
-  summary: 'Change a role or status. A workspace must keep one active owner.',
+  summary: 'Change a role or status. Setting active also brings back a removed member. A workspace must keep one active owner.',
   security: bearer,
   request: {
     params: memberParams,
@@ -248,7 +237,7 @@ export const updateMemberRoute = createRoute({
       required: true,
       ...json(
         z
-          .strictObject({ role: RoleSchema.optional(), status: MemberStatusSchema.optional() })
+          .strictObject({ role: RoleSchema.optional(), status: z.enum(['active', 'suspended']).optional() })
           .refine((v) => v.role !== undefined || v.status !== undefined, 'Change a role or a status'),
       ),
     },
@@ -261,7 +250,7 @@ export const removeMemberRoute = createRoute({
   path: '/api/v1/workspaces/{workspaceId}/members/{memberId}',
   tags: ['workspaces'],
   operationId: 'removeMember',
-  summary: 'Remove a member and their push subscriptions',
+  summary: 'Remove a member and their push subscriptions. Their messages keep their name, and the member can be brought back.',
   security: bearer,
   request: { params: memberParams },
   responses: { 204: { description: 'Removed' }, default: problemResponse },
@@ -410,7 +399,7 @@ export const MessageSchema = z
     seq: z.number().int(),
     publicSeq: z.number().int().nullable().openapi({ description: 'Null for internal notes.' }),
     clientMessageId: z.string().nullable(),
-    sender: z.object({ type: z.enum(['visitor', 'member', 'system']), id: z.string().nullable(), displayName: z.string().nullable() }),
+    sender: z.object({ type: z.enum(['visitor', 'member', 'system']), id: z.string().nullable(), displayName: z.string().nullable(), removed: z.boolean().optional() }),
     type: z.enum(['text', 'image', 'file', 'system', 'internal_note']),
     visibility: z.enum(['public', 'internal']),
     content: z.string(),
@@ -868,4 +857,104 @@ export const downloadVisitorAttachmentRoute = createRoute({
   security: visitor,
   request: { params: z.object({ attachmentId: z.string() }) },
   responses: { 200: BinaryFile, default: problemResponse },
+});
+
+// ---------- Installation admin ----------
+
+const personParams = z.object({ userId: z.string() });
+const personWorkspaceParams = personParams.extend({ workspaceId: z.string() });
+
+export const PersonSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    email: z.string(),
+    isInstallationAdmin: z.boolean(),
+    deactivated: z.boolean(),
+    memberships: z.array(z.object({ memberId: z.string(), workspaceId: z.string(), workspaceName: z.string(), role: RoleSchema, status: MemberStatusSchema })),
+  })
+  .openapi('Person');
+
+export const AdminWorkspaceSchema = z.object({ id: z.string(), name: z.string() }).openapi('AdminWorkspace');
+
+const adminRoute = { tags: ['admin'], security: bearer };
+
+export const listPeopleRoute = createRoute({
+  ...adminRoute,
+  method: 'get',
+  path: '/api/v1/admin/people',
+  operationId: 'listPeople',
+  summary: 'List every account on the installation. Anyone but an installation admin gets 404.',
+  request: { query: PaginationQuery },
+  responses: { 200: { description: 'People', ...json(page(PersonSchema)) }, default: problemResponse },
+});
+
+export const createPersonRoute = createRoute({
+  ...adminRoute,
+  method: 'post',
+  path: '/api/v1/admin/people',
+  operationId: 'createPerson',
+  summary: 'Create an account and email a link that lasts seven days to choose a password. 409 if the address has an account.',
+  request: { body: { required: true, ...json(z.strictObject({ name: SafeName, email: Email })) } },
+  responses: { 201: { description: 'Created', ...json(PersonSchema) }, default: problemResponse },
+});
+
+export const updatePersonRoute = createRoute({
+  ...adminRoute,
+  method: 'patch',
+  path: '/api/v1/admin/people/{userId}',
+  operationId: 'updatePerson',
+  summary: 'Grant or take away installation admin. The installation must keep one active admin.',
+  request: { params: personParams, body: { required: true, ...json(z.strictObject({ isInstallationAdmin: z.boolean() })) } },
+  responses: { 200: { description: 'Updated', ...json(PersonSchema) }, default: problemResponse },
+});
+
+export const deactivatePersonRoute = createRoute({
+  ...adminRoute,
+  method: 'post',
+  path: '/api/v1/admin/people/{userId}/deactivate',
+  operationId: 'deactivatePerson',
+  summary: 'End all access, keeping the account and its memberships. Refused for yourself, and for the only owner of a workspace.',
+  request: { params: personParams },
+  responses: { 200: { description: 'Deactivated', ...json(PersonSchema) }, default: problemResponse },
+});
+
+export const reactivatePersonRoute = createRoute({
+  ...adminRoute,
+  method: 'post',
+  path: '/api/v1/admin/people/{userId}/reactivate',
+  operationId: 'reactivatePerson',
+  summary: 'Restore a deactivated account, with its password and memberships as they were.',
+  request: { params: personParams },
+  responses: { 200: { description: 'Reactivated', ...json(PersonSchema) }, default: problemResponse },
+});
+
+export const assignPersonRoute = createRoute({
+  ...adminRoute,
+  method: 'put',
+  path: '/api/v1/admin/people/{userId}/workspaces/{workspaceId}',
+  operationId: 'assignPerson',
+  summary: 'Put someone in a workspace with a role, or change their role there. Brings back a removed member. Needs no invitation.',
+  request: { params: personWorkspaceParams, body: { required: true, ...json(z.strictObject({ role: RoleSchema })) } },
+  responses: { 200: { description: 'Assigned', ...json(PersonSchema) }, default: problemResponse },
+});
+
+export const unassignPersonRoute = createRoute({
+  ...adminRoute,
+  method: 'delete',
+  path: '/api/v1/admin/people/{userId}/workspaces/{workspaceId}',
+  operationId: 'unassignPerson',
+  summary: 'Remove someone from a workspace. Their messages keep their name. A workspace must keep one active owner.',
+  request: { params: personWorkspaceParams },
+  responses: { 200: { description: 'Removed', ...json(PersonSchema) }, default: problemResponse },
+});
+
+export const listAdminWorkspacesRoute = createRoute({
+  ...adminRoute,
+  method: 'get',
+  path: '/api/v1/admin/workspaces',
+  operationId: 'listAdminWorkspaces',
+  summary: 'List every workspace by name, to assign people to. Gives no access to what is inside.',
+  request: { query: PaginationQuery },
+  responses: { 200: { description: 'Workspaces', ...json(page(AdminWorkspaceSchema)) }, default: problemResponse },
 });

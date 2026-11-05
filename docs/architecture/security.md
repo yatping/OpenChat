@@ -46,17 +46,19 @@ Every request verifies, in order: identity, membership, permission, resource own
 | Invite and remove members | Yes | Yes (not owners) | No | No |
 | Security settings, workspace deletion, transfer ownership | Yes | No | No | No |
 
+**Installation admin** is a separate flag on the account, not a workspace role. It manages accounts and assigns them to workspaces, and gives no read access to a workspace without a membership ([ADR-0015](decisions/0015-installation-admin-and-reversible-removal.md)).
+
 `packages/auth` holds this as pure data and functions, with a table-driven test. It gives an early 403. Member changes are also decided in SQL at commit: the last-owner rule, and the current roles of both the actor and the target, so a role changed mid-request counts.
 
 ## Workspaces and invitations
 
 | Item | Decision |
 |---|---|
-| Creating a workspace | On `invite_only`, only someone who already owns a workspace. On `open`, any signed-in user. The first owner comes from the CLI. |
+| Creating a workspace | On `invite_only`, only an installation admin, or someone who already owns a workspace. On `open`, any signed-in user. The first owner comes from the CLI. |
 | Invitation token | Created as the email is sent, so no token reaches a queue, and stored as SHA-256. A duplicate job delivery replaces the token, so the newest email holds the working link. Lasts 7 days. |
 | Accepting | Holding the token proves control of the address, so the account is marked verified. An existing account joins without a password, and its name and password are never changed. |
 | Invitation limit | 30 per workspace per hour, because each one sends an email to any address. |
-| Deleting an account | Anonymised, not deleted, because messages keep their authors. Needs the password again, because it can't be undone and an access token can be stolen. A wrong password answers 403, so that clients do not refresh and retry, and attempts share the login limits. Refused for the last active owner of a workspace. |
+| Removing and deactivating | Nobody can delete an account. Removing a member, or deactivating an account, ends access and can be undone, and the person's messages keep their name ([ADR-0015](decisions/0015-installation-admin-and-reversible-removal.md)). |
 | Allowed origins | Exact origins only: no wildcards or paths, and plain HTTP only on the local machine. |
 
 ## Visitor authentication
@@ -137,6 +139,7 @@ The shared logger takes a typed field allowlist, so sensitive data has to be del
 Customers are the controllers of visitor data. For GDPR and similar laws, the product needs:
 
 - Export and erase-contact operations (Milestone 4, with the chunked job).
+- A way to erase a former agent's name on request. Removal keeps it, and no tool for this exists yet.
 - Consent evidence for follow-ups.
 - A widget consent mode which uses session-only storage until the host site grants consent. Built.
 - Retention settings (Milestone 6).

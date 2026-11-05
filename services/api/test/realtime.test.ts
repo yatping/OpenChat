@@ -361,12 +361,14 @@ describe('losing access', () => {
 });
 
 describe('losing an account', () => {
-  it('closes its sockets within a sweep, because the outbox row is part of the deletion', async () => {
+  it('closes its sockets within a sweep, because the outbox row is part of deactivating', async () => {
     const { accessToken } = await json<{ accessToken: string }>(await call('POST', '/api/v1/auth/login', { body: { email: 'peer@example.com', password: PASSWORD, clientType: 'mobile' } }));
     const ticket = await json<{ url: string }>(await call('POST', `${W}/realtime/tickets`, { token: accessToken }));
     const peer = await connect(ticket.url);
     await peer.next('hello');
-    expect((await call('POST', '/api/v1/me/delete', { token: accessToken, body: { password: PASSWORD } })).status).toBe(204);
+    await env.DB.prepare(`UPDATE users SET is_installation_admin = 1 WHERE email = 'agent@example.com'`).run();
+    const peerId = await env.DB.prepare(`SELECT id FROM users WHERE email = 'peer@example.com'`).first<string>('id');
+    expect((await call('POST', `/api/v1/admin/people/${peerId}/deactivate`, { token: agent })).status).toBe(200);
     await env.DB.prepare(`UPDATE outbox SET created_at = created_at - 120000 WHERE topic = 'member.access_changed'`).run();
     await handleScheduled({ scheduledTime: Date.now() } as ScheduledController, testEnv);
     expect(await peer.closed()).toBe(4403);

@@ -6,6 +6,7 @@ import { newId } from '@openchat/shared';
 import type { Role, WorkspaceContext } from './context';
 import type { WorkspaceRow } from './workspace-repository';
 import { DB_NOW_MS, rawHandle, type Database } from './internal/handle';
+import { accessChangedStatement, removeMembershipStatements } from './internal/member-statements';
 import { ATTACHMENTS_JSON, messageStatements } from './internal/message-statements';
 
 export interface WebsiteRow {
@@ -21,7 +22,7 @@ export interface MemberRow {
   name: string;
   email: string;
   role: Role;
-  status: 'active' | 'suspended';
+  status: 'active' | 'suspended' | 'removed';
 }
 
 export type MemberChange = { outcome: 'done' } | { outcome: 'not_found' } | { outcome: 'forbidden' } | { outcome: 'last_owner' };
@@ -39,7 +40,7 @@ const toWebsite = ({ originsJson, settingsJson, ...row }: RawWebsite): WebsiteRo
   settings: settingsJson ? (JSON.parse(settingsJson) as Record<string, unknown>) : {},
 });
 
-const MEMBER_SELECT = `SELECT m.id, u.name, u.email, m.role, m.status FROM workspace_members m JOIN users u ON u.id = m.user_id`;
+const MEMBER_SELECT = `SELECT m.id, u.name, u.email, m.role, CASE WHEN m.removed_at IS NOT NULL THEN 'removed' ELSE m.status END AS status FROM workspace_members m JOIN users u ON u.id = m.user_id`;
 
 export type SendableType = 'text' | 'image' | 'file' | 'system' | 'internal_note';
 
@@ -70,6 +71,8 @@ export interface StoredMessage {
   createdAt: number;
   /** The member's or contact's current name. Null if there is none, or the member has since left. */
   senderName: string | null;
+  /** The author was removed from the workspace, or their account was deactivated. Agents only. */
+  senderRemoved: number | null;
 }
 
 export interface NewAttachment {
@@ -161,7 +164,8 @@ export type AssignResult =
 /** Names come by primary key, so that this stays cheap on the hot path. Agents only: it includes internal notes. */
 export const MESSAGE_SELECT = `SELECT m.id, m.workspace_id AS workspaceId, ${ATTACHMENTS_JSON} AS attachmentsJson, m.conversation_id AS conversationId, m.seq, m.public_seq AS publicSeq,
     m.client_message_id AS clientMessageId, m.sender_type AS senderType, m.sender_id AS senderId,
-    m.message_type AS type, m.visibility, m.content, m.created_at AS createdAt, COALESCE(u.name, ct.name) AS senderName
+    m.message_type AS type, m.visibility, m.content, m.created_at AS createdAt, COALESCE(u.name, ct.name) AS senderName,
+    (sm.removed_at IS NOT NULL OR u.disabled_at IS NOT NULL) AS senderRemoved
   FROM messages m
   LEFT JOIN workspace_members sm ON m.sender_type = 'member' AND sm.workspace_id = m.workspace_id AND sm.id = m.sender_id
   LEFT JOIN users u ON u.id = sm.user_id
@@ -200,8 +204,8 @@ export function repositories(database: Database, ctx: WorkspaceContext) {
              WHERE a.workspace_id = t.workspace_id AND a.id = ?8 AND a.status = 'active'
                AND (a.role = 'owner' OR (a.role = 'admin' AND t.role <> 'owner' AND COALESCE(?6, '') <> 'owner')))
     AND (t.role <> 'owner' OR t.status <> 'active' OR ?7 = 0
-         OR EXISTS (SELECT 1 FROM workspace_members o
-                     WHERE o.workspace_id = t.workspace_id AND o.id <> t.id AND o.role = 'owner' AND o.status = 'active'))`;
+         OR EXISTS (SELECT 1 FROM workspace_members o JOIN users ou ON ou.id = o.user_id
+                     WHERE o.workspace_id = t.workspace_id AND o.id <> t.id AND o.role = 'owner' AND o.status = 'active' AND ou.disabled_at IS NULL))`;
 
   /** Explains a refused change. The batch has already decided, so this only chooses the message. */
   const explainRefusal = async (memberId: string): Promise<MemberChange> => {
@@ -220,14 +224,7 @@ export function repositories(database: Database, ctx: WorkspaceContext) {
       )
       .bind(auditId, action, metadata, w, memberId, role, removesOwner ? 1 : 0, ctx.memberId);
 
-  /** So that the member's sockets close even if the isolate dies right after the commit. */
-  const accessChanged = (memberId: string, audit: string) =>
-    d1
-      .prepare(
-        `INSERT INTO outbox (id, workspace_id, topic, aggregate_id, payload_json, created_at)
-         SELECT ?1, ?2, 'member.access_changed', ?3, json_object('memberId', ?3), ${DB_NOW_MS} WHERE EXISTS (SELECT 1 FROM audit_log WHERE id = ?4)`,
-      )
-      .bind(newId('outbox'), w, memberId, audit);
+  const accessChanged = (memberId: string, audit: string) => accessChangedStatement(d1, w, memberId, audit);
 
   return {
     contacts: {
@@ -308,7 +305,8 @@ export function repositories(database: Database, ctx: WorkspaceContext) {
           auditMemberChange(audit, 'member.updated', memberId, role, removesOwner, metadata),
           d1
             .prepare(
-              `UPDATE workspace_members SET role = COALESCE(?1, role), status = COALESCE(?2, status), updated_at = ${DB_NOW_MS}
+              `UPDATE workspace_members SET role = COALESCE(?1, role), status = COALESCE(?2, status),
+                      removed_at = CASE WHEN ?2 = 'active' THEN NULL ELSE removed_at END, updated_at = ${DB_NOW_MS}
                 WHERE workspace_id = ?3 AND id = ?4 AND EXISTS (SELECT 1 FROM audit_log WHERE id = ?5)`,
             )
             .bind(role, status, w, memberId, audit),
@@ -318,18 +316,9 @@ export function repositories(database: Database, ctx: WorkspaceContext) {
       },
       async remove(memberId: string): Promise<MemberChange> {
         const audit = newId('audit');
-        const guard = `EXISTS (SELECT 1 FROM audit_log WHERE id = ?3)`;
         const [allowed] = await d1.batch([
           auditMemberChange(audit, 'member.removed', memberId, null, true, '{}'),
-          // Assignment has no cascade, so these must be released first or the delete fails.
-          d1
-            .prepare(
-              `UPDATE conversations SET assigned_member_id = NULL, version = version + 1, updated_at = ${DB_NOW_MS}
-                WHERE workspace_id = ?1 AND assigned_member_id = ?2 AND ${guard}`,
-            )
-            .bind(w, memberId, audit),
-          d1.prepare(`DELETE FROM workspace_members WHERE workspace_id = ?1 AND id = ?2 AND ${guard}`).bind(w, memberId, audit),
-          accessChanged(memberId, audit),
+          ...removeMembershipStatements(d1, w, memberId, audit),
         ]);
         return allowed?.meta.changes === 1 ? { outcome: 'done' } : explainRefusal(memberId);
       },

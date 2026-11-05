@@ -8,6 +8,7 @@ import { registerAuthRoutes } from './routes/auth';
 import { registerConversationRoutes } from './routes/conversations';
 import { registerRealtimeRoutes } from './routes/realtime';
 import { registerWidgetRoutes } from './routes/widget';
+import { registerAdminRoutes } from './routes/admin';
 import { registerWorkspaceRoutes } from './routes/workspaces';
 
 const OVERLOAD_RETRY_SECONDS = 2;
@@ -96,6 +97,7 @@ export function createApp() {
 
   registerAuthRoutes(app);
   registerWorkspaceRoutes(app);
+  registerAdminRoutes(app);
   registerConversationRoutes(app);
   registerWidgetRoutes(app);
   registerRealtimeRoutes(app);

@@ -133,7 +133,7 @@ Spike results are in [Phase 0 spike results](#phase-0-spike-results).
 | Foreground notifications | Shown by default from SDK 58 | Documented |
 | Guideline 2.1(a) | Live backend and demo account required for review | Documented |
 | Guideline 4.2.6 | Single-binary "picker" model is allowed; template services submitting for clients are not | Documented |
-| Guideline 5.1.1(v) | Apps that support account creation must offer in-app deletion | Documented |
+| Guideline 5.1.1(v) | Apps that support account creation must offer in-app deletion. Ours has no signup and no deletion ([ADR-0015](decisions/0015-installation-admin-and-reversible-removal.md)), and the exemption is not confirmed | Documented |
 
 ## Phase 0 spike results
 

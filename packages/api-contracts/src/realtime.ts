@@ -35,7 +35,7 @@ export const WireMessageSchema = z.object({
   /** Null for internal notes. */
   publicSeq: z.number().int().nullable(),
   clientMessageId: z.string().nullable(),
-  sender: z.object({ type: z.enum(['visitor', 'member', 'system']), id: z.string().nullable(), displayName: z.string().nullable() }),
+  sender: z.object({ type: z.enum(['visitor', 'member', 'system']), id: z.string().nullable(), displayName: z.string().nullable(), removed: z.boolean().optional() }),
   type: MessageTypeSchema,
   visibility: z.enum(['public', 'internal']),
   content: z.string(),

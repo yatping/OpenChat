@@ -2,7 +2,7 @@
  * Queue consumers and cron. Phase 0 proves the pipeline end to end with one job. Rules are in
  * docs/architecture/background-jobs.md: acknowledge per message, classify errors, check notAfter.
  */
-import { INVITATION_EMAIL_JOB, PASSWORD_RESET_JOB, sendInvitationEmail, sendPasswordResetEmail } from '@openchat/core';
+import { INVITATION_EMAIL_JOB, NEW_ACCOUNT_EMAIL_JOB, PASSWORD_RESET_JOB, sendInvitationEmail, sendNewAccountEmail, sendPasswordResetEmail } from '@openchat/core';
 import { claimJob, getInstallation, openDatabase, recordFailedJob } from '@openchat/database';
 import { CloudflareEmailProvider, ConsoleEmailProvider, EmailSendError, ResendEmailProvider, type EmailProvider } from '@openchat/email';
 import { AppError, createLogger, newId, retryDelaySeconds, type JobEnvelope } from '@openchat/shared';
@@ -63,6 +63,9 @@ const HANDLERS: Record<string, Handler> = {
   },
   [PASSWORD_RESET_JOB]: async (job, env, deps) => {
     await sendPasswordResetEmail(await systemEmailDeps(env, deps), (job.payload as { userId: string }).userId);
+  },
+  [NEW_ACCOUNT_EMAIL_JOB]: async (job, env, deps) => {
+    await sendNewAccountEmail(await systemEmailDeps(env, deps), (job.payload as { userId: string }).userId);
   },
   [INVITATION_EMAIL_JOB]: async (job, env, deps) => {
     await sendInvitationEmail(await systemEmailDeps(env, deps), { workspaceId: job.workspaceId ?? '', invitationId: (job.payload as { invitationId: string }).invitationId });

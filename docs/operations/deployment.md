@@ -79,6 +79,8 @@ TURNSTILE_SECRET_KEY=... pnpm oc deploy --env acme --turnstile-site-key <site ke
 
 Metrics are optional: enable Analytics Engine once in the Cloudflare dashboard, then add `--analytics`. To use your own domain, attach it to the Worker, then pass `--public-url https://chat.example.com`, because links in emails are built from that URL.
 
+**The first installation admin** is the owner set up here. They manage people from then on ([ADR-0015](../architecture/decisions/0015-installation-admin-and-reversible-removal.md)). Upgrading an existing installation makes its first active owner the admin.
+
 **Without email, or locked out:** `pnpm oc recover --env acme --email you@example.com` prints a one-hour reset link. Using it signs the account out everywhere. It works because holding Cloudflare access already means holding the database.
 
 Delivered in basic form in Milestone 1, and polished in Milestone 5. Each step is recorded in `.openchat/<env>/state.json` as it finishes, so a failed run can be resumed by running it again. Keep that directory, because a deployment refuses to adopt a resource name it has no record of creating. Steps marked *(M5)* below do not exist yet.
