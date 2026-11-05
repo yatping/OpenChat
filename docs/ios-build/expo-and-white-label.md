@@ -80,7 +80,7 @@ Acceptance: "switching workspaces never leaks conversation data". This relies on
 
 ```text
 ConnectionManager
-  └── Connection (installationId + userId), keyed by a local connection ID
+  └── Connection (installationId + userId), one on a device (ADR-0014), keyed by a local connection ID
         ├── Tokens           expo-secure-store, key prefix conn.<id>.
         ├── ApiClient        bound to one base URL and token source. There is no global client.
         ├── QueryClient      one per Connection and workspace. Never shared.
@@ -88,11 +88,11 @@ ConnectionManager
         └── Socket           open only for the active Connection in the foreground
 ```
 
-- Switching connection or workspace replaces the top-level provider with a new `key`, unmounting the screens, query client, socket, and navigator together, so no state survives ([ADR-0013](../architecture/decisions/0013-react-navigation-not-expo-router.md)).
+- Switching workspace or signing in to another installation replaces the top-level provider with a new `key`, unmounting the screens, query client, socket, and navigator together, so no state survives ([ADR-0013](../architecture/decisions/0013-react-navigation-not-expo-router.md)).
 - Deep links name their target explicitly, and never use "current workspace".
-- A test uses two fake installations with **identical IDs** and asserts that nothing crosses between them.
+- Signing in to another installation replaces the Connection and wipes what it held. A test does this with two fake installations with **identical IDs**.
 - A Connection is known by a local ID, because installations choose their own IDs and can collide.
-- The list of connections is not secret and lives in app storage. Message data is held in memory, so there is no offline cache yet.
+- The connection record is not secret and lives in app storage. Message data is held in memory, so there is no offline cache yet.
 - A simulator build must be signed, even ad hoc (`CODE_SIGN_IDENTITY=-`). Without a signature the keychain refuses every write, and sign-in fails.
 
 ## Files
@@ -109,10 +109,10 @@ Files move as bytes through `expo/fetch`, because React Native's own `fetch` han
 
 ```text
 Tap -> read oc.installationId, oc.workspaceId, oc.conversationId from the payload
-  -> find Connection by installationId
-      none: stale subscription. Show a message and unregister.
+  -> compare oc.installationId with the Connection's
+      different or none: stale subscription. Show a message and unregister.
   -> session expired: sign in, retaining the destination
-  -> switch Connection and workspace
+  -> switch workspace
   -> fetch the conversation from the installation
       404 problem response (access removed): show a message and return to the inbox
       any other 404 (the platform's HTML page): retry, since access may be fine

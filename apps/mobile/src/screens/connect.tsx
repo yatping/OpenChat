@@ -14,7 +14,7 @@ const MESSAGES = {
   not_openchat: 'That address did not answer as an OpenChat installation.',
 };
 
-export function ConnectScreen({ onFound, onCancel }: { onFound: (found: Found) => void; onCancel?: () => void }) {
+export function ConnectScreen({ onFound }: { onFound: (found: Found) => void }) {
   const [address, setAddress] = useState('');
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<keyof typeof MESSAGES | null>(null);
@@ -42,7 +42,6 @@ export function ConnectScreen({ onFound, onCancel }: { onFound: (found: Found) =
       {problem && <Problem>{MESSAGES[problem]}</Problem>}
       {outOfRange && <UpgradeMessage name={outOfRange.name} compatibility={outOfRange.compatibility} />}
       <Button title="Continue" busy={busy} onPress={() => void submit()} />
-      {onCancel && <Button title="Cancel" kind="plain" onPress={onCancel} />}
     </Screen>
   );
 }

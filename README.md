@@ -1,7 +1,7 @@
 # OpenChat
 
 An open-source, self-hostable customer messaging platform that runs entirely in your own Cloudflare account:
-a website chat widget, a team inbox, a multi-installation iOS app, and email follow-ups.
+a website chat widget, a team inbox, an iOS app, and email follow-ups.
 
 **Status: early development. Accounts, workspaces, one-command deployment, a team inbox, and a website widget work, with real-time messaging and file attachments between them. Load tested and reviewed, with [limits listed](docs/plan/milestones.md#m1b-exit-check). The iOS app, push, and email follow-ups do not exist yet.**
 
