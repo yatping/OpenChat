@@ -80,7 +80,8 @@ export function createApp() {
         api: { versions: ['v1'], minor: API_MINOR_VERSION },
         realtime: { protocolVersions: [REALTIME_PROTOCOL_VERSION] },
         relay: null,
-        auth: { signup: installation.signupPolicy },
+        // Accounts come only from an installation admin. See ADR-0016.
+        auth: { signup: 'invite_only' as const },
       },
       200,
     );

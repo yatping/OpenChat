@@ -46,7 +46,7 @@ beforeEach(async () => {
     env.DB.prepare(`INSERT INTO installation (id, name, public_base_url, created_at, updated_at) VALUES ('inst_test', 'Test', '${ORIGIN}', 1, 1)`),
     env.DB.prepare(`INSERT INTO workspaces (id, name, slug, created_at, updated_at) VALUES ('work_1', 'One', 'one', 1, 1), ('work_2', 'Two', 'two', 1, 1)`),
     env.DB.prepare(`INSERT INTO users (id, email, name, password_hash, created_at, updated_at) VALUES ('user_o', 'owner@example.com', 'Owner', ?1, 1, 1), ('user_a', 'agent@example.com', 'Agent', ?1, 1, 1)`).bind(hash),
-    env.DB.prepare(`INSERT INTO workspace_members (id, workspace_id, user_id, role, status, created_at, updated_at) VALUES ('mem_o', 'work_1', 'user_o', 'owner', 'active', 1, 1), ('mem_a', 'work_1', 'user_a', 'agent', 'active', 1, 1)`),
+    env.DB.prepare(`INSERT INTO workspace_members (id, workspace_id, user_id, role, status, created_at, updated_at) VALUES ('mem_o', 'work_1', 'user_o', 'supervisor', 'active', 1, 1), ('mem_a', 'work_1', 'user_a', 'agent', 'active', 1, 1)`),
     env.DB.prepare(`INSERT INTO websites (id, workspace_id, name, website_key, created_at, updated_at) VALUES ('site_1', 'work_1', 'Shop', 'key_1', 1, 1)`),
     env.DB.prepare(`INSERT INTO contacts (id, workspace_id, name, email, phone, first_seen_at, last_seen_at, created_at, updated_at) VALUES ('cont_1', 'work_1', 'Ann', 'ann@example.com', '123', 1000, 2000, 1, 1)`),
     env.DB.prepare(`INSERT INTO conversations (id, workspace_id, website_id, contact_id, last_message_at, created_at, updated_at) VALUES ('conv_1', 'work_1', 'site_1', 'cont_1', 1, 1, 1)`),

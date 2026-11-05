@@ -80,7 +80,7 @@ beforeEach(async () => {
     env.DB.prepare(`INSERT INTO installation (id, name, public_base_url, created_at, updated_at) VALUES ('inst_test', 'Test', '${ORIGIN}', 1, 1)`),
     env.DB.prepare(`INSERT INTO workspaces (id, name, slug, created_at, updated_at) VALUES ('work_1', 'One', 'one', 1, 1)`),
     env.DB.prepare(`INSERT INTO users (id, email, name, password_hash, created_at, updated_at) VALUES ('user_a', 'agent@example.com', 'Ana Agent', ?1, 1, 1)`).bind(hash),
-    env.DB.prepare(`INSERT INTO workspace_members (id, workspace_id, user_id, role, status, created_at, updated_at) VALUES ('mem_a', 'work_1', 'user_a', 'owner', 'active', 1, 1)`),
+    env.DB.prepare(`INSERT INTO workspace_members (id, workspace_id, user_id, role, status, created_at, updated_at) VALUES ('mem_a', 'work_1', 'user_a', 'supervisor', 'active', 1, 1)`),
     env.DB.prepare(`INSERT INTO websites (id, workspace_id, name, website_key, allowed_origins_json, settings_json, created_at, updated_at) VALUES ('site_1', 'work_1', 'Shop', 'key_shop', ?1, '{"welcomeMessage":"Hi"}', 1, 1)`).bind(JSON.stringify([SITE])),
     env.DB.prepare(`INSERT INTO websites (id, workspace_id, name, website_key, allowed_origins_json, created_at, updated_at) VALUES ('site_2', 'work_1', 'Blog', 'key_blog', ?1, 1, 1)`).bind(JSON.stringify(['https://blog.example'])),
   ]);

@@ -5,6 +5,7 @@
  */
 import { newId } from '@openchat/shared';
 import type { Role } from './context';
+import { effectiveRole } from './internal/roles';
 import { DB_NOW_MS, rawHandle, type Database } from './internal/handle';
 
 export type ClientType = 'dashboard' | 'mobile';
@@ -153,7 +154,7 @@ export interface MembershipRow {
 export async function listMemberships(database: Database, userId: string): Promise<MembershipRow[]> {
   const { results } = await rawHandle(database)
     .prepare(
-      `SELECT m.id AS memberId, m.role AS role, w.id AS workspaceId, w.name AS workspaceName, w.slug AS workspaceSlug, w.created_at AS workspaceCreatedAt
+      `SELECT m.id AS memberId, ${effectiveRole('m')} AS role, w.id AS workspaceId, w.name AS workspaceName, w.slug AS workspaceSlug, w.created_at AS workspaceCreatedAt
          FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
         WHERE m.user_id = ?1 AND m.status = 'active' ORDER BY w.created_at, w.id`,
     )

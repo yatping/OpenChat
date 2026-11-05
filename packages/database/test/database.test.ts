@@ -18,7 +18,7 @@ async function seed() {
       `DELETE FROM outbox`,
       `INSERT OR IGNORE INTO users (id,email,name,password_hash,created_at,updated_at) VALUES ('u1','one@x.test','One','!',1,1),('u2','two@x.test','Two','!',1,1),('u3','off@x.test','Off','!',1,1)`,
       `INSERT OR IGNORE INTO workspaces (id,name,slug,created_at,updated_at) VALUES ('w1','A','a',1,1),('w2','B','b',1,1)`,
-      `INSERT OR IGNORE INTO workspace_members (id,workspace_id,user_id,role,created_at,updated_at) VALUES ('m1','w1','u1','owner',1,1),('m2','w2','u2','owner',1,1)`,
+      `INSERT OR IGNORE INTO workspace_members (id,workspace_id,user_id,role,created_at,updated_at) VALUES ('m1','w1','u1','supervisor',1,1),('m2','w2','u2','supervisor',1,1)`,
       `INSERT OR IGNORE INTO workspace_members (id,workspace_id,user_id,role,status,created_at,updated_at) VALUES ('m3','w1','u3','agent','suspended',1,1)`,
       `INSERT OR IGNORE INTO websites (id,workspace_id,name,website_key,created_at,updated_at) VALUES ('s1','w1','s','k1',1,1),('s2','w2','s','k2',1,1)`,
       `INSERT OR IGNORE INTO contacts (id,workspace_id,first_seen_at,last_seen_at,created_at,updated_at) VALUES ('p1','w1',1,1,1,1),('p2','w2',1,1,1,1)`,
@@ -89,7 +89,7 @@ describe('internal notes enforced by the schema', () => {
 
 describe('authorisation', () => {
   it('builds a context for an active member', async () => {
-    expect(await contextFor('u1', 'w1')).toMatchObject({ workspaceId: 'w1', memberId: 'm1', role: 'owner' });
+    expect(await contextFor('u1', 'w1')).toMatchObject({ workspaceId: 'w1', memberId: 'm1', role: 'supervisor' });
   });
   it('returns null across tenants', async () => expect(await authorizeWorkspaceMember(db, 'u1', 'w2')).toBeNull());
   it('returns null for a suspended member', async () => expect(await authorizeWorkspaceMember(db, 'u3', 'w1')).toBeNull());

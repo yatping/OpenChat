@@ -8,7 +8,6 @@ import type {
   createTagRoute,
   getContactRoute,
   updateContactRoute,
-  createInvitationRoute,
   createWebsiteRoute,
   createWorkspaceRoute,
   getDiscoveryRoute,
@@ -23,7 +22,6 @@ import type {
   sendMessageRoute,
   AttachmentSchema,
   updateConversationRoute,
-  updateMemberRoute,
   assignPersonRoute,
   createPersonRoute,
   listAdminWorkspacesRoute,
@@ -48,14 +46,11 @@ export type Member = MemberPage['data'][number];
 export type Website = Json200<typeof listWebsitesRoute>['data'][number];
 export type WebsiteInput = BodyOf<typeof createWebsiteRoute>;
 export type WebsiteUpdate = BodyOf<typeof updateWebsiteRoute>;
-export type MemberUpdate = BodyOf<typeof updateMemberRoute>;
 export type Person = Json201<typeof createPersonRoute>;
 export type PersonInput = BodyOf<typeof createPersonRoute>;
 export type PersonAssignment = BodyOf<typeof assignPersonRoute>;
 export type People = Json200<typeof listPeopleRoute>;
 export type AdminWorkspaces = Json200<typeof listAdminWorkspacesRoute>;
-export type InvitationInput = BodyOf<typeof createInvitationRoute>;
-export type Invitation = Json201<typeof createInvitationRoute>;
 export type LoginInput = BodyOf<typeof loginRoute>;
 export type CreatedWorkspace = Json201<typeof createWorkspaceRoute>;
 export type Conversation = Json200<typeof getConversationRoute>;
@@ -130,6 +125,7 @@ export function createClient(options: ClientOptions) {
   const get = <T>(path: string) => request<T>('GET', path);
   const person = (id: string) => `/api/v1/admin/people/${encodeURIComponent(id)}`;
   const workspace = (id: string) => `/api/v1/workspaces/${encodeURIComponent(id)}`;
+  const adminWorkspace = (id: string) => `/api/v1/admin/workspaces/${encodeURIComponent(id)}`;
   const conversation = (workspaceId: string, id: string) => `${workspace(workspaceId)}/conversations/${encodeURIComponent(id)}`;
   const query = (values: Record<string, string | number | undefined>) => {
     // By hand, because React Native's URLSearchParams has no `size`, which would silently drop the query.
@@ -145,14 +141,9 @@ export function createClient(options: ClientOptions) {
     logout: () => request<void>('POST', '/api/v1/auth/logout'),
     requestPasswordReset: (email: string) => request<void>('POST', '/api/v1/auth/password-reset/request', { email }),
     confirmPasswordReset: (token: string, password: string) => request<void>('POST', '/api/v1/auth/password-reset/confirm', { token, password }),
-    acceptInvitation: (input: { token: string; name?: string; password?: string }) => request<{ workspaceId: string }>('POST', '/api/v1/invitations/accept', input),
     getMe: () => get<Me>('/api/v1/me'),
 
-    createWorkspace: (name: string) => request<CreatedWorkspace>('POST', '/api/v1/workspaces', { name }),
     listMembers: (workspaceId: string, cursor?: string) => get<MemberPage>(`${workspace(workspaceId)}/members?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`),
-    updateMember: (workspaceId: string, memberId: string, input: MemberUpdate) =>
-      request<Member>('PATCH', `${workspace(workspaceId)}/members/${encodeURIComponent(memberId)}`, input),
-    removeMember: (workspaceId: string, memberId: string) => request<void>('DELETE', `${workspace(workspaceId)}/members/${encodeURIComponent(memberId)}`),
     listPeople: (input: { cursor?: string; limit?: number } = {}) => get<People>(`/api/v1/admin/people${query(input)}`),
     createPerson: (input: PersonInput) => request<Person>('POST', '/api/v1/admin/people', input),
     updatePerson: (userId: string, input: { isInstallationAdmin: boolean }) => request<Person>('PATCH', person(userId), input),
@@ -161,11 +152,12 @@ export function createClient(options: ClientOptions) {
     assignPerson: (userId: string, workspaceId: string, input: PersonAssignment) => request<Person>('PUT', `${person(userId)}/workspaces/${encodeURIComponent(workspaceId)}`, input),
     unassignPerson: (userId: string, workspaceId: string) => request<Person>('DELETE', `${person(userId)}/workspaces/${encodeURIComponent(workspaceId)}`),
     listAdminWorkspaces: (input: { cursor?: string; limit?: number } = {}) => get<AdminWorkspaces>(`/api/v1/admin/workspaces${query(input)}`),
-    invite: (workspaceId: string, input: InvitationInput) => request<Invitation>('POST', `${workspace(workspaceId)}/invitations`, input),
+    createWorkspace: (name: string) => request<CreatedWorkspace>('POST', '/api/v1/admin/workspaces', { name }),
+    updateWorkspace: (workspaceId: string, input: { name: string }) => request<Workspace>('PATCH', adminWorkspace(workspaceId), input),
+    listAdminWebsites: (workspaceId: string) => get<{ data: Website[] }>(`${adminWorkspace(workspaceId)}/websites`),
+    createWebsite: (workspaceId: string, input: WebsiteInput) => request<Website>('POST', `${adminWorkspace(workspaceId)}/websites`, input),
+    updateWebsite: (workspaceId: string, websiteId: string, input: WebsiteUpdate) => request<Website>('PATCH', `${adminWorkspace(workspaceId)}/websites/${encodeURIComponent(websiteId)}`, input),
     listWebsites: (workspaceId: string) => get<{ data: Website[] }>(`${workspace(workspaceId)}/websites`),
-    createWebsite: (workspaceId: string, input: WebsiteInput) => request<Website>('POST', `${workspace(workspaceId)}/websites`, input),
-    updateWebsite: (workspaceId: string, websiteId: string, input: WebsiteUpdate) =>
-      request<Website>('PATCH', `${workspace(workspaceId)}/websites/${encodeURIComponent(websiteId)}`, input),
 
     listConversations: (workspaceId: string, input: { status: Conversation['status']; assignee?: string | undefined; cursor?: string | undefined }) =>
       get<ConversationPage>(`${workspace(workspaceId)}/conversations${query({ ...input, limit: 50 })}`),

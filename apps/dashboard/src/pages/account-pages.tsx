@@ -1,4 +1,3 @@
-import { ApiError } from '@openchat/api-client';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { api, errorMessage, session } from '../app-context';
 
@@ -132,59 +131,6 @@ export function ResetPasswordPage({ token }: { token: string | null }) {
           <button className="button w-full" disabled={busy}>Change password</button>
         </form>
       )}
-    </Frame>
-  );
-}
-
-export function AcceptInvitationPage({ token }: { token: string | null }) {
-  const [needsAccount, setNeedsAccount] = useState(false);
-  const [name, setName] = useState('');
-  const [password, setPassword] = useState('');
-  const [done, setDone] = useState(false);
-  const { busy, error, run } = useSubmit();
-
-  if (!token) {
-    return (
-      <Frame title="Join a workspace">
-        <p className="error" role="alert">This link is incomplete. Ask for a new invitation.</p>
-      </Frame>
-    );
-  }
-  if (done) {
-    return (
-      <Frame title="You have joined">
-        <p className="notice" role="status">You can now sign in to the workspace.</p>
-        <button className="button w-full" onClick={() => go('/')}>Sign in</button>
-      </Frame>
-    );
-  }
-  return (
-    <Frame title="Join a workspace">
-      <form
-        className="space-y-4"
-        onSubmit={run(async () => {
-          try {
-            await api.acceptInvitation(needsAccount ? { token, name, password } : { token });
-            setDone(true);
-          } catch (caught) {
-            // Only someone holding the emailed link can learn this, and they own the address.
-            if (caught instanceof ApiError && caught.code === 'account_details_required') setNeedsAccount(true);
-            else throw caught;
-          }
-        })}
-      >
-        {needsAccount ? (
-          <>
-            <p className="text-sm">Create your account to join.</p>
-            <Field label="Your name" value={name} onChange={setName} autoComplete="name" maxLength={100} />
-            <Field label="Password" type="password" value={password} onChange={setPassword} autoComplete="new-password" minLength={10} maxLength={1024} />
-          </>
-        ) : (
-          <p className="text-sm">Accept this invitation to join the workspace.</p>
-        )}
-        {error && <p className="error" role="alert">{error}</p>}
-        <button className="button w-full" disabled={busy}>{needsAccount ? 'Create account and join' : 'Accept invitation'}</button>
-      </form>
     </Frame>
   );
 }

@@ -48,8 +48,8 @@ The two share only `packages/notification-protocol`. Neither imports the other, 
 
 | Term | Meaning |
 |---|---|
-| **Installation** | One deployment of the Installation Worker, identified by `installationId` and an Ed25519 key pair. Multi-tenant. |
-| **Workspace** | A tenant inside an installation. Workspace IDs are unique only within an installation as far as other parties are concerned. |
+| **Installation** | One deployment of the Installation Worker, identified by `installationId` and an Ed25519 key pair. One company, which may have several isolated workspaces ([ADR-0016](decisions/0016-installation-admin-replaces-workspace-managers.md)). |
+| **Workspace** | An isolated team or brand inside an installation. Workspace IDs are unique only within an installation as far as other parties are concerned. |
 | **Member** | A user's membership in a workspace. `memberId` is the recipient identity shared with the relay, so no email or user ID leaves the installation. |
 | **Connection** | Mobile-side record of one authenticated user on one installation. The unit of isolation in the iOS app. |
 | **Device / Subscription** | Relay-side. A device holds an APNs token. A subscription links a device to an (installation, workspace, member). |
@@ -85,6 +85,7 @@ If step 4 is lost to a crash, a cron sweep re-dispatches from the outbox. If the
 | iOS navigation | React Navigation, one navigator per connection and workspace. No Expo Router | [0013](decisions/0013-react-navigation-not-expo-router.md) |
 | iOS connections | One installation at a time, switching between its workspaces | [0014](decisions/0014-one-installation-in-the-app.md) |
 | Managing people | Installation admins. Removing and deactivating can be undone, and nobody deletes an account | [0015](decisions/0015-installation-admin-and-reversible-removal.md) |
+| Administration | One company per installation. Its admins manage everything, and workspaces have only supervisors and agents. Managing does not include reading conversations | [0016](decisions/0016-installation-admin-replaces-workspace-managers.md) |
 
 ## Technology baseline
 

@@ -1,23 +1,33 @@
 import {
   assignPersonRoute,
   createPersonRoute,
+  createWebsiteRoute,
+  createWorkspaceRoute,
   deactivatePersonRoute,
+  listAdminWebsitesRoute,
   listAdminWorkspacesRoute,
   listPeopleRoute,
   reactivatePersonRoute,
   unassignPersonRoute,
+  updateWebsiteRoute,
   updatePersonRoute,
+  updateWorkspaceRoute,
 } from '@openchat/api-contracts';
 import {
   adminContext,
   assignPerson,
   createPerson,
+  createWebsite,
+  createWorkspace,
   deactivatePerson,
+  listAdminWebsites,
   listAdminWorkspaces,
   listPeople,
   reactivatePerson,
   setInstallationAdmin,
   unassignPerson,
+  updateWebsite,
+  updateWorkspace,
 } from '@openchat/core';
 import type { Context } from 'hono';
 import { authDeps, type App, type AppEnv } from '../context';
@@ -80,5 +90,31 @@ export function registerAdminRoutes(app: App) {
   app.openapi(listAdminWorkspacesRoute, async (c) => {
     const { deps, ctx } = await admin(c);
     return c.json(await listAdminWorkspaces(deps.db, ctx, c.req.valid('query')), 200);
+  });
+
+  app.openapi(createWorkspaceRoute, async (c) => {
+    const { deps, ctx } = await admin(c);
+    return c.json(await createWorkspace(deps.db, ctx, c.req.valid('json').name), 201);
+  });
+
+  app.openapi(updateWorkspaceRoute, async (c) => {
+    const { deps, ctx } = await admin(c);
+    return c.json(await updateWorkspace(deps.db, ctx, c.req.valid('param').workspaceId, c.req.valid('json')), 200);
+  });
+
+  app.openapi(listAdminWebsitesRoute, async (c) => {
+    const { deps, ctx } = await admin(c);
+    return c.json(await listAdminWebsites(deps.db, ctx, c.req.valid('param').workspaceId), 200);
+  });
+
+  app.openapi(createWebsiteRoute, async (c) => {
+    const { deps, ctx } = await admin(c);
+    return c.json(await createWebsite(deps.db, ctx, c.req.valid('param').workspaceId, c.req.valid('json'), { turnstileAvailable: deps.turnstile !== undefined }), 201);
+  });
+
+  app.openapi(updateWebsiteRoute, async (c) => {
+    const { workspaceId, websiteId } = c.req.valid('param');
+    const { deps, ctx } = await admin(c);
+    return c.json(await updateWebsite(deps.db, ctx, workspaceId, websiteId, c.req.valid('json'), { turnstileAvailable: deps.turnstile !== undefined }), 200);
   });
 }

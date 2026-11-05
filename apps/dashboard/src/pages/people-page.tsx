@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api, errorMessage } from '../app-context';
 
-const ROLES = ['owner', 'admin', 'supervisor', 'agent'] as const;
+const ROLES = ['agent', 'supervisor'] as const;
 type Role = (typeof ROLES)[number];
 
 function Failure({ error }: { error: unknown }) {
@@ -60,7 +60,12 @@ function AddPerson() {
 
 function PersonCard({ person, isMe, workspaces }: { person: Person; isMe: boolean; workspaces: { id: string; name: string }[] }) {
   const client = useQueryClient();
-  const refreshed = { onSuccess: () => client.invalidateQueries({ queryKey: ['people'] }) };
+  // 'me' too, because adding yourself to a workspace puts it in your workspace list.
+  const refreshed = {
+    onSuccess: async () => {
+      await Promise.all([client.invalidateQueries({ queryKey: ['people'] }), client.invalidateQueries({ queryKey: ['me'] })]);
+    },
+  };
   const deactivate = useMutation({ mutationFn: () => api.deactivatePerson(person.id), ...refreshed });
   const reactivate = useMutation({ mutationFn: () => api.reactivatePerson(person.id), ...refreshed });
   const setAdmin = useMutation({ mutationFn: (isInstallationAdmin: boolean) => api.updatePerson(person.id, { isInstallationAdmin }), ...refreshed });

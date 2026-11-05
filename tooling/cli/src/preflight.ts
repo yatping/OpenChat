@@ -127,7 +127,7 @@ export function runPreflight(run: (args: string[]) => string, options: Preflight
   } else if (options.resendKey) {
     checks.push({ name: 'Email', status: 'confirm', detail: `Resend is not contacted here. Confirm that the domain of ${options.emailFrom} is verified with Resend` });
   } else {
-    checks.push({ name: 'Email', status: 'note', detail: 'None set. Invitations and resets are not delivered. Use pnpm oc recover until one is set' });
+    checks.push({ name: 'Email', status: 'note', detail: 'None set. New account links and resets are not delivered. Use pnpm oc recover until one is set' });
   }
   return checks;
 }

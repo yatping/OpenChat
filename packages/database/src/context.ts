@@ -1,6 +1,7 @@
 import { rawHandle, type Database } from './internal/handle';
+import { effectiveRole } from './internal/roles';
 
-export type Role = 'owner' | 'admin' | 'supervisor' | 'agent';
+export type Role = 'supervisor' | 'agent';
 
 declare const contextBrand: unique symbol;
 
@@ -23,7 +24,7 @@ export async function authorizeWorkspaceMember(
 ): Promise<WorkspaceContext | null> {
   const row = await rawHandle(database)
     .prepare(
-      `SELECT m.id AS member_id, m.role AS role
+      `SELECT m.id AS member_id, ${effectiveRole('m')} AS role
          FROM workspace_members m
          JOIN users u ON u.id = m.user_id
         WHERE m.workspace_id = ?1 AND m.user_id = ?2 AND m.status = 'active' AND u.disabled_at IS NULL`,

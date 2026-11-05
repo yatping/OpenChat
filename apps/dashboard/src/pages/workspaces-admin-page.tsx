@@ -1,0 +1,246 @@
+import type { Website } from '@openchat/api-client';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+import { api, errorMessage } from '../app-context';
+
+const parseOrigins = (text: string) => text.split(/[\s,]+/).filter(Boolean);
+
+function Failure({ error }: { error: unknown }) {
+  return error ? <p className="error" role="alert">{errorMessage(error)}</p> : null;
+}
+
+/** The second key is what a member sees, in case this admin is also in the workspace. */
+const refreshWebsites = (client: QueryClient, workspaceId: string) =>
+  Promise.all([client.invalidateQueries({ queryKey: ['admin-websites', workspaceId] }), client.invalidateQueries({ queryKey: ['websites', workspaceId] })]);
+
+export function CopyableSnippet({ website }: { website: Website }) {
+  const snippet = `<script src="${window.location.origin}/widget/widget.js" data-website-key="${website.websiteKey}" async></script>`;
+  return <pre className="overflow-x-auto rounded-md bg-slate-100 p-3 text-xs dark:bg-slate-800">{snippet}</pre>;
+}
+
+/** What a colour input must show when nothing has been chosen. Saved only if someone chooses it. */
+const DEFAULT_WIDGET_COLOR = '#2563eb';
+
+function WidgetSettingsForm({ website, workspaceId }: { website: Website; workspaceId: string }) {
+  const client = useQueryClient();
+  const initial = website.settings;
+  const [welcomeMessage, setWelcome] = useState(initial.welcomeMessage ?? '');
+  const [primaryColor, setColor] = useState(initial.primaryColor ?? DEFAULT_WIDGET_COLOR);
+  const [collectEmail, setCollectEmail] = useState(initial.collectEmail ?? 'never');
+  const [showAgentNames, setShowNames] = useState(initial.showAgentNames ?? false);
+  const [requireTurnstile, setTurnstile] = useState(initial.requireTurnstile ?? false);
+  const save = useMutation({
+    mutationFn: () =>
+      api.updateWebsite(workspaceId, website.id, {
+        settings: { ...initial, ...(primaryColor === DEFAULT_WIDGET_COLOR && !initial.primaryColor ? {} : { primaryColor }), collectEmail, showAgentNames, requireTurnstile, ...(welcomeMessage.trim() ? { welcomeMessage: welcomeMessage.trim() } : { welcomeMessage: undefined }) },
+      }),
+    onSuccess: () => refreshWebsites(client, workspaceId),
+  });
+  return (
+    <form
+      className="space-y-3 border-t border-slate-200 pt-3 dark:border-slate-800"
+      onSubmit={(event) => {
+        event.preventDefault();
+        save.mutate();
+      }}
+    >
+      <h4 className="text-sm font-medium">Widget</h4>
+      <label className="block text-sm font-medium">
+        Welcome message
+        <textarea className="field mt-1 font-normal" rows={2} maxLength={500} value={welcomeMessage} onChange={(e) => setWelcome(e.target.value)} />
+      </label>
+      <label className="block text-sm font-medium">
+        Colour
+        <input className="field mt-1 h-10 w-20 p-1" type="color" value={primaryColor} onChange={(e) => setColor(e.target.value)} />
+      </label>
+      <label className="block text-sm font-medium">
+        Ask for an email
+        <select className="field mt-1 w-auto font-normal" value={collectEmail} onChange={(e) => setCollectEmail(e.target.value as typeof collectEmail)}>
+          <option value="never">Never</option>
+          <option value="optional">Offer it, after the first message</option>
+          <option value="required">Before the first message</option>
+        </select>
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={showAgentNames} onChange={(e) => setShowNames(e.target.checked)} />
+        Show agents' names to visitors
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={requireTurnstile} onChange={(e) => setTurnstile(e.target.checked)} />
+        Check that new visitors are people, with Cloudflare Turnstile
+      </label>
+      <Failure error={save.error} />
+      {save.isSuccess && <p className="notice" role="status">Saved. The widget picks this up within a minute.</p>}
+      <button className="button-quiet" disabled={save.isPending}>Save widget settings</button>
+    </form>
+  );
+}
+
+function WebsiteCard({ website, workspaceId }: { website: Website; workspaceId: string }) {
+  const client = useQueryClient();
+  const [name, setName] = useState(website.name);
+  const [origins, setOrigins] = useState(website.allowedOrigins.join('\n'));
+  const save = useMutation({
+    mutationFn: () => api.updateWebsite(workspaceId, website.id, { name, allowedOrigins: parseOrigins(origins) }),
+    onSuccess: () => refreshWebsites(client, workspaceId),
+  });
+  return (
+    <li className="card space-y-3">
+      <h3 className="font-medium">{website.name}</h3>
+      <CopyableSnippet website={website} />
+      <form
+          className="space-y-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            save.mutate();
+          }}
+        >
+          <label className="block text-sm font-medium">
+            Name
+            <input className="field mt-1 font-normal" value={name} required maxLength={100} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <label className="block text-sm font-medium">
+            Allowed origins, one per line
+            <textarea className="field mt-1 font-normal" rows={3} value={origins} onChange={(e) => setOrigins(e.target.value)} />
+          </label>
+          <Failure error={save.error} />
+          {save.isSuccess && <p className="notice" role="status">Saved.</p>}
+          <button className="button-quiet" disabled={save.isPending}>Save changes</button>
+      </form>
+      <WidgetSettingsForm website={website} workspaceId={workspaceId} />
+    </li>
+  );
+}
+
+function AddWebsite({ workspaceId }: { workspaceId: string }) {
+  const client = useQueryClient();
+  const [name, setName] = useState('');
+  const [origins, setOrigins] = useState('');
+  const create = useMutation({
+    mutationFn: () => api.createWebsite(workspaceId, { name, allowedOrigins: parseOrigins(origins) }),
+    onSuccess: async () => {
+      setName('');
+      setOrigins('');
+      await refreshWebsites(client, workspaceId);
+    },
+  });
+  return (
+    <form
+      className="card space-y-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        create.mutate();
+      }}
+    >
+      <h3 className="font-medium">Add a website</h3>
+      <label className="block text-sm font-medium">
+        Name
+        <input className="field mt-1 font-normal" value={name} required maxLength={100} onChange={(e) => setName(e.target.value)} />
+      </label>
+      <label className="block text-sm font-medium">
+        Allowed origins, one per line
+        <textarea className="field mt-1 font-normal" rows={2} placeholder="https://www.example.com" value={origins} onChange={(e) => setOrigins(e.target.value)} />
+      </label>
+      <Failure error={create.error} />
+      <button className="button" disabled={create.isPending}>Add website</button>
+    </form>
+  );
+}
+
+function RenameWorkspace({ workspace }: { workspace: { id: string; name: string } }) {
+  const client = useQueryClient();
+  const [name, setName] = useState(workspace.name);
+  const rename = useMutation({
+    mutationFn: () => api.updateWorkspace(workspace.id, { name }),
+    onSuccess: async () => {
+      await Promise.all([client.invalidateQueries({ queryKey: ['admin-workspaces'] }), client.invalidateQueries({ queryKey: ['me'] })]);
+    },
+  });
+  return (
+    <form
+      className="flex flex-wrap items-end gap-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        rename.mutate();
+      }}
+    >
+      <label className="min-w-48 flex-1 text-sm font-medium">
+        Workspace name
+        <input className="field mt-1 font-normal" required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
+      </label>
+      <button className="button-quiet" disabled={rename.isPending}>Rename</button>
+      <Failure error={rename.error} />
+    </form>
+  );
+}
+
+function NewWorkspace({ onCreated }: { onCreated: (id: string) => void }) {
+  const client = useQueryClient();
+  const [name, setName] = useState('');
+  const create = useMutation({
+    mutationFn: () => api.createWorkspace(name),
+    onSuccess: async (workspace) => {
+      setName('');
+      await client.invalidateQueries({ queryKey: ['admin-workspaces'] });
+      onCreated(workspace.id);
+    },
+  });
+  return (
+    <form
+      className="flex flex-wrap gap-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        create.mutate();
+      }}
+    >
+      <input className="field w-48" aria-label="New workspace name" placeholder="New workspace" required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
+      <button className="button-quiet" disabled={create.isPending}>Create workspace</button>
+      <Failure error={create.error} />
+    </form>
+  );
+}
+
+function ManagedWorkspace({ workspace }: { workspace: { id: string; name: string } }) {
+  const websites = useQuery({ queryKey: ['admin-websites', workspace.id], queryFn: () => api.listAdminWebsites(workspace.id) });
+  return (
+    <div className="space-y-4">
+      <RenameWorkspace workspace={workspace} />
+      <Failure error={websites.error} />
+      {websites.data?.data.length === 0 && <p className="text-sm text-slate-600 dark:text-slate-400">No websites yet.</p>}
+      <ul className="space-y-4">
+        {websites.data?.data.map((website) => <WebsiteCard key={website.id} website={website} workspaceId={workspace.id} />)}
+      </ul>
+      <p className="text-xs text-slate-600 dark:text-slate-400">Add the snippet to your site, and list the site's address under allowed origins. Sites with a content security policy also need to allow this address for scripts and connections.</p>
+      <AddWebsite workspaceId={workspace.id} />
+    </div>
+  );
+}
+
+/** For installation admins, who need no membership for any of this. Conversations do need one. See ADR-0016. */
+export function WorkspacesAdminPage() {
+  const workspaces = useQuery({ queryKey: ['admin-workspaces'], queryFn: () => api.listAdminWorkspaces({ limit: 100 }) });
+  const [chosen, setChosen] = useState('');
+  const list = workspaces.data?.data ?? [];
+  const workspace = list.find((w) => w.id === chosen) ?? list[0];
+  return (
+    <section className="space-y-4" aria-label="Manage workspaces">
+      <Failure error={workspaces.error} />
+      <NewWorkspace onCreated={setChosen} />
+      {workspaces.data?.nextCursor && <p className="notice">Only the first 100 are shown.</p>}
+      {list.length === 0 && workspaces.data && <p className="text-sm text-slate-600 dark:text-slate-400">No workspaces yet.</p>}
+      {workspace && (
+        <>
+          <label className="block text-sm font-medium">
+            Workspace to manage
+            <select className="field mt-1 font-normal" value={workspace.id} onChange={(e) => setChosen(e.target.value)}>
+              {list.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          </label>
+          <p className="text-xs text-slate-600 dark:text-slate-400">Managing a workspace does not show you its conversations. To read them, add yourself on the People page, which is recorded in the audit log.</p>
+          {/* The key gives each workspace fresh form state, so nothing typed in one is saved to another. */}
+          <ManagedWorkspace key={workspace.id} workspace={workspace} />
+        </>
+      )}
+    </section>
+  );
+}

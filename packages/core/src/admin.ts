@@ -1,6 +1,6 @@
 /**
- * What an installation admin does: manage people, and assign them to workspaces. Anyone else gets 404, so the
- * routes do not reveal that they exist. The rules that must hold at commit are in the repository's SQL.
+ * What an installation admin does: manage people, workspaces, and websites. Anyone else gets 404, so the routes
+ * do not reveal that they exist. The rules that must hold at commit are in the repository's SQL.
  */
 import { generateOpaqueToken, hashOpaqueToken } from '@openchat/auth';
 import {
@@ -13,9 +13,10 @@ import {
   type PersonChange,
   type Principal,
   type Role,
+  type WorkspaceRow,
 } from '@openchat/database';
 import type { EmailProvider } from '@openchat/email';
-import { AppError, newId, notFound, type JobEnvelope } from '@openchat/shared';
+import { AppError, newId, notFound, toIso, type JobEnvelope } from '@openchat/shared';
 import { enforce, escapeHtml, limitKey, LIMITS, type AuthDeps } from './auth-flows';
 
 export const NEW_ACCOUNT_EMAIL_JOB = 'auth.new_account_email';
@@ -37,8 +38,6 @@ function changed(result: PersonChange) {
       throw new AppError(409, 'cannot_deactivate_self', 'Ask another installation admin to deactivate your account');
     case 'deactivated':
       throw new AppError(409, 'person_deactivated', 'Reactivate this person first');
-    case 'last_owner':
-      throw new AppError(409, 'last_owner', 'Make someone else an owner of the workspace first');
     case 'last_admin':
       throw new AppError(409, 'last_admin', 'The installation must keep at least one active admin');
     case 'forbidden':
@@ -55,6 +54,66 @@ export const reactivatePerson = async (db: Database, ctx: AdminContext, userId: 
 export const assignPerson = async (db: Database, ctx: AdminContext, userId: string, workspaceId: string, role: Role) => changed(await adminRepository(db, ctx).assign(userId, workspaceId, role));
 export const unassignPerson = async (db: Database, ctx: AdminContext, userId: string, workspaceId: string) => changed(await adminRepository(db, ctx).unassign(userId, workspaceId));
 
+const toWorkspace = (row: WorkspaceRow) => ({ id: row.id, name: row.name, slug: row.slug, createdAt: toIso(row.createdAt) });
+
+function slugFor(name: string): string {
+  const base = name.normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+  const suffix = [...crypto.getRandomValues(new Uint8Array(4))].map((b) => b.toString(16).padStart(2, '0')).join('');
+  return `${base || 'workspace'}-${suffix}`;
+}
+
+export async function createWorkspace(db: Database, ctx: AdminContext, name: string) {
+  const row = await adminRepository(db, ctx).createWorkspace({ name, slug: slugFor(name) });
+  if (!row) throw notFound();
+  return toWorkspace(row);
+}
+
+export async function updateWorkspace(db: Database, ctx: AdminContext, workspaceId: string, input: { name?: string | undefined }) {
+  const row = await adminRepository(db, ctx).updateWorkspace(workspaceId, input);
+  if (!row) throw notFound();
+  return toWorkspace(row);
+}
+
+export async function listAdminWebsites(db: Database, ctx: AdminContext, workspaceId: string) {
+  const data = await adminRepository(db, ctx).listWebsites(workspaceId);
+  if (!data) throw notFound();
+  return { data };
+}
+
+/** Otherwise the website would turn away every new visitor, with nothing to say why. */
+function assertTurnstilePossible(settings: Record<string, unknown> | undefined, available: boolean): void {
+  if (settings?.requireTurnstile === true && !available) {
+    throw new AppError(400, 'turnstile_not_configured', 'This installation has no Turnstile keys. Deploy it with them first');
+  }
+}
+
+export async function createWebsite(
+  db: Database,
+  ctx: AdminContext,
+  workspaceId: string,
+  input: { name: string; allowedOrigins: string[]; settings?: Record<string, unknown> | undefined },
+  options: { turnstileAvailable: boolean } = { turnstileAvailable: false },
+) {
+  assertTurnstilePossible(input.settings, options.turnstileAvailable);
+  const row = await adminRepository(db, ctx).createWebsite(workspaceId, { ...input, websiteKey: `wk_${generateOpaqueToken()}` });
+  if (!row) throw notFound();
+  return row;
+}
+
+export async function updateWebsite(
+  db: Database,
+  ctx: AdminContext,
+  workspaceId: string,
+  websiteId: string,
+  input: { name?: string | undefined; allowedOrigins?: string[] | undefined; settings?: Record<string, unknown> | undefined },
+  options: { turnstileAvailable: boolean } = { turnstileAvailable: false },
+) {
+  assertTurnstilePossible(input.settings, options.turnstileAvailable);
+  const row = await adminRepository(db, ctx).updateWebsite(workspaceId, websiteId, input);
+  if (!row) throw notFound();
+  return row;
+}
+
 function newAccountJob(userId: string): JobEnvelope<{ userId: string }> {
   const id = newId('job');
   return {
@@ -70,7 +129,7 @@ function newAccountJob(userId: string): JobEnvelope<{ userId: string }> {
 }
 
 export async function createPerson(deps: Pick<AuthDeps, 'db' | 'limiter' | 'emailJobs'>, ctx: AdminContext, input: { name: string; email: string }) {
-  await enforce(deps.limiter, await limitKey('admin-people', ctx.userId), LIMITS.invitationsPerWorkspace);
+  await enforce(deps.limiter, await limitKey('admin-people', ctx.userId), LIMITS.newPeoplePerAdmin);
   const person = changed(await adminRepository(deps.db, ctx).create(input));
   await deps.emailJobs.send(newAccountJob(person.id));
   return person;

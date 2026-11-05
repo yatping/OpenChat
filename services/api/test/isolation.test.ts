@@ -39,7 +39,6 @@ const CASES: Record<string, Case> = {
   requestPasswordReset: { kind: 'public', reason: 'Answers the same for every address' },
   confirmPasswordReset: { kind: 'public', reason: 'Acts only on the user of the presented token' },
   confirmEmailVerification: { kind: 'public', reason: 'Acts only on the user of the presented token' },
-  acceptInvitation: { kind: 'public', reason: 'Acts only on the workspace of the presented token' },
   logout: { kind: 'self', reason: 'Revokes the caller’s own session' },
   getMe: { kind: 'self', reason: 'Filtered to the caller’s own memberships. Covered in auth.test.ts' },
   listPeople: { kind: 'installation' },
@@ -50,16 +49,14 @@ const CASES: Record<string, Case> = {
   assignPerson: { kind: 'installation', body: { role: 'agent' } },
   unassignPerson: { kind: 'installation' },
   listAdminWorkspaces: { kind: 'installation' },
-  createWorkspace: { kind: 'self', reason: 'Creates a new workspace. Reads no existing one' },
+  createWorkspace: { kind: 'installation', body: { name: 'Taken over' } },
+  updateWorkspace: { kind: 'installation', body: { name: 'Taken over' } },
+  listAdminWebsites: { kind: 'installation' },
+  createWebsite: { kind: 'installation', body: { name: 'Taken over', allowedOrigins: [] } },
+  updateWebsite: { kind: 'installation', body: { name: 'Taken over' } },
   getWorkspace: { kind: 'workspace', ownerStatus: 200 },
-  updateWorkspace: { kind: 'workspace', body: { name: 'Taken over' }, ownerStatus: 200 },
   listMembers: { kind: 'workspace', ownerStatus: 200 },
-  updateMember: { kind: 'workspace', body: { role: 'supervisor' }, ownerStatus: 200 },
-  removeMember: { kind: 'workspace', ownerStatus: 204 },
-  createInvitation: { kind: 'workspace', body: { email: 'new@example.com', role: 'agent' }, ownerStatus: 201 },
   listWebsites: { kind: 'workspace', ownerStatus: 200 },
-  createWebsite: { kind: 'workspace', body: { name: 'Taken over', allowedOrigins: [] }, ownerStatus: 201 },
-  updateWebsite: { kind: 'workspace', body: { name: 'Taken over' }, ownerStatus: 200 },
   widgetBootstrap: { kind: 'public', reason: 'Public configuration. Only ever the named website' },
   createVisitorSession: { kind: 'public', reason: 'Creates a new anonymous visitor, or resumes the one holding the token' },
   updateVisitorProfile: { kind: 'visitor', body: { name: 'Taken over' }, ownerStatus: 204 },
@@ -210,7 +207,7 @@ async function seed() {
         .bind(`user_${w}_owner`, `owner-${w}@example.com`, passwordHash, `user_${w}_agent`, `agent-${w}@example.com`),
       env.DB.prepare(
         `INSERT INTO workspace_members (id, workspace_id, user_id, role, status, created_at, updated_at) VALUES
-         (?1, ?2, ?3, 'owner', 'active', 1, 1), (?4, ?2, ?5, 'agent', 'active', 1, 1)`,
+         (?1, ?2, ?3, 'supervisor', 'active', 1, 1), (?4, ?2, ?5, 'agent', 'active', 1, 1)`,
       ).bind(`mem_${w}_owner`, `work_${w}`, `user_${w}_owner`, `mem_${w}_agent`, `user_${w}_agent`),
       env.DB.prepare(`INSERT INTO websites (id, workspace_id, name, website_key, created_at, updated_at) VALUES (?1, ?2, 'Site', ?3, 1, 1)`).bind(`site_${w}`, `work_${w}`, `key_${w}`),
       env.DB.prepare(`INSERT INTO tags (id, workspace_id, name, created_at) VALUES (?1, ?2, 'existing', 1)`).bind(`tag_${w}`, `work_${w}`),
@@ -366,11 +363,37 @@ describe('across tenants', () => {
 });
 
 describe('installation admin routes', () => {
-  for (const { method, path, id } of contractRoutes.filter((r) => CASES[r.id]?.kind === 'installation')) {
-    it(`${id} answers a workspace owner as if it were not there`, async () => {
-      const c = CASES[id] as InstallationAdmin;
-      const response = await request(method, urlFor(path, RESOURCES.a), tokens.ownerB, c.body);
-      expect(response.status).toBe(404);
-    });
-  }
+  beforeAll(async () => {
+    passwordHash = await hashPassword(PASSWORD);
+  });
+
+  beforeEach(async () => {
+    await seed();
+    await seedFiles();
+    tokens.ownerB = await signIn('owner-b@example.com');
+  });
+
+  const adminRoutes = contractRoutes.filter((r) => CASES[r.id]?.kind === 'installation');
+
+  it.each(adminRoutes)('$id answers a supervisor as if it were not there, and changes nothing', async ({ method, path, id }) => {
+    const before = await snapshotOfA();
+    expect((await request(method, urlFor(path, RESOURCES.a), tokens.ownerB, (CASES[id] as InstallationAdmin).body)).status).toBe(404);
+    expect(await snapshotOfA()).toBe(before);
+  });
+
+  // ADR-0016: an admin manages settings without joining, but the workspace's contents still need a membership.
+  it.each(scopedRoutes)('$id answers an installation admin who has not joined with 404', async ({ method, path, id }) => {
+    await env.DB.prepare(`UPDATE users SET is_installation_admin = 1 WHERE id = 'user_b_owner'`).run();
+    const before = await snapshotOfA();
+    expect((await request(method, urlFor(path, RESOURCES.a), tokens.ownerB, bodyOf(id))).status).toBe(404);
+    expect(await snapshotOfA()).toBe(before);
+  });
+
+  it('finds a website only under its own workspace, even for an admin', async () => {
+    await env.DB.prepare(`UPDATE users SET is_installation_admin = 1 WHERE id = 'user_b_owner'`).run();
+    const before = await snapshotOfA();
+    const response = await request('PATCH', `/api/v1/admin/workspaces/work_b/websites/site_a`, tokens.ownerB, { name: 'Taken over' });
+    expect(response.status).toBe(404);
+    expect(await snapshotOfA()).toBe(before);
+  });
 });

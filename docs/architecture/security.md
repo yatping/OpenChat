@@ -27,37 +27,35 @@ Every request verifies, in order: identity, membership, permission, resource own
 | Mobile transport | Bearer token. Stored in `expo-secure-store` per connection. |
 | CSRF | `SameSite=Strict`, plus requiring `Authorization` on all data routes. Only the refresh route uses the cookie, and it also checks `Origin`. |
 | Login throttling | Strict fixed-window counters in the `AuthGuard` Durable Object, one object per hashed key: 10 attempts per account and 50 per IP address per 15 minutes. A successful login clears the account counter. The account key is derived from the submitted email, so unknown accounts behave identically. Trade-off: anyone can lock an account out of password login for 15 minutes by failing on purpose. Reset still works, and existing sessions are unaffected. |
-| Enumeration | Login, reset, and signup give identical responses and comparable timing whether or not the account exists. Login hashes against a dummy for unknown, disabled, and placeholder accounts. A reset request answers 202 before looking anything up, doing that work in `waitUntil`. |
+| Enumeration | Login and reset give identical responses and comparable timing whether or not the account exists. Login hashes against a dummy for unknown, disabled, and placeholder accounts. A reset request answers 202 before looking anything up, doing that work in `waitUntil`. |
 | Refresh reuse | Rotation and reuse detection are one `batch()`. Presenting the previous token revokes that session, and only that session. One generation is kept, so an older token simply fails. Two concurrent refreshes count as reuse, so the dashboard must serialise refreshes across tabs (Web Locks), and a client that loses a refresh response signs in again. Both fail safe. |
 | Password reset | Limit 3 per address and 20 per IP address per hour, silently past the limit. The job holds only the user ID, and the consumer creates the token as it sends, so no token reaches a queue or `failed_jobs`. Tokens last 1 hour, are stored as SHA-256, and travel in the URL fragment so they stay out of access logs. Confirming revokes every session and every outstanding reset token for the user. Confirmations are limited to 20 per IP address per 15 minutes. |
 | Signing keys | `AUTH_SIGNING_KEY` is JSON: `{ active: { kid, privateKey, publicKey }, retired?: [{ kid, publicKey }] }`. To rotate, move the old key to `retired` and remove it once its tokens have expired, after 15 minutes. |
 
 ## RBAC
 
-| Capability | Owner | Admin | Supervisor | Agent |
-|---|---|---|---|---|
-| View and reply to conversations, add notes | Yes | Yes | Yes | Yes |
-| Assign to self | Yes | Yes | Yes | Yes |
-| Assign to others, transfer | Yes | Yes | Yes | Own only |
-| Merge contacts | Yes | Yes | Yes | No |
-| Export or delete a contact | Yes | Yes | No | No |
-| Manage canned responses (later) | Yes | Yes | Yes | No |
-| Manage websites, automation, email settings, workspace name | Yes | Yes | No | No |
-| Invite and remove members | Yes | Yes (not owners) | No | No |
-| Security settings, workspace deletion, transfer ownership | Yes | No | No | No |
+| Capability | Installation admin | Supervisor | Agent |
+|---|---|---|---|
+| View and reply to conversations, add notes | Only after joining | Yes | Yes |
+| Assign to self | Only after joining | Yes | Yes |
+| Assign to others, transfer | Only after joining, as a supervisor | Yes | Own only |
+| Merge contacts, delete tags | Only after joining, as a supervisor | Yes | No |
+| Manage canned responses (later) | Only after joining, as a supervisor | Yes | No |
+| Manage people and the admin role, and assign them to workspaces | Yes | No | No |
+| Create and rename workspaces. Manage websites, and later automation and email settings | Yes, without joining | No | No |
 
-**Installation admin** is a separate flag on the account, not a workspace role. It manages accounts and assigns them to workspaces, and gives no read access to a workspace without a membership ([ADR-0015](decisions/0015-installation-admin-and-reversible-removal.md)).
+**Supervisor and agent are workspace roles. Installation admin is a flag on the account**, and there is no owner or admin inside a workspace ([ADR-0016](decisions/0016-installation-admin-replaces-workspace-managers.md)). Being an admin gives no read access to a workspace: without a membership it gets 404 there, and adding yourself leaves an audit row. Every admin has power over every workspace, so each company runs its own installation.
 
-`packages/auth` holds this as pure data and functions, with a table-driven test. It gives an early 403. Member changes are also decided in SQL at commit: the last-owner rule, and the current roles of both the actor and the target, so a role changed mid-request counts.
+`packages/auth` holds the workspace roles as pure data and functions, with a table-driven test. It gives an early 403. Admin changes are decided in SQL at commit, so a role taken away mid-request counts.
 
-## Workspaces and invitations
+## Workspaces and accounts
 
 | Item | Decision |
 |---|---|
-| Creating a workspace | On `invite_only`, only an installation admin, or someone who already owns a workspace. On `open`, any signed-in user. The first owner comes from the CLI. |
-| Invitation token | Created as the email is sent, so no token reaches a queue, and stored as SHA-256. A duplicate job delivery replaces the token, so the newest email holds the working link. Lasts 7 days. |
-| Accepting | Holding the token proves control of the address, so the account is marked verified. An existing account joins without a password, and its name and password are never changed. |
-| Invitation limit | 30 per workspace per hour, because each one sends an email to any address. |
+| Creating a workspace | Only an installation admin. Nobody joins it by creating it. The first workspace and admin come from the CLI. |
+| Creating an account | Only an installation admin, or the CLI for the first one. There is no signup and there are no invitations. |
+| New account link | Created as the email is sent, so no token reaches a queue, and stored as SHA-256. Lasts 7 days. |
+| New account limit | 30 per admin per hour, because each one sends an email to any address. |
 | Removing and deactivating | Nobody can delete an account. Removing a member, or deactivating an account, ends access and can be undone, and the person's messages keep their name ([ADR-0015](decisions/0015-installation-admin-and-reversible-removal.md)). |
 | Allowed origins | Exact origins only: no wildcards or paths, and plain HTTP only on the local machine. |
 

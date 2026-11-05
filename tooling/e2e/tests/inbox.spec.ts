@@ -358,16 +358,21 @@ test('fits a phone, moving between the list and the conversation', async ({ page
   await expect(page.getByRole('region', { name: 'Conversations' })).toBeVisible();
 });
 
-test('an owner changes the widget from the dashboard', async ({ page }) => {
+const openWorkspacesPage = async (page: Page) => {
+  await page.getByRole('button', { name: 'Workspaces', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Manage workspaces' })).toBeVisible();
+};
+
+test('an installation admin changes the widget from the Workspaces page', async ({ page }) => {
   await signIn(page, OWNER);
-  await page.getByRole('button', { name: 'websites', exact: true }).click();
+  await openWorkspacesPage(page);
   const card = page.getByRole('listitem').filter({ hasText: 'Shop' }).first();
   await card.getByLabel('Welcome message').fill('Hello from settings');
   await card.getByLabel('Ask for an email').selectOption('optional');
   await card.getByRole('button', { name: 'Save widget settings' }).click();
   await expect(card.getByRole('status')).toContainText('Saved');
   await page.reload();
-  await page.getByRole('button', { name: 'websites', exact: true }).click();
+  await openWorkspacesPage(page);
   const after = page.getByRole('listitem').filter({ hasText: 'Shop' }).first();
   await expect(after.getByLabel('Welcome message')).toHaveValue('Hello from settings');
   await expect(after.getByLabel('Ask for an email')).toHaveValue('optional');
