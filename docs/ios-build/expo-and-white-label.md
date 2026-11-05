@@ -53,7 +53,7 @@ fastlane ios device                       # Writes build/ios/OpenChat-adhoc.ipa
 fastlane ios install                      # Needs the phone unlocked and connected by cable
 ```
 
-`refresh_profile` also enables Push Notifications on the App ID, which M3 needs. `APP_VARIANT` chooses a white-label variant, as it does for prebuild. The certificate goes into a temporary keychain that is deleted after each build, and profiles stay in `credentials/`, which Git ignores. Over Wi-Fi alone, `install` has timed out even though the phone showed as connected.
+`refresh_profile` also enables Push Notifications on the App ID, which M3 needs. `APP_VARIANT` chooses a white-label variant, as it does for prebuild. The certificate goes into a temporary keychain that is deleted after each build, and profiles stay in `credentials/`, which Git ignores. With the phone on Wi-Fi only, `install` timed out even though the phone showed as connected. It worked with a cable.
 
 | Build | APNs environment | Distribution |
 |---|---|---|
