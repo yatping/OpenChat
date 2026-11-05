@@ -159,7 +159,8 @@ Expo app, Connection manager, discovery and compatibility check, sign-in, worksp
 | App skeleton, connections, sign-in, upgrade message | Merged, with unit tests including colliding IDs |
 | Inbox and conversation | Tested by hand on an iPhone 17 simulator against a local server: live messages, reply, internal note kept from the visitor, status, assignee, restart keeps the session, sign-out clears local files |
 | Attachments | Tested by hand on the same simulator: picture preview, PDF through the share sheet, photo and document upload reaching the visitor, GPS removed from photos, no copies left after upload, sign-out removes downloads. Not tried: a file near the 25 MB limit, and signing out during a download |
-| Contact, tags, profile, account deletion | Tested by hand on the same simulator: contact and tag edits reach the inbox; deletion refuses a wrong password and the last owner; a real deletion removes the member and their name from messages, ends their login, and clears this device. The profile is read-only, because the API has no way to change a name |
+| Contact, tags, profile | Tested by hand on the same simulator: contact and tag edits reach the inbox. The profile is read-only, because the API has no way to change a name |
+| Account deletion | Not in the app. The owner decided on 2026-11-05 that agents should not delete their own accounts. Who may delete an account is still open, and `POST /api/v1/me/delete` still works for any signed-in user |
 | Not tested yet | Priority, switching workspace, switching between two real installations, login expiry mid-session, typing indicators, real Cloudflare, a physical device |
 
 ## M3: Relay and push (L)

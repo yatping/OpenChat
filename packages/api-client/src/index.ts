@@ -137,8 +137,6 @@ export function createClient(options: ClientOptions) {
     confirmPasswordReset: (token: string, password: string) => request<void>('POST', '/api/v1/auth/password-reset/confirm', { token, password }),
     acceptInvitation: (input: { token: string; name?: string; password?: string }) => request<{ workspaceId: string }>('POST', '/api/v1/invitations/accept', input),
     getMe: () => get<Me>('/api/v1/me'),
-    /** Anonymises the account. A wrong password answers 403, and the last owner of a workspace is refused with 409. */
-    deleteAccount: (password: string) => request<void>('POST', '/api/v1/me/delete', { password }),
 
     createWorkspace: (name: string) => request<CreatedWorkspace>('POST', '/api/v1/workspaces', { name }),
     listMembers: (workspaceId: string, cursor?: string) => get<MemberPage>(`${workspace(workspaceId)}/members?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`),
