@@ -18,7 +18,7 @@ Run `pnpm oc preflight` to check them. It only reads, and `oc deploy` runs the s
 | Analytics Engine | With `--analytics` | Enable once in the dashboard | Confirm yourself |
 | Custom domain | With `--public-url` | A zone on Cloudflare, attached to the Worker. A domain is recommended, but `workers.dev` also works | Confirm yourself |
 | Email | To deliver new account links and resets | Cloudflare Email Sending (a domain on Cloudflare DNS in this account, onboarded with `wrangler email sending enable <domain>`, and a login with `email_sending:write`), or a Resend API key and verified domain. Without either, use `oc recover` | Cloudflare: the domain is listed as onboarded. Resend: `--email-from` is present, and Resend is not contacted |
-| Push | With `--relay-url`, `--relay-id`, and `--relay-bundle-ids`, all three together. There is no managed relay to point at yet | Nothing for the managed relay, or an Apple Developer account for independent mode | Not checked yet |
+| Push | With `--relay-url`, `--relay-id`, and `--relay-bundle-ids`, all three together. The [managed relay](#managed-relay-project-operators) admits installations one at a time for now | Nothing for the managed relay, or an Apple Developer account for independent mode | Not checked yet |
 
 A brand-new account has not been tried yet, so this list comes from Cloudflare's documentation and Wrangler's source, and may be incomplete.
 
@@ -133,11 +133,13 @@ Community forks can run all but the last. Nothing else depends on project-held c
 
 ## Managed relay (project operators)
 
-- Separate Cloudflare account, restricted access, and `deployment/managed/` for non-secret configuration.
-- `RELAY_MODE=open`, with the APNs key set by `wrangler secret`. **It is never in the repository or any customer-facing artifact.**
-- Runs both APNs environments, because development builds use sandbox while TestFlight and App Store builds use production.
-- Monitoring: delivery rate, APNs error reasons, connection-lost errors, queue age, and quota breaches.
-- Needs an owner decision on operator, terms, and privacy ([Q5](../architecture/open-questions.md)).
+Orango Labs runs it at `https://openchat-relay.orangolabs.com`, with the relay ID `managed`, on the same Cloudflare account as its other projects. That was the owner's choice on 2026-11-05, in place of a separate account, so everyone with access to that account can reach the APNs key.
+
+- **Private mode for now.** Only installations in `RELAY_ALLOWED_INSTALLATIONS` can register. It moves to `open` after legal review of the terms and privacy policy ([Q5](../architecture/open-questions.md)).
+- **Production APNs only**, because the key is production only. A relay serves one environment.
+- **Configuration** is in the operator's `.openchat/managed-relay/`, which Git ignores. Worker secrets cannot be read back, so `RELAY_TOKEN_KEY` and the operator token are kept with the signing keys. Losing `RELAY_TOKEN_KEY` means every device has to register again.
+- **To admit an installation:** add its ID, from its `/.well-known/openchat.json`, to `RELAY_ALLOWED_INSTALLATIONS`, and deploy the relay. Then deploy the installation with `--relay-url https://openchat-relay.orangolabs.com --relay-id managed --relay-bundle-ids com.orangolabs.openchat`.
+- **Not built:** monitoring of delivery rate, APNs error reasons, and queue age. See the [M3 limits](../plan/milestones.md#m3-exit-check).
 
 ## Independent relay (customers)
 

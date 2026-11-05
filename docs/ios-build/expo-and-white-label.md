@@ -88,7 +88,7 @@ Expo's push service isn't used, in keeping with the spec's native APNs approach.
 
 Each step can fail without affecting messaging, and it tries again at the next start. On each start the app also asks the installation whether its rows still exist, because a revoked session removes them, and registers again if not. Settings shows why push is off, if it is.
 
-**The official variant has push off** until a managed relay exists, since there is no relay address to allow. To test against a temporary relay, make `variants/local/variant.json`, which Git ignores, with `push.enabled` true and that relay in `allowedRelays`, then build with `APP_VARIANT=local`.
+**The official variant allows only the [managed relay](../operations/deployment.md#managed-relay-project-operators).** To test against a temporary relay, make `variants/local/variant.json`, which Git ignores, with `push.enabled` true and that relay in `allowedRelays`, then build with `APP_VARIANT=local`.
 
 ## Isolation of connections
 

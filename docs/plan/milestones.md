@@ -212,7 +212,7 @@ Push is M3, so an agent gets no alert while the app is closed. Before anyone rel
 | Devices | Single-use grants, device registration, token rotation, and unregistering, on the relay. Tokens are encrypted at rest. Tested on real Cloudflare with fake tokens. The installation does not issue grants yet |
 | Relay delivery | Accepting notifications, quotas, the queue, retries, each APNs answer, and the fixed payload, on the relay. Tested on a real queue and real APNs with a fake device token, so nothing has reached a phone from a Worker yet |
 | Installation side | Signing key, discovery, lazy registration, grants, subscriptions, preferences, [fan-out](../architecture/background-jobs.md#push), and removal on losing access. [Tested on real Cloudflare](../architecture/cloudflare-validation.md#push-from-an-installation-on-real-cloudflare-2026-11-05) with fake device tokens. Nothing triggers `conversation_transferred`, `mention`, or `conversation_updated` yet: mentions do not exist in the product, and a transfer is sent as `conversation_assigned`. Subscriptions are not tied to a session, so ending one session leaves that device subscribed while another session lives |
-| App | Registration with a build-time relay allowlist, token changes, opening a conversation from a notification, hiding a banner for the conversation on screen, notification settings, and unregistering on sign-out. [Tested on one real iPhone](../architecture/cloudflare-validation.md#on-a-real-iphone). The official variant keeps push off until a managed relay exists. Not exercised on a phone: a real token change, a sign-out while offline, and several devices. Those are covered by tests with fakes |
+| App | Registration with a build-time relay allowlist, token changes, opening a conversation from a notification, hiding a banner for the conversation on screen, notification settings, and unregistering on sign-out. [Tested on one real iPhone](../architecture/cloudflare-validation.md#on-a-real-iphone). The official variant allows only the managed relay. Not exercised on a phone: a real token change, a sign-out while offline, and several devices. Those are covered by tests with fakes |
 | Exit check | [Done](#m3-exit-check) |
 
 **Security review:** full relay threat model, ideally external. Not done.
@@ -232,7 +232,7 @@ Push is M3, so an agent gets no alert while the app is closed. Before anyone rel
 
 **Limits**
 
-- **No managed relay is running**, so the official app has push off. Running one needs a decision on its address, then legal review of terms and a privacy policy before public launch ([Q5](../architecture/open-questions.md)).
+- **The managed relay is in private mode**, at `openchat-relay.orangolabs.com`. Opening it needs legal review of terms and a privacy policy ([Q5](../architecture/open-questions.md)). It has been checked end to end with a fake device token, and no phone has used it yet, because the phone test used a temporary relay.
 - **Not built:** rotating an installation's signing key or `RELAY_TOKEN_KEY`; `/health/notifications`; delivery metrics for the operator; an operator route to revoke an installation, which today means editing the relay's D1 by hand.
 - **Triggers missing:** `mention`, because mentions do not exist; `conversation_transferred`, sent as `conversation_assigned`; `conversation_updated`.
 - **Not measured:** throughput; the relay's rate limit bindings on real Cloudflare; the daily self-check firing from cron.
