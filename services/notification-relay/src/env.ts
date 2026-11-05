@@ -1,4 +1,5 @@
 import type { ApnsCredential } from './apns/credential';
+import type { DeliveryMessage } from './delivery/consumer';
 import type { RelayGuard } from './requests/guard';
 
 export interface Env {
@@ -7,6 +8,7 @@ export interface Env {
   /** Comma-separated installation IDs. Used only in private mode. */
   RELAY_ALLOWED_INSTALLATIONS?: string;
   RELAY_GUARD: DurableObjectNamespace<RelayGuard>;
+  DELIVERY_QUEUE: Queue<DeliveryMessage>;
   /** This relay's name, which a grant must carry as its audience. */
   RELAY_ID?: string;
   /** Comma-separated bundle IDs this relay holds an APNs key for. */

@@ -210,7 +210,8 @@ Push is M3, so an agent gets no alert while the app is closed. Before anyone rel
 | APNs transport | Transports, `ApnsCredential`, handling of each APNs answer, and a self-check. [Tested on real APNs](../architecture/cloudflare-validation.md#apns-from-a-worker-with-a-real-key-2026-11-05) with a fake device token, so nothing has reached a phone from a Worker yet |
 | Relay requests | Signed request checks, `RelayGuard`, and registering installations and workspaces, [tested on real Cloudflare](../architecture/cloudflare-validation.md#relay-requests-on-real-cloudflare-2026-11-05). Key rotation is not built |
 | Devices | Single-use grants, device registration, token rotation, and unregistering, on the relay. Tokens are encrypted at rest. Tested on real Cloudflare with fake tokens. The installation does not issue grants yet |
-| Delivery, fan-out, app, exit check | Not started |
+| Relay delivery | Accepting notifications, quotas, the queue, retries, each APNs answer, and the fixed payload, on the relay. Tested on a real queue and real APNs with a fake device token, so nothing has reached a phone from a Worker yet |
+| Installation fan-out, app, exit check | Not started |
 
 **Security review:** full relay threat model, ideally external.
 

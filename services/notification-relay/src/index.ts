@@ -3,6 +3,8 @@ import { createLogger } from '@openchat/shared';
 import { Hono } from 'hono';
 import { runApnsSelfCheck } from './apns/self-check';
 import { WorkersFetchTransport } from './apns/transport';
+import { type DeliveryMessage, handleDeliveryBatch } from './delivery/consumer';
+import { deleteOldNotifications, notificationRoutes } from './delivery/routes';
 import { deviceRoutes } from './devices/routes';
 import type { Env } from './env';
 import { relayRoutes } from './requests/routes';
@@ -33,6 +35,7 @@ export function createApp(transportFor: () => ApnsTransport = () => new WorkersF
 
   app.route('/', relayRoutes(fetcher));
   app.route('/', deviceRoutes());
+  app.route('/', notificationRoutes());
 
   app.notFound((c) => c.json(notFound, 404));
   return app;
@@ -42,11 +45,15 @@ const app = createApp();
 
 export default {
   fetch: app.fetch,
+  async queue(batch, env) {
+    await handleDeliveryBatch(batch, env, new WorkersFetchTransport());
+  },
   async scheduled(_controller, env) {
+    await deleteOldNotifications(env.DB, Date.now());
     const result = await runApnsSelfCheck(env, new WorkersFetchTransport());
     if (result.outcome === 'not_configured') return;
     const fields = { jobType: 'apns_self_check', errorCode: result.outcome, durationMs: result.durationMs, ...(result.status ? { status: result.status } : {}) };
     if (result.outcome === 'ok') log.info('apns.self_check', fields);
     else log.error('apns.self_check', fields);
   },
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler<Env, DeliveryMessage>;

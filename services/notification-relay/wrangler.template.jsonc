@@ -1,6 +1,5 @@
 {
   // The notification relay. Independent of the installation: see docs/notification-relay/protocol.md.
-  // Queues arrive in a later Milestone 3 slice.
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "oc-relay-local",
   "main": "./src/index.ts",
@@ -19,6 +18,10 @@
   "d1_databases": [{ "binding": "DB", "database_name": "oc-relay-local", "database_id": "local", "migrations_dir": "./migrations" }],
   // Approximate and per location. RelayGuard enforces the limits that must hold.
   "ratelimits": [{ "name": "REGISTRATION_LIMIT", "namespace_id": "1001", "simple": { "limit": 20, "period": 60 } }, { "name": "DEVICE_LIMIT", "namespace_id": "1002", "simple": { "limit": 60, "period": 60 } }],
-  // Once a day, so a change in how Workers reach APNs is noticed. See ADR-0006.
+  "queues": {
+    "producers": [{ "binding": "DELIVERY_QUEUE", "queue": "oc-relay-delivery" }],
+    "consumers": [{ "queue": "oc-relay-delivery", "max_batch_size": 10, "max_retries": 5, "dead_letter_queue": "oc-relay-delivery-dlq" }]
+  },
+  // Once a day, to remove old records, and to notice a change in how Workers reach APNs. See ADR-0006.
   "triggers": { "crons": ["17 4 * * *"] }
 }
