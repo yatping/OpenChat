@@ -1,0 +1,8 @@
+# Copy to .dev.vars, which Git ignores. Placeholders only: never commit real values.
+# Local development cannot reach APNs, because workerd has no HTTP/2 client. Use a deployed preview for that.
+APNS_TEAM_ID=
+APNS_KEY_ID=
+# The contents of the .p8 file.
+APNS_PRIVATE_KEY=
+APNS_SELF_CHECK_TOPIC=
+RELAY_OPERATOR_TOKEN=

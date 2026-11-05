@@ -220,6 +220,16 @@ paths:
       responses:
         '204': { description: Removed. Idempotent. }
         default: { $ref: '#/components/responses/Problem' }
+  /v1/operator/apns-check:
+    post:
+      summary: Check the path to APNs with a device token no phone can have. For the relay's operator
+      description: 'Takes `Authorization: Bearer` with RELAY_OPERATOR_TOKEN. Proves the path and the key, not the topic.'
+      security: []
+      responses:
+        '200':
+          description: The outcome is ok, credential_error, unreachable, unexpected, or not_configured.
+        '404':
+          description: Any other caller, or no operator token is set.
   /v1/notifications/send:
     post:
       tags: [notifications]

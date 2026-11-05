@@ -4,6 +4,8 @@ Decisions for the project owner. Each has a recommended default so work is not b
 
 ## Needed before Milestone 3 (managed relay)
 
+**Owner's answers, 2026-11-05:** Q5: Orango Labs Ltd runs the managed relay, free with quotas, and terms and a privacy policy need legal review before public launch. Q7: generic text, as recommended. Q8: decide at App Store submission, which does not block Milestone 3.
+
 | # | Question | Why it matters | Recommendation |
 |---|---|---|---|
 | Q5 | **Who operates the managed relay, who pays, and what are the terms?** | The operator holds the Apple signing identity, device tokens, and abuse duties, and may be a data processor under GDPR. Spec §1 forbids a mandatory subscription. | A named legal entity runs it free with quotas, under published terms and a privacy policy. Cost should be small, since a Workers Paid account covers it at low volume, but measure it. |
