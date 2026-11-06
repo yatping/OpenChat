@@ -24,6 +24,7 @@ import type { Context } from 'hono';
 import type { AppEnv } from './context';
 import type { Env } from './env';
 import { emailJobsFor, sweepUnanswered } from './email/alerts';
+import { sweepFollowUps } from './email/follow-ups';
 import { pushJobsFor } from './push/fanout';
 
 const SWEEP_AGE_MS = 60_000;
@@ -144,6 +145,7 @@ export async function sweepOutbox(env: Env, scheduledTime: number): Promise<void
   const db = openDatabase(env.DB);
   await dispatchRows(env, db, await staleOutbox(db, SWEEP_AGE_MS, SWEEP_LIMIT));
   await sweepUnanswered(env, db);
+  await sweepFollowUps(env, db);
   if (new Date(scheduledTime).getUTCMinutes() === 0) {
     await purgeDispatchedOutbox(db, PURGE_AGE_MS, PURGE_LIMIT);
     await sweepAttachments(env, db);

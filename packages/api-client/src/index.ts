@@ -21,6 +21,7 @@ import type {
   createPushGrantRoute,
   listPushSubscriptionsRoute,
   listEmailSuppressionsRoute,
+  listFollowUpRulesRoute,
   recordPushSubscriptionRoute,
   getNotificationPreferencesRoute,
   loginRoute,
@@ -52,6 +53,7 @@ export type Website = Json200<typeof listWebsitesRoute>['data'][number];
 export type PushGrant = Json201<typeof createPushGrantRoute>;
 export type PushSubscription = Json200<typeof listPushSubscriptionsRoute>['data'][number];
 export type PushSubscriptionInput = BodyOf<typeof recordPushSubscriptionRoute>;
+export type FollowUpRule = Json200<typeof listFollowUpRulesRoute>['data'][number];
 export type EmailSuppressionPage = Json200<typeof listEmailSuppressionsRoute>;
 export type NotificationPreferences = Json200<typeof getNotificationPreferencesRoute>;
 export type WebsiteInput = BodyOf<typeof createWebsiteRoute>;
@@ -200,6 +202,10 @@ export function createClient(options: ClientOptions) {
     listEmailSuppressions: (workspaceId: string, cursor?: string) => get<EmailSuppressionPage>(`${workspace(workspaceId)}/email-suppressions?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`),
     addEmailSuppression: (workspaceId: string, email: string) => request<void>('POST', `${workspace(workspaceId)}/email-suppressions`, { email }),
     removeEmailSuppression: (workspaceId: string, email: string) => request<void>('POST', `${workspace(workspaceId)}/email-suppressions/remove`, { email }),
+    listFollowUpRules: (workspaceId: string) => get<{ data: FollowUpRule[] }>(`${workspace(workspaceId)}/follow-up-rules`),
+    createFollowUpRule: (workspaceId: string, input: { name: string; inactiveMinutes: number }) => request<FollowUpRule>('POST', `${workspace(workspaceId)}/follow-up-rules`, input),
+    updateFollowUpRule: (workspaceId: string, ruleId: string, change: { name?: string; enabled?: boolean; inactiveMinutes?: number }) => request<FollowUpRule>('PATCH', `${workspace(workspaceId)}/follow-up-rules/${encodeURIComponent(ruleId)}`, change),
+    deleteFollowUpRule: (workspaceId: string, ruleId: string) => request<void>('DELETE', `${workspace(workspaceId)}/follow-up-rules/${encodeURIComponent(ruleId)}`),
     createRealtimeTicket: (workspaceId: string) => request<RealtimeTicket>('POST', `${workspace(workspaceId)}/realtime/tickets`),
   };
 }

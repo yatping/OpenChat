@@ -363,6 +363,69 @@ export const confirmUnsubscribeRoute = createRoute({
   responses: { 200: { description: 'Page', ...unsubscribePage }, 404: { description: 'No such link', ...unsubscribePage }, default: problemResponse },
 });
 
+export const FollowUpRuleSchema = z
+  .object({ id: z.string(), name: z.string(), enabled: z.boolean(), inactiveMinutes: z.number().int(), createdAt: z.number(), updatedAt: z.number() })
+  .openapi('FollowUpRule');
+
+/** Long enough that it is not a reply to someone still typing, and within what a conversation still means after a while. */
+const InactiveMinutes = z.number().int().min(5).max(43_200);
+const followUpRuleParams = workspaceParams.extend({ ruleId: z.string() });
+
+export const listFollowUpRulesRoute = createRoute({
+  method: 'get',
+  path: '/api/v1/workspaces/{workspaceId}/follow-up-rules',
+  tags: ['email'],
+  operationId: 'listFollowUpRules',
+  summary: 'Rules for following up on quiet conversations. For supervisors.',
+  security: bearer,
+  request: { params: workspaceParams },
+  responses: { 200: { description: 'Rules', ...json(z.object({ data: z.array(FollowUpRuleSchema) })) }, default: problemResponse },
+});
+
+export const createFollowUpRuleRoute = createRoute({
+  method: 'post',
+  path: '/api/v1/workspaces/{workspaceId}/follow-up-rules',
+  tags: ['email'],
+  operationId: 'createFollowUpRule',
+  summary: 'Add a rule. For supervisors.',
+  description: 'A rule only ever emails an open conversation whose visitor gave an address and consent. It first applies after the next public message in a conversation.',
+  security: bearer,
+  request: { params: workspaceParams, body: { required: true, ...json(z.strictObject({ name: SafeName, enabled: z.boolean().default(true), inactiveMinutes: InactiveMinutes })) } },
+  responses: { 201: { description: 'Rule', ...json(FollowUpRuleSchema) }, default: problemResponse },
+});
+
+export const updateFollowUpRuleRoute = createRoute({
+  method: 'patch',
+  path: '/api/v1/workspaces/{workspaceId}/follow-up-rules/{ruleId}',
+  tags: ['email'],
+  operationId: 'updateFollowUpRule',
+  summary: 'Change a rule. For supervisors.',
+  security: bearer,
+  request: {
+    params: followUpRuleParams,
+    body: {
+      required: true,
+      ...json(
+        z
+          .strictObject({ name: SafeName.optional(), enabled: z.boolean().optional(), inactiveMinutes: InactiveMinutes.optional() })
+          .refine((b) => b.name !== undefined || b.enabled !== undefined || b.inactiveMinutes !== undefined, 'Nothing to change'),
+      ),
+    },
+  },
+  responses: { 200: { description: 'Rule', ...json(FollowUpRuleSchema) }, default: problemResponse },
+});
+
+export const deleteFollowUpRuleRoute = createRoute({
+  method: 'delete',
+  path: '/api/v1/workspaces/{workspaceId}/follow-up-rules/{ruleId}',
+  tags: ['email'],
+  operationId: 'deleteFollowUpRule',
+  summary: 'Delete a rule. For supervisors.',
+  security: bearer,
+  request: { params: followUpRuleParams },
+  responses: { 204: { description: 'Deleted' }, default: problemResponse },
+});
+
 export const EmailSuppressionSchema = z
   .object({ email: z.string(), reason: z.enum(['unsubscribe', 'bounce', 'complaint', 'manual']), createdAt: z.number() })
   .openapi('EmailSuppression');

@@ -17,6 +17,7 @@ const CAPABILITIES = {
   'contact.merge': SUPERVISORS,
   'tag.delete': SUPERVISORS,
   'suppression.manage': SUPERVISORS,
+  'automation.manage': SUPERVISORS,
 } as const satisfies Record<string, readonly Role[]>;
 
 export type Capability = keyof typeof CAPABILITIES;
