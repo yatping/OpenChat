@@ -17,7 +17,7 @@ import {
   type Database,
   type OutboxRow,
 } from '@openchat/database';
-import { EmailSendError, type EmailProvider } from '@openchat/email';
+import { EmailSendError, type EmailMessage, type EmailProvider } from '@openchat/email';
 import { createLogger, newId, type JobEnvelope } from '@openchat/shared';
 import type { Env } from '../env';
 
@@ -60,6 +60,29 @@ function stillTrue(kind: AlertKind, facts: AlertFacts): boolean {
   return facts.status === 'open' && facts.lastVisitorMessageAt !== null && (facts.lastAgentMessageAt === null || facts.lastAgentMessageAt < facts.lastVisitorMessageAt);
 }
 
+export const systemFrom = (env: Env, publicBaseUrl: string) => env.SYSTEM_EMAIL_FROM ?? `no-reply@${new URL(publicBaseUrl).hostname}`;
+
+/** Claim, send, record. A repeated job finds the claim and sends nothing, and the log holds a hash and no address. */
+export async function deliverOnce(db: Database, email: EmailProvider, input: { workspaceId: string; dedupeKey: string; template: string; to: string; message: () => EmailMessage | Promise<EmailMessage> }): Promise<void> {
+  const { workspaceId, dedupeKey, template } = input;
+  if (!(await claimEmailDelivery(db, { workspaceId, dedupeKey, template, recipientHash: await sha256Hex(input.to.toLowerCase()) }))) {
+    createLogger({ workspaceId }).info('email_already_claimed');
+    return;
+  }
+  try {
+    const sent = await email.send({ ...(await input.message()), idempotencyKey: dedupeKey });
+    await finishEmailDelivery(db, { workspaceId, dedupeKey, status: 'sent', providerMessageId: sent.messageId });
+  } catch (error) {
+    // Cloudflare keeps a list of its own, from bounces and complaints. Retrying could not change its answer.
+    if (error instanceof EmailSendError && error.code === 'E_RECIPIENT_SUPPRESSED') {
+      await finishEmailDelivery(db, { workspaceId, dedupeKey, status: 'suppressed' });
+      return;
+    }
+    await finishEmailDelivery(db, { workspaceId, dedupeKey, status: 'failed' }).catch(() => undefined);
+    throw error;
+  }
+}
+
 async function handleAlert(job: JobEnvelope, env: Env): Promise<void> {
   const db = openDatabase(env.DB);
   const workspaceId = job.workspaceId!;
@@ -84,25 +107,17 @@ async function handleSend(job: JobEnvelope, env: Env, email: EmailProvider): Pro
   const payload = job.payload as SendPayload;
   const [facts, recipient, installation] = await Promise.all([conversationForAlert(db, workspaceId, payload.conversationId), alertRecipient(db, workspaceId, payload.memberId, payload.kind), getInstallation(db)]);
   if (!facts || !recipient || !installation || !stillTrue(payload.kind, facts)) return;
-  const dedupeKey = `alert:${payload.eventId}:${payload.memberId}`;
-  const claimed = await claimEmailDelivery(db, { workspaceId, dedupeKey, template: payload.kind, recipientHash: await sha256Hex(recipient.email.toLowerCase()) });
-  if (!claimed) {
-    createLogger({ workspaceId }).info('email_already_claimed', { jobId: job.id });
-    return;
-  }
-  try {
-    const message = alertEmail({ kind: payload.kind, workspaceName: facts.workspaceName, publicBaseUrl: installation.publicBaseUrl });
-    const sent = await email.send({ to: recipient.email, from: { name: facts.workspaceName, email: env.SYSTEM_EMAIL_FROM ?? `no-reply@${new URL(installation.publicBaseUrl).hostname}` }, ...message, idempotencyKey: dedupeKey });
-    await finishEmailDelivery(db, { workspaceId, dedupeKey, status: 'sent', providerMessageId: sent.messageId });
-  } catch (error) {
-    // Cloudflare keeps a list of its own, from bounces and complaints. Retrying could not change its answer.
-    if (error instanceof EmailSendError && error.code === 'E_RECIPIENT_SUPPRESSED') {
-      await finishEmailDelivery(db, { workspaceId, dedupeKey, status: 'suppressed' });
-      return;
-    }
-    await finishEmailDelivery(db, { workspaceId, dedupeKey, status: 'failed' }).catch(() => undefined);
-    throw error;
-  }
+  await deliverOnce(db, email, {
+    workspaceId,
+    dedupeKey: `alert:${payload.eventId}:${payload.memberId}`,
+    template: payload.kind,
+    to: recipient.email,
+    message: () => ({
+      to: recipient.email,
+      from: { name: facts.workspaceName, email: systemFrom(env, installation.publicBaseUrl) },
+      ...alertEmail({ kind: payload.kind, workspaceName: facts.workspaceName, publicBaseUrl: installation.publicBaseUrl }),
+    }),
+  });
 }
 
 export const EMAIL_ALERT_HANDLERS = {

@@ -1,4 +1,4 @@
-import type { NotificationPreferences } from '@openchat/api-client';
+import type { FollowUpRule, NotificationPreferences } from '@openchat/api-client';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api, errorMessage } from '../app-context';
@@ -74,6 +74,49 @@ export function SuppressionsPanel({ workspaceId }: { workspaceId: string }) {
         ))}
       </ul>
       {list.data?.nextCursor ? <p className="text-xs text-slate-600 dark:text-slate-400">Showing the first 100.</p> : null}
+    </section>
+  );
+}
+
+const describeWait = (minutes: number) => (minutes % 60 === 0 ? `${minutes / 60} hour${minutes === 60 ? '' : 's'}` : `${minutes} minutes`);
+
+/** For supervisors. */
+export function FollowUpRulesPanel({ workspaceId }: { workspaceId: string }) {
+  const client = useQueryClient();
+  const key = ['follow-up-rules', workspaceId];
+  const [name, setName] = useState('');
+  const [minutes, setMinutes] = useState('60');
+  const rules = useQuery({ queryKey: key, queryFn: () => api.listFollowUpRules(workspaceId) });
+  const refresh = () => client.invalidateQueries({ queryKey: key });
+  const add = useMutation({ mutationFn: () => api.createFollowUpRule(workspaceId, { name: name.trim(), inactiveMinutes: Number(minutes) }), onSuccess: () => { setName(''); void refresh(); } });
+  const toggle = useMutation({ mutationFn: (rule: FollowUpRule) => api.updateFollowUpRule(workspaceId, rule.id, { enabled: !rule.enabled }), onSuccess: refresh });
+  const remove = useMutation({ mutationFn: (rule: FollowUpRule) => api.deleteFollowUpRule(workspaceId, rule.id), onSuccess: refresh });
+  const failure = rules.error ?? add.error ?? toggle.error ?? remove.error;
+  return (
+    <section className="card space-y-3" aria-label="Follow-up emails">
+      <h2 className="font-medium">Follow-up emails</h2>
+      <p className="text-xs text-slate-600 dark:text-slate-400">Sent once when an open conversation has had no messages for this long, only to visitors who gave an email address and ticked the box to allow it. Closing a browser does not count. A new or changed rule applies from the next message in a conversation.</p>
+      {failure ? <p className="error" role="alert">{errorMessage(failure)}</p> : null}
+      <ul className="divide-y divide-slate-200 dark:divide-slate-800">
+        {rules.data?.data.map((rule) => (
+          <li key={rule.id} className="flex flex-wrap items-center gap-3 py-2 text-sm">
+            <label className="flex min-w-48 flex-1 items-center gap-3">
+              <input type="checkbox" checked={rule.enabled} disabled={toggle.isPending} onChange={() => toggle.mutate(rule)} />
+              <span>{rule.name}, after {describeWait(rule.inactiveMinutes)}</span>
+            </label>
+            <button className="button-quiet" disabled={remove.isPending} onClick={() => remove.mutate(rule)}>Delete</button>
+          </li>
+        ))}
+      </ul>
+      <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); add.mutate(); }}>
+        <label className="min-w-40 flex-1 text-sm">Rule name
+          <input className="field" required maxLength={100} value={name} onChange={(event) => setName(event.target.value)} />
+        </label>
+        <label className="w-32 text-sm">After minutes
+          <input className="field" type="number" required min={5} max={43200} value={minutes} onChange={(event) => setMinutes(event.target.value)} />
+        </label>
+        <button className="button" disabled={add.isPending}>Add rule</button>
+      </form>
     </section>
   );
 }

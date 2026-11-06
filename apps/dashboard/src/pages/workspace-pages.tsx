@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api, errorMessage, preference, queryClient, session } from '../app-context';
 import { InboxPanel } from '../inbox/inbox-panel';
-import { NotificationsPanel, SuppressionsPanel } from './notifications-panel';
+import { FollowUpRulesPanel, NotificationsPanel, SuppressionsPanel } from './notifications-panel';
 import { PeoplePage } from './people-page';
 import { CopyableSnippet, WorkspacesAdminPage } from './workspaces-admin-page';
 
@@ -118,7 +118,7 @@ export function WorkspaceApp() {
               </button>
             ))}
           </nav>
-          {tab === 'inbox' ? <InboxWithMembers membership={current} /> : tab === 'websites' ? <WebsitesPanel membership={current} /> : tab === 'notifications' ? <div className="space-y-6"><NotificationsPanel workspaceId={current.workspace.id} />{current.role === 'supervisor' && <SuppressionsPanel workspaceId={current.workspace.id} />}</div> : <MembersPanel membership={current} />}
+          {tab === 'inbox' ? <InboxWithMembers membership={current} /> : tab === 'websites' ? <WebsitesPanel membership={current} /> : tab === 'notifications' ? <div className="space-y-6"><NotificationsPanel workspaceId={current.workspace.id} />{current.role === 'supervisor' && <><FollowUpRulesPanel workspaceId={current.workspace.id} /><SuppressionsPanel workspaceId={current.workspace.id} /></>}</div> : <MembersPanel membership={current} />}
         </div>
       )}
     </div>

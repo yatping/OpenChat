@@ -178,6 +178,16 @@ describe('a visitor left waiting', () => {
     expect(await dueAt(id)).toBeNull();
   });
 
+  it('still emails after an internal note, which the visitor never sees', async () => {
+    const { id } = await visitorStarts();
+    expect((await reply(id, 'internal_note')).status).toBe(201);
+    queued = [];
+    await makeDue(id);
+    await sweep();
+    await runQueue();
+    expect(sent.map((m) => m.to).sort()).toEqual(['one@example.com', 'two@example.com']);
+  });
+
   it('emails when due, and only once however often the sweep runs', async () => {
     const { id } = await visitorStarts();
     queued = [];

@@ -8,6 +8,7 @@ import { CloudflareEmailProvider, ConsoleEmailProvider, EmailSendError, ResendEm
 import { AppError, createLogger, newId, retryDelaySeconds, type JobEnvelope } from '@openchat/shared';
 import { sweepOutbox } from './dispatch';
 import { EMAIL_ALERT_HANDLERS } from './email/alerts';
+import { FOLLOW_UP_HANDLERS } from './email/follow-ups';
 import { NOTIFICATION_HANDLERS } from './push/fanout';
 import { RelayError } from './push/relay-client';
 import type { Env } from './env';
@@ -72,6 +73,7 @@ const HANDLERS: Record<string, Handler> = {
   },
   ...NOTIFICATION_HANDLERS,
   ...EMAIL_ALERT_HANDLERS,
+  ...FOLLOW_UP_HANDLERS,
   // Queued by a Worker from before ADR-0016. Its link would lead nowhere, so it is acknowledged and dropped. Remove after one release.
   'workspace.invitation_email': async () => undefined,
 };

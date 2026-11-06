@@ -32,7 +32,7 @@ Three queues plus DLQs, not one per job type. Few queues keep self-hosted setup 
 | Queue | Job types | `max_batch_size` | `max_batch_timeout` | `max_retries` | `max_concurrency` |
 |---|---|---|---|---|---|
 | `oc-notifications` | `notification.fanout`, `notification.dispatch`, `notification.unregister` | 25 | 1 s | 8 | 20 |
-| `oc-email` | Alerts to members (`email.alert`, `email.send`), which hold IDs only and read the address when sending. System email (`auth.password_reset_email`, `auth.new_account_email`) | No delivery row, because the token is created at send time. Each attempt has a new token and so a new provider idempotency key, A crash after sending can deliver two emails, and failures of any kind retry and then dead-letter. |
+| `oc-email` | Alerts to members (`email.alert`, `email.send`) and follow-ups to visitors (`email.follow_up`), which hold IDs only and read the address when sending. System email (`auth.password_reset_email`, `auth.new_account_email`) | No delivery row, because the token is created at send time. Each attempt has a new token and so a new provider idempotency key, A crash after sending can deliver two emails, and failures of any kind retry and then dead-letter. |
 | `email.send` | 10 | 5 s | 8 | 5 |
 | `oc-jobs` | `attachment.process`, `automation.evaluate`, `webhook.deliver` (later), `workspace.purge`, `analytics.rollup` | 10 | 5 s | 5 | 10 |
 | `*-dlq` | All of the above | 25 | 30 s | 3 | 1 |
@@ -90,9 +90,10 @@ Exactly-once is impossible for external effects, so each consumer aims for the n
 |---|---|---|
 | `notification.dispatch` | Relay dedupes on `notificationId` for 72 hours | None within the window |
 | `notification.unregister` | Removing nothing still succeeds at the relay | None |
+| `email.follow_up` | The same claim as `email.send`, keyed on rule, conversation, and quiet period | The same two as `email.send` |
 | `email.alert` | Decides who should hear, then queues one `email.send` per person. Repeating it queues the same keys | None of its own |
 | `email.send` | Unique `email_deliveries (workspace_id, dedupe_key)`: claim, send, mark sent. A row marked `failed` can be claimed again by a retry | Two. A crash between send and mark leaves the row `claimed`, and nothing sends again, because a missed email is better than a duplicate. An answer lost after Cloudflare accepted the send marks it `failed`, and the retry sends twice, because Cloudflare documents no idempotency key |
-| `automation.evaluate` | Unique `automation_runs (workspace_id, rule_id, conversation_id, trigger_key)` | None for the decision |
+| `automation.evaluate` | Unique `automation_runs (workspace_id, rule_id, conversation_id, trigger_key)`. A repeat queues `email.follow_up` again, in case a crash came before it, and the claim there keeps it to one | None for the decision |
 | Internal state | SQL conditions per the [write patterns](data-model.md#write-patterns), or `job_receipts` | None |
 
 <a id="push"></a>
@@ -158,12 +159,16 @@ Follow-ups need both consent and an address not on the list. [Follow-up automati
 
 Queue delays cap at 24 hours and cannot be cancelled. A Durable Object alarm per conversation would mean a wake per conversation. Instead:
 
-1. Each message update sets `next_automation_at` to `now + the workspace's shortest inactivity threshold` when the workspace has an enabled rule. Otherwise it stays NULL.
+1. Each public message sets `next_automation_at` to `now + the workspace's shortest inactivity threshold` when the workspace has an enabled rule. Otherwise it becomes NULL. An internal note changes nothing, because the visitor never saw it.
 2. The sweep finds due conversations through a partial index, at a cost proportional to the work.
-3. `automation.evaluate` reads fresh state, evaluates rules, and claims `automation_runs` using `last_message_seq` as the `trigger_key`. So one quiet period produces at most one follow-up, even with duplicates, and new activity naturally resets it.
-4. It enqueues `email.send`, which re-checks consent and suppression immediately before sending.
+3. `automation.evaluate` reads fresh state, evaluates rules, and claims `automation_runs` using `last_public_seq` as the `trigger_key`. So one quiet period produces at most one follow-up per rule, even with duplicates, and a new public message resets it. A rule with a longer wait sets the column again, for later.
+4. It enqueues `email.follow_up`, which re-checks the rule, the conversation, the address, consent, and suppression immediately before sending.
 
-Rule edits take effect at the next evaluation. If a threshold shrinks, conversations already scheduled are picked up later than the new threshold suggests. That is acceptable, and documented in the rule editor.
+Nothing here knows about browsers or sockets, so a disconnect alone triggers nothing.
+
+Rule edits take effect at the next evaluation. A new rule, or a threshold that shrinks, reaches a conversation only after its next public message or its next scheduled check. That is acceptable, and the rule editor says so.
+
+Follow-ups use one fixed template, in `packages/core/src/email-templates.ts`, with no message text. Its link goes to the website's first allowed origin.
 
 ## Failure monitoring
 

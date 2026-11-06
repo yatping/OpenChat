@@ -81,6 +81,10 @@ const CASES: Record<string, Case> = {
   showUnsubscribe: { kind: 'public', reason: 'Acts only on the address of the presented token' },
   confirmUnsubscribe: { kind: 'public', reason: 'Acts only on the address of the presented token' },
   listEmailSuppressions: { kind: 'workspace', ownerStatus: 200 },
+  listFollowUpRules: { kind: 'workspace', ownerStatus: 200 },
+  createFollowUpRule: { kind: 'workspace', body: { name: 'Taken over', inactiveMinutes: 30 }, ownerStatus: 201 },
+  updateFollowUpRule: { kind: 'workspace', body: { name: 'Taken over' }, ownerStatus: 200 },
+  deleteFollowUpRule: { kind: 'workspace', ownerStatus: 204 },
   addEmailSuppression: { kind: 'workspace', body: { email: 'blocked@example.com' }, ownerStatus: 204 },
   removeEmailSuppression: { kind: 'workspace', body: { email: 'blocked@example.com' }, ownerStatus: 204 },
   setNotificationPreferences: { kind: 'workspace', body: { preferences: [] }, ownerStatus: 204 },
@@ -161,8 +165,8 @@ const testEnv = { ...env, EMAIL_QUEUE: { send: async (_job: JobEnvelope) => unde
 
 /** Resources in each workspace, by the name of the path parameter that holds them. */
 const RESOURCES: Record<'a' | 'b', Record<string, string>> = {
-  a: { userId: 'user_a_agent', workspaceId: 'work_a', memberId: 'mem_a_agent', websiteId: 'site_a', conversationId: 'conv_a', contactId: 'cont_a', tagId: 'tag_a', attachmentId: 'att_a', subscriptionId: 'psub_a' },
-  b: { userId: 'user_b_agent', workspaceId: 'work_b', memberId: 'mem_b_agent', websiteId: 'site_b', conversationId: 'conv_b', contactId: 'cont_b', tagId: 'tag_b', attachmentId: 'att_b', subscriptionId: 'psub_b' },
+  a: { userId: 'user_a_agent', workspaceId: 'work_a', memberId: 'mem_a_agent', websiteId: 'site_a', conversationId: 'conv_a', contactId: 'cont_a', tagId: 'tag_a', attachmentId: 'att_a', subscriptionId: 'psub_a', ruleId: 'rule_a' },
+  b: { userId: 'user_b_agent', workspaceId: 'work_b', memberId: 'mem_b_agent', websiteId: 'site_b', conversationId: 'conv_b', contactId: 'cont_b', tagId: 'tag_b', attachmentId: 'att_b', subscriptionId: 'psub_b', ruleId: 'rule_b' },
 };
 
 function urlFor(path: string, ...sources: Record<string, string>[]): string {
@@ -195,7 +199,7 @@ const request = async (method: string, path: string, token: string | null, body?
   return response;
 };
 
-const TABLES = ['workspaces', 'workspace_members', 'websites', 'invitations', 'audit_log', 'outbox', 'conversation_read_cursors', 'conversation_events', 'messages', 'conversations', 'tags', 'conversation_tags', 'contacts', 'visitors', 'attachments', 'push_subscriptions', 'notification_preferences'];
+const TABLES = ['automation_rules', 'workspaces', 'workspace_members', 'websites', 'invitations', 'audit_log', 'outbox', 'conversation_read_cursors', 'conversation_events', 'messages', 'conversations', 'tags', 'conversation_tags', 'contacts', 'visitors', 'attachments', 'push_subscriptions', 'notification_preferences'];
 
 /** Every row belonging to workspace A. A refused request must leave this exactly as it was. */
 async function snapshotOfA(): Promise<string> {
@@ -223,6 +227,7 @@ async function seed() {
       env.DB.prepare(`INSERT INTO websites (id, workspace_id, name, website_key, created_at, updated_at) VALUES (?1, ?2, 'Site', ?3, 1, 1)`).bind(`site_${w}`, `work_${w}`, `key_${w}`),
       env.DB.prepare(`INSERT INTO push_subscriptions (id, workspace_id, member_id, relay_id, relay_subscription_id, platform, created_at, updated_at) VALUES (?1, ?2, ?3, 'managed', ?4, 'ios', 1, 1)`).bind(`psub_${w}`, `work_${w}`, `mem_${w}_owner`, `sub_${w}`),
       env.DB.prepare(`INSERT INTO tags (id, workspace_id, name, created_at) VALUES (?1, ?2, 'existing', 1)`).bind(`tag_${w}`, `work_${w}`),
+      env.DB.prepare(`INSERT INTO automation_rules (id, workspace_id, name, trigger_type, conditions_json, actions_json, created_at, updated_at) VALUES (?1, ?2, 'Rule', 'conversation_inactive', '{"inactiveMinutes":30}', '[]', 1, 1)`).bind(`rule_${w}`, `work_${w}`),
       env.DB.prepare(`INSERT INTO contacts (id, workspace_id, first_seen_at, last_seen_at, created_at, updated_at) VALUES (?1, ?2, 1, 1, 1, 1)`).bind(`cont_${w}`, `work_${w}`),
       env.DB.prepare(`INSERT INTO conversations (id, workspace_id, website_id, contact_id, last_message_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, 1, 1, 1)`).bind(`conv_${w}`, `work_${w}`, `site_${w}`, `cont_${w}`),
       env.DB.prepare(`INSERT INTO attachments (id, workspace_id, conversation_id, storage_key, filename, content_type, size, status, uploaded_by_type, uploaded_by_id, created_at) VALUES (?1, ?2, ?3, ?4, 'a.png', 'image/png', 11, 'ready', 'member', ?5, 1)`).bind(`att_${w}`, `work_${w}`, `conv_${w}`, `w/work_${w}/c/conv_${w}/att_${w}`, `mem_${w}_agent`),

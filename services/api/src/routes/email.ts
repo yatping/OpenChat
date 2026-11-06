@@ -1,5 +1,5 @@
-import { addEmailSuppressionRoute, confirmUnsubscribeRoute, listEmailSuppressionsRoute, removeEmailSuppressionRoute, showUnsubscribeRoute } from '@openchat/api-contracts';
-import { addEmailSuppression, confirmUnsubscribe, listEmailSuppressions, removeEmailSuppression, unsubscribeLinkIsValid, workspaceContext } from '@openchat/core';
+import { addEmailSuppressionRoute, confirmUnsubscribeRoute, createFollowUpRuleRoute, deleteFollowUpRuleRoute, listEmailSuppressionsRoute, listFollowUpRulesRoute, removeEmailSuppressionRoute, showUnsubscribeRoute, updateFollowUpRuleRoute } from '@openchat/api-contracts';
+import { addEmailSuppression, confirmUnsubscribe, createFollowUpRule, deleteFollowUpRule, listEmailSuppressions, listFollowUpRules, removeEmailSuppression, unsubscribeLinkIsValid, updateFollowUpRule, workspaceContext } from '@openchat/core';
 import type { Context } from 'hono';
 import { authDeps, type App, type AppEnv } from '../context';
 
@@ -50,6 +50,29 @@ export function registerEmailRoutes(app: App) {
   app.openapi(removeEmailSuppressionRoute, async (c) => {
     const { db, ctx } = await scoped(c, c.req.valid('param').workspaceId);
     await removeEmailSuppression(db, ctx, c.req.valid('json').email);
+    return c.body(null, 204);
+  });
+
+  app.openapi(listFollowUpRulesRoute, async (c) => {
+    const { db, ctx } = await scoped(c, c.req.valid('param').workspaceId);
+    return c.json(await listFollowUpRules(db, ctx), 200);
+  });
+
+  app.openapi(createFollowUpRuleRoute, async (c) => {
+    const { db, ctx } = await scoped(c, c.req.valid('param').workspaceId);
+    return c.json(await createFollowUpRule(db, ctx, c.req.valid('json')), 201);
+  });
+
+  app.openapi(updateFollowUpRuleRoute, async (c) => {
+    const { workspaceId, ruleId } = c.req.valid('param');
+    const { db, ctx } = await scoped(c, workspaceId);
+    return c.json(await updateFollowUpRule(db, ctx, ruleId, c.req.valid('json')), 200);
+  });
+
+  app.openapi(deleteFollowUpRuleRoute, async (c) => {
+    const { workspaceId, ruleId } = c.req.valid('param');
+    const { db, ctx } = await scoped(c, workspaceId);
+    await deleteFollowUpRule(db, ctx, ruleId);
     return c.body(null, 204);
   });
 }
