@@ -82,7 +82,6 @@ export function createVariantWriter(root: string, log: (line: string) => void = 
       const appName = options.appName.trim();
       if (appName.length === 0 || appName.length > 30 || !/[A-Za-z0-9]/.test(appName)) throw new Error('--name is 1 to 30 characters, with at least one letter or number');
       if (!BUNDLE_ID.test(options.bundleId)) throw new Error('--bundle-id looks like com.company.support');
-      if (options.bundleId.startsWith('com.orangolabs.')) throw new Error('--bundle-id must be your own, registered under your Apple account');
       const color = options.color ?? '#2563eb';
       if (!COLOR.test(color)) throw new Error('--color is a colour such as #0f766e');
       const relay = relayFor(options);

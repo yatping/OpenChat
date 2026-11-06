@@ -89,7 +89,6 @@ describe('oc app variant', () => {
     refuses({ id: 'official' }, /reserved/);
     refuses({ id: 'Acme' }, /--id/);
     refuses({ bundleId: 'support' }, /--bundle-id/);
-    refuses({ bundleId: 'com.orangolabs.acme' }, /your own/);
     refuses({ color: 'teal' }, /--color/);
     refuses({ relayEnv: undefined }, /Choose one/);
     refuses({ noPush: true }, /Choose one/);
