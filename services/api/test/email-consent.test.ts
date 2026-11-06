@@ -3,9 +3,7 @@ import { env } from 'cloudflare:workers';
 import { hashPassword } from '@openchat/auth';
 import { newUnsubscribeHeaders } from '@openchat/core';
 import { openDatabase } from '@openchat/database';
-import { EmailSendError } from '@openchat/email';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { handleQueue } from '../src/background';
 import worker from '../src/index';
 
 const ORIGIN = 'https://chat.example.com';
@@ -208,17 +206,4 @@ describe('consent in the widget', () => {
     await save(token, { email: 'vera@example.com', followUpConsent: true });
     expect(await suppressed()).toHaveLength(1);
   });
-});
-
-it('records a send Cloudflare refuses for a past bounce or complaint, and does not retry', async () => {
-  await env.DB.prepare(`INSERT INTO notification_preferences (workspace_id, member_id, event_type, channel, enabled, updated_at) VALUES (?1, 'mem_boss', 'new_conversation', 'email', 1, 1)`).bind(W).run();
-  await env.DB.prepare(`INSERT INTO conversations (id, workspace_id, website_id, contact_id, last_message_at, created_at, updated_at) VALUES ('conv_x', ?1, 'site_a', 'c_a', 1, 1, 1)`).bind(W).run();
-  const body = { v: 1, type: 'email.send', id: 'job_x', idempotencyKey: 'k', workspaceId: W, occurredAt: new Date().toISOString(), notAfter: new Date(Date.now() + 60_000).toISOString(), payload: { kind: 'new_conversation', conversationId: 'conv_x', eventId: 'e1', memberId: 'mem_boss' } };
-  let acked = false;
-  let retried = false;
-  const messages = [{ id: 'x', body, attempts: 1, ack: () => { acked = true; }, retry: () => { retried = true; } }];
-  const provider = { send: () => Promise.reject(new EmailSendError(null, 'E_RECIPIENT_SUPPRESSED')) };
-  await handleQueue({ queue: 'oc-local-email', messages } as unknown as MessageBatch, { ...env, EMAIL_PROVIDER: 'console' } as never, { email: provider });
-  expect({ acked, retried }).toEqual({ acked: true, retried: false });
-  expect((await env.DB.prepare(`SELECT status FROM email_deliveries`).first<{ status: string }>())!.status).toBe('suppressed');
 });

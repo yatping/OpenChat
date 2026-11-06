@@ -242,14 +242,14 @@ Push is M3, so an agent gets no alert while the app is closed. Before anyone rel
 
 ## M4: Email and automation (L)
 
-Provider abstraction. Templates. Agent alerts for new and unanswered conversations. Transcripts with permissions. Rule model, cron sweep, and evaluation with `automation_runs`. Consent capture, unsubscribe, and suppressions. DLQ sink and operator page. Contact export and erasure.
+Provider abstraction. Templates. Rule model, cron sweep, and evaluation with `automation_runs`. Consent capture, unsubscribe, and suppressions. Email is for follow-ups and account email only ([A15](../architecture/spec-review.md#amendments-to-the-specification)). The operator page for failed jobs, and contact export and erasure, moved to M6.
 
 **Exit (spec Phase 4, plus)**
 
 - A qualifying inactive conversation sends one follow-up, even with duplicate deliveries and overlapping sweeps.
 - A browser disconnect alone triggers nothing.
 - Unsubscribed contacts and those without consent are excluded, checked immediately before sending.
-- Failed jobs can be seen and replayed.
+- Failed jobs are recorded with IDs only, in `failed_jobs`. A page to see and replay them moved to M6.
 - A provider outage does not affect messaging.
 
 **Depends on:** Q12, Q13.
@@ -258,11 +258,10 @@ Provider abstraction. Templates. Agent alerts for new and unanswered conversatio
 
 | Slice | State |
 |---|---|
-| Email sending and alerts to members | Done, tested with a fake provider. Not yet sent through real Cloudflare, which the exit check covers |
+| Email sending | Done. Its alerts to members were removed again, by the owner's decision |
 | Consent and unsubscribe | Done, tested with a fake provider. Sending through real Cloudflare is left to the exit check |
 | Follow-up automation | Done, tested with a fake provider. Limits: one fixed template, and a new rule does not reach conversations already quiet |
-| Transcripts | Not started |
-| Operations and data | Not started |
+| Transcripts, operations page, export and erasure | Dropped from M4 by the owner. Export, erasure, and the operations page are in M6 |
 | Exit check | Not started |
 
 ## M5: Independent deployment (L)
@@ -277,7 +276,7 @@ Polished CLI: `deploy`, `upgrade`, `relay deploy`, `relay set-apns`. White-label
 
 ## M6: Hardening and release (M)
 
-Retention settings. Audit log UI. Accessibility pass on widget and dashboard. Widget translations. Monitoring guides and alert recommendations. Backup and restore rehearsal. External security review. App Store submission. Licence and CLA checks. Public documentation, `security.txt`.
+Contact export and erasure, which must also delete `email_unsubscribe_links`. A page to see and replay failed jobs. Retention settings. Audit log UI. Accessibility pass on widget and dashboard. Widget translations. Monitoring guides and alert recommendations. Backup and restore rehearsal. External security review. App Store submission. Licence and CLA checks. Public documentation, `security.txt`.
 
 **Exit:** both acceptance journeys in spec §20 are demonstrated end to end on production infrastructure, with recordings or logs. Known issues published.
 

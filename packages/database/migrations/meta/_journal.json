@@ -57,6 +57,13 @@
       "when": 1793900299716,
       "tag": "0007_chubby_tag",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1793930314973,
+      "tag": "0008_remove_member_email_alerts",
+      "breakpoints": true
     }
   ]
 }

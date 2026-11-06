@@ -275,26 +275,23 @@ describe('subscriptions', () => {
 
 describe('preferences', () => {
   const path = `/api/v1/workspaces/${W}/notification-preferences`;
-  const read = async (name: string) => ((await (await call('GET', path, { token: tokens[name]! })).json()) as { preferences: { eventType: string; channel: string; enabled: boolean }[] }).preferences;
+  const read = async (name: string) => ((await (await call('GET', path, { token: tokens[name]! })).json()) as { preferences: { eventType: string; enabled: boolean }[] }).preferences;
 
   it('starts with everything on, and belongs to one person', async () => {
-    expect((await read('one')).filter((p) => p.channel === 'push').every((p) => p.enabled)).toBe(true);
-    expect((await read('one')).filter((p) => p.channel === 'email').every((p) => !p.enabled)).toBe(true);
+    expect((await read('one')).every((p) => p.enabled)).toBe(true);
     expect((await call('PUT', path, { token: tokens.one!, body: { preferences: [{ eventType: 'new_message', channel: 'push', enabled: false }] } })).status).toBe(204);
-    expect((await read('one')).find((p) => p.channel === 'push' && p.eventType === 'new_message')!.enabled).toBe(false);
-    expect((await read('two')).find((p) => p.channel === 'push' && p.eventType === 'new_message')!.enabled).toBe(true);
+    expect((await read('one')).find((p) => p.eventType === 'new_message')!.enabled).toBe(false);
+    expect((await read('two')).find((p) => p.eventType === 'new_message')!.enabled).toBe(true);
   });
 
   it('replaces what was there', async () => {
     await call('PUT', path, { token: tokens.one!, body: { preferences: [{ eventType: 'new_message', channel: 'push', enabled: false }] } });
     await call('PUT', path, { token: tokens.one!, body: { preferences: [] } });
-    expect((await read('one')).filter((p) => p.channel === 'push').every((p) => p.enabled)).toBe(true);
+    expect((await read('one')).every((p) => p.enabled)).toBe(true);
   });
 
-  it('refuses an event that does not exist, or not on that channel', async () => {
+  it('refuses an event that does not exist', async () => {
     expect((await call('PUT', path, { token: tokens.one!, body: { preferences: [{ eventType: 'free_text', channel: 'push', enabled: false }] } })).status).toBe(400);
-    expect((await call('PUT', path, { token: tokens.one!, body: { preferences: [{ eventType: 'conversation_unanswered', channel: 'push', enabled: false }] } })).status).toBe(400);
-    expect((await call('PUT', path, { token: tokens.one!, body: { preferences: [{ eventType: 'new_message', channel: 'email', enabled: true }] } })).status).toBe(400);
   });
 });
 

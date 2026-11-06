@@ -2,21 +2,9 @@ import { expect, test } from '@playwright/test';
 import { OWNER } from './fixtures';
 import { signIn } from './helpers';
 
-test('a supervisor can choose email alerts and keep an address from being emailed', async ({ page }) => {
+test('a supervisor can keep an address from being emailed', async ({ page }) => {
   await signIn(page, OWNER);
-  const tab = page.getByRole('navigation', { name: 'Sections' }).getByRole('button', { name: 'notifications' });
-  await tab.click();
-  const box = page.getByRole('checkbox', { name: 'New conversations' });
-  await expect(box).not.toBeChecked();
-  const saved = page.waitForResponse((response) => response.url().endsWith('/notification-preferences') && response.request().method() === 'PUT');
-  // Not check(), which looks in the same instant, before the query cache has told the page.
-  await box.click();
-  expect((await saved).status()).toBe(204);
-  await expect(box).toBeChecked();
-  await page.reload();
-  await tab.click();
-  await expect(page.getByRole('checkbox', { name: 'New conversations' })).toBeChecked();
-
+  await page.getByRole('navigation', { name: 'Sections' }).getByRole('button', { name: 'email' }).click();
   const address = `blocked-${Date.now()}@example.com`;
   const list = page.getByRole('region', { name: 'Addresses not to email' });
   await list.getByLabel('Email address').fill(address);
@@ -29,7 +17,7 @@ test('a supervisor can choose email alerts and keep an address from being emaile
 
 test('a supervisor can add, turn off, and delete a follow-up rule', async ({ page }) => {
   await signIn(page, OWNER);
-  await page.getByRole('navigation', { name: 'Sections' }).getByRole('button', { name: 'notifications' }).click();
+  await page.getByRole('navigation', { name: 'Sections' }).getByRole('button', { name: 'email' }).click();
   const panel = page.getByRole('region', { name: 'Follow-up emails' });
   const name = `Rule ${Date.now()}`;
   await panel.getByLabel('Rule name').fill(name);

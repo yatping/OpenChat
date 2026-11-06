@@ -7,7 +7,7 @@ import { claimJob, getInstallation, openDatabase, recordFailedJob } from '@openc
 import { CloudflareEmailProvider, ConsoleEmailProvider, EmailSendError, ResendEmailProvider, type EmailProvider } from '@openchat/email';
 import { AppError, createLogger, newId, retryDelaySeconds, type JobEnvelope } from '@openchat/shared';
 import { sweepOutbox } from './dispatch';
-import { EMAIL_ALERT_HANDLERS } from './email/alerts';
+import { RETIRED_HANDLERS } from './email/delivery';
 import { FOLLOW_UP_HANDLERS } from './email/follow-ups';
 import { NOTIFICATION_HANDLERS } from './push/fanout';
 import { RelayError } from './push/relay-client';
@@ -72,7 +72,7 @@ const HANDLERS: Record<string, Handler> = {
     await sendNewAccountEmail(await systemEmailDeps(env, deps), (job.payload as { userId: string }).userId);
   },
   ...NOTIFICATION_HANDLERS,
-  ...EMAIL_ALERT_HANDLERS,
+  ...RETIRED_HANDLERS,
   ...FOLLOW_UP_HANDLERS,
   // Queued by a Worker from before ADR-0016. Its link would lead nowhere, so it is acknowledged and dropped. Remove after one release.
   'workspace.invitation_email': async () => undefined,

@@ -32,10 +32,11 @@ Three queues plus DLQs, not one per job type. Few queues keep self-hosted setup 
 | Queue | Job types | `max_batch_size` | `max_batch_timeout` | `max_retries` | `max_concurrency` |
 |---|---|---|---|---|---|
 | `oc-notifications` | `notification.fanout`, `notification.dispatch`, `notification.unregister` | 25 | 1 s | 8 | 20 |
-| `oc-email` | Alerts to members (`email.alert`, `email.send`) and follow-ups to visitors (`email.follow_up`), which hold IDs only and read the address when sending. System email (`auth.password_reset_email`, `auth.new_account_email`) | No delivery row, because the token is created at send time. Each attempt has a new token and so a new provider idempotency key, A crash after sending can deliver two emails, and failures of any kind retry and then dead-letter. |
-| `email.send` | 10 | 5 s | 8 | 5 |
+| `oc-email` | `email.follow_up`, `auth.password_reset_email`, `auth.new_account_email` | 10 | 5 s | 8 | 5 |
 | `oc-jobs` | `attachment.process`, `automation.evaluate`, `webhook.deliver` (later), `workspace.purge`, `analytics.rollup` | 10 | 5 s | 5 | 10 |
 | `*-dlq` | All of the above | 25 | 30 s | 3 | 1 |
+
+Email jobs hold IDs only and read the address when sending. System email (`auth.password_reset_email`, `auth.new_account_email`) has no delivery row, because the token is created at send time. Each attempt has a new token and so a new provider idempotency key. A crash after sending can deliver two emails, and failures of any kind retry and then dead-letter.
 
 These values are starting points to be tuned from Milestone 3 and 4 measurements. `max_retries` is set explicitly everywhere, because the default is 3 and messages are **deleted** if retries run out without a DLQ. CI validates that every consumer has a DLQ configured.
 
@@ -90,9 +91,7 @@ Exactly-once is impossible for external effects, so each consumer aims for the n
 |---|---|---|
 | `notification.dispatch` | Relay dedupes on `notificationId` for 72 hours | None within the window |
 | `notification.unregister` | Removing nothing still succeeds at the relay | None |
-| `email.follow_up` | The same claim as `email.send`, keyed on rule, conversation, and quiet period | The same two as `email.send` |
-| `email.alert` | Decides who should hear, then queues one `email.send` per person. Repeating it queues the same keys | None of its own |
-| `email.send` | Unique `email_deliveries (workspace_id, dedupe_key)`: claim, send, mark sent. A row marked `failed` can be claimed again by a retry | Two. A crash between send and mark leaves the row `claimed`, and nothing sends again, because a missed email is better than a duplicate. An answer lost after Cloudflare accepted the send marks it `failed`, and the retry sends twice, because Cloudflare documents no idempotency key |
+| `email.follow_up` | Unique `email_deliveries (workspace_id, dedupe_key)`: claim, send, mark sent. A row marked `failed` can be claimed again by a retry | Two. A crash between send and mark leaves the row `claimed`, and nothing sends again, because a missed email is better than a duplicate. An answer lost after Cloudflare accepted the send marks it `failed`, and the retry sends twice, because Cloudflare documents no idempotency key |
 | `automation.evaluate` | Unique `automation_runs (workspace_id, rule_id, conversation_id, trigger_key)`. A repeat queues `email.follow_up` again, in case a crash came before it, and the claim there keeps it to one | None for the decision |
 | Internal state | SQL conditions per the [write patterns](data-model.md#write-patterns), or `job_receipts` | None |
 
@@ -132,19 +131,13 @@ One schedule, `* * * * *`, with a dispatcher inside. Each sweep is bounded and m
 | Attachment orphans | Hourly | Unattached and older than 24 h, `LIMIT 200` | Delete from R2, then the row |
 | Token and session expiry | Hourly | Expired, in chunks | Delete |
 | Outbox and receipt purge | Hourly | Older than 14 days, in chunks | Delete |
-| Unanswered alerts | Every minute | `next_unanswered_alert_at` is due, `LIMIT 200` | Queue `email.alert`, then clear the time. With no email provider, only clear it |
 | Heartbeat | Every minute | | Record the time for `/health/queues` |
 
 Sweeps from overlapping cron runs are harmless, because each action is idempotent. Sweep writes use small chunks, because D1 is shared with live traffic.
 
-## Alerts to members
+## What email is for
 
-Email alerts are off until a member turns them on, per workspace, on the Notifications tab, so that a busy website cannot use up a sending allowance by surprise. They say only that something happened, with a link to the inbox, and never include what anyone wrote.
-
-- **New conversation:** the `conversation.created` outbox row queues `email.alert`, for everyone who asked.
-- **Visitor still waiting:** a visitor's message sets `next_unanswered_alert_at` to 15 minutes from now, unless a time is already set. A public reply clears it, and an internal note does not. When due, the alert goes to the assignee if there is one and they asked for it, otherwise to everyone who asked. The 15 minutes is fixed for now.
-
-`email.send` reads the member, their preference, and the conversation again just before sending, so that someone suspended, a switch turned off, or a reply since then all stop it. An unavailable provider only delays alerts: the jobs retry and then dead-letter, and messaging never waits on them.
+By the owner's decision ([amendment A15](spec-review.md#amendments-to-the-specification)), email has two uses: follow-ups to visitors who have gone quiet, and account email such as password resets. Members hear about conversations through push, not email. Job types from before, `email.alert` and `email.send`, are acknowledged and dropped, in case a Worker from before a deploy queues one.
 
 ## Consent and unsubscribe
 

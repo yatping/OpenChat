@@ -284,7 +284,7 @@ export const conversations = sqliteTable(
     lastAgentMessageAt: integer('last_agent_message_at'),
     /** Cron work-list. See docs/architecture/background-jobs.md. */
     nextAutomationAt: integer('next_automation_at'),
-    /** When to email members about a visitor still waiting. Set by a visitor's message, cleared by a public reply. */
+    /** No longer written, since members are not emailed (amendment A15). A later contract migration drops it. */
     nextUnansweredAlertAt: integer('next_unanswered_alert_at'),
     /** Optimistic concurrency token. */
     version: integer('version').notNull().default(1),

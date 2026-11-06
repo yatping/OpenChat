@@ -31,7 +31,6 @@ Beyond the spec's entities, the schema adds what stated requirements need:
 | `conversations.version`, `last_mutation_id` | Optimistic concurrency without interactive transactions |
 | `auth_tokens.consumed_by` | The same guard for one-time tokens: later statements in a reset batch apply only to the attempt that spent the token |
 | `conversations.next_automation_at` | Inactivity detection without table scans |
-| `conversations.next_unanswered_alert_at` | Finding visitors still waiting without table scans |
 | `tags`, `conversation_tags`, `contact_tags` | Tagging |
 | `push_subscriptions` | Replaces `Devices`. Holds handles, never APNs tokens |
 | `email_suppressions`, `email_deliveries` | Suppression and duplicate prevention |

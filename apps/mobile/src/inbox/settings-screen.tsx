@@ -44,7 +44,7 @@ function NotificationSettings() {
     );
   }
   const toggle = (eventType: (typeof CHOICES)[number]['eventType'], enabled: boolean) => {
-    const others = (preferences.data?.preferences ?? []).filter((p) => !(p.channel === 'push' && p.eventType === eventType));
+    const others = (preferences.data?.preferences ?? []).filter((p) => p.eventType !== eventType);
     save.mutate({ preferences: [...others, { eventType, channel: 'push', enabled }] });
   };
   return (
@@ -56,7 +56,7 @@ function NotificationSettings() {
           <Switch
             accessibilityLabel={label}
             disabled={!preferences.data}
-            value={preferences.data?.preferences.find((p) => p.channel === 'push' && p.eventType === eventType)?.enabled ?? true}
+            value={preferences.data?.preferences.find((p) => p.eventType === eventType)?.enabled ?? true}
             onValueChange={(enabled) => toggle(eventType, enabled)}
           />
         </View>

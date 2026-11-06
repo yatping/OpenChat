@@ -136,7 +136,7 @@ The shared logger takes a typed field allowlist, so sensitive data has to be del
 
 Customers are the controllers of visitor data. For GDPR and similar laws, the product needs:
 
-- Export and erase-contact operations (Milestone 4, with the chunked job).
+- Export and erase-contact operations (Milestone 6, with retention settings and the chunked job). Erasing a contact must also delete their rows in `email_unsubscribe_links`, which hold the address.
 - A way to erase a former agent's name on request. Removal keeps it, and no tool for this exists yet.
 - Consent evidence for follow-ups.
 - A widget consent mode which uses session-only storage until the host site grants consent. Built.
