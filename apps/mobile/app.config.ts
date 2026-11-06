@@ -1,13 +1,19 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ExpoConfig } from 'expo/config';
-import type { AppVariant } from './config/variant';
+// With its extension, because Expo loads this file without TypeScript's module resolution.
+import { type AppVariant, variantProblems } from './config/variant.ts';
 
 /** Reads `variants/<id>/variant.json`. A white-label build adds a directory, and sets APP_VARIANT. */
 function loadVariant(id: string): AppVariant {
   if (!/^[a-z0-9-]+$/.test(id)) throw new Error(`Invalid app variant: ${id}`);
   const directory = join(__dirname, 'variants', id);
   const variant = JSON.parse(readFileSync(join(directory, 'variant.json'), 'utf8')) as AppVariant;
+  const problems = variantProblems(variant, id);
+  if (problems.length > 0) throw new Error(`variants/${id}/variant.json:\n  ${problems.join('\n  ')}`);
+  for (const asset of [variant.assets.icon, variant.assets.splash]) {
+    if (!existsSync(join(directory, asset))) throw new Error(`variants/${id}/${asset} is missing`);
+  }
   return { ...variant, id, assets: { icon: join(directory, variant.assets.icon), splash: join(directory, variant.assets.splash) } };
 }
 
@@ -29,6 +35,8 @@ export default (): ExpoConfig => ({
   userInterfaceStyle: 'automatic',
   ios: {
     bundleIdentifier: variant.bundleIdentifier,
+    // TestFlight refuses a build number it has seen before, so a release sets APP_BUILD_NUMBER.
+    buildNumber: process.env.APP_BUILD_NUMBER ?? '1',
     supportsTablet: true,
     config: { usesNonExemptEncryption: false },
   },

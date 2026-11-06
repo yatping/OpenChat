@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createDeployer } from './deploy';
+import { createVariantWriter } from './app-variant';
 import { createRelayDeployer } from './relay';
 import { renderConfig, type DeploymentState } from './render-config';
 import { ABUSE_LIMITS } from '@openchat/shared';
@@ -25,6 +26,11 @@ Your own notification relay, for your own iOS app and APNs key:
   pnpm oc relay allow --env <name> --installation <inst_...> [--remove]
   pnpm oc relay check --env <name>
 
+A white-label build of the iOS app, in apps/mobile/variants/<id>. Nothing in it is secret:
+  pnpm oc app variant --id <id> --name <app name> --bundle-id <id>
+                      (--relay-env <name> | --relay-url <https://...> --relay-id <id> | --no-push)
+                      [--color <#rrggbb>] [--icon <1024px.png>] [--splash <png>]
+
 RESEND_API_KEY and TURNSTILE_SECRET_KEY are read from the environment, so that they stay out of shell history.
 TURNSTILE_SECRET_KEY needs --turnstile-site-key. Websites can then require Turnstile for new visitors.
 
@@ -42,10 +48,34 @@ const flag = (name: string) => {
   return i >= 0 ? rest[i + 1] : undefined;
 };
 const env = flag('env');
+/** pnpm runs this from tooling/cli, so a relative path is taken from where the command was typed. */
+const userPath = (value: string | undefined) => (value === undefined ? undefined : resolve(process.env.INIT_CWD ?? process.cwd(), value));
 
 if (command === 'preflight') {
   const ready = createDeployer(root).preflight({ analytics: rest.includes('--analytics'), emailFrom: flag('email-from'), publicUrl: flag('public-url'), cloudflareEmail: rest.includes('--cloudflare-email') });
   process.exit(ready ? 0 : 1);
+}
+if (command === 'app') {
+  const [id, appName, bundleId] = [flag('id'), flag('name'), flag('bundle-id')];
+  if (rest[0] !== 'variant' || !id || !appName || !bundleId) usage();
+  try {
+    createVariantWriter(root).create({
+      id,
+      appName,
+      bundleId,
+      relayEnv: flag('relay-env'),
+      relayUrl: flag('relay-url'),
+      relayId: flag('relay-id'),
+      noPush: rest.includes('--no-push'),
+      color: flag('color'),
+      icon: userPath(flag('icon')),
+      splash: userPath(flag('splash')),
+    });
+  } catch (error) {
+    console.error((error as Error).message);
+    process.exit(1);
+  }
+  process.exit(0);
 }
 if (!env) usage();
 
@@ -56,7 +86,7 @@ async function relay(name: string) {
   if (sub === 'set-apns') {
     const [teamId, keyId, keyFile, bundleId] = [flag('team-id'), flag('key-id'), flag('key-file'), flag('bundle-id')];
     if (!teamId || !keyId || !keyFile || !bundleId) usage();
-    return relays.setApns(name, { teamId, keyId, keyFile, bundleId });
+    return relays.setApns(name, { teamId, keyId, keyFile: userPath(keyFile)!, bundleId });
   }
   if (sub === 'allow') {
     const installation = flag('installation');
