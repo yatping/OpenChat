@@ -299,6 +299,16 @@ Polished CLI: `deploy`, `upgrade`, `relay deploy`, `relay set-apns`. White-label
 - The official app still connects to that installation, without push and with a clear explanation.
 - Upgrade test passes, including rollback.
 
+**Status**
+
+| Slice | State |
+|---|---|
+| `oc relay deploy`, `set-apns`, `allow`, `check` | Built. Tested with a fake Wrangler, and on real Cloudflare with a real key ([validation](../architecture/cloudflare-validation.md#relay-cli-on-real-cloudflare-2026-11-06)) |
+| `oc upgrade` and `oc rollback`, with a CI upgrade test from v0.1.0 | Not started |
+| White-label variant template and `oc app variant` | Not started |
+| Self-hosting guide, to be followed literally | Not started |
+| Exit check, run by the owner on their own account | Not started. A separate Apple account stays a limit |
+
 ## M6: Hardening and release (M)
 
 Contact export and erasure, which must also delete `email_unsubscribe_links`. A page to see and replay failed jobs. Retention settings. Audit log UI. Accessibility pass on widget and dashboard. Widget translations. Monitoring guides and alert recommendations. Backup and restore rehearsal. External security review. App Store submission. Licence and CLA checks. Public documentation, `security.txt`.
