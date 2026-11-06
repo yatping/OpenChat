@@ -306,7 +306,7 @@ Polished CLI: `deploy`, `upgrade`, `relay deploy`, `relay set-apns`. White-label
 | `oc relay deploy`, `set-apns`, `allow`, `check` | Built. Tested with a fake Wrangler, and on real Cloudflare with a real key ([validation](../architecture/cloudflare-validation.md#relay-cli-on-real-cloudflare-2026-11-06)) |
 | `oc upgrade` and `oc rollback`, with a CI upgrade test from v0.1.0 | Built. The CI test runs both versions on local D1. The commands are tested with a fake Wrangler and on real Cloudflare |
 | White-label variant template and `oc app variant` | Built: `oc app variant`, a check of every variant before a build, and an App Store lane beside the ad-hoc one. Locking an app to one installation is not built |
-| Self-hosting guide, to be followed literally | Not started |
+| Self-hosting guide, to be followed literally | Written: [self-hosting.md](../operations/self-hosting.md). Its Cloudflare steps were followed from a fresh clone on real Cloudflare. The Apple steps are first followed in the exit check |
 | Exit check, run by the owner on their own account | Not started. A separate Apple account stays a limit |
 
 ## M6: Hardening and release (M)

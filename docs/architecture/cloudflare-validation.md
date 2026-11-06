@@ -538,6 +538,21 @@ The automatic rollback of an unhealthy Worker has only run against a fake Wrangl
 
 **Removing it** needed the same order as the relay, and the Worker delete answered 10064 for a short time after the consumers were removed. A retry about 20 seconds later worked.
 
+## Self-hosting guide, followed on real Cloudflare (2026-11-06)
+
+The [guide](../operations/self-hosting.md) was followed from a fresh clone of `main`, as `preview-g`, then removed. Its Apple steps, 6, 8, and 9, were not followed here: they register a bundle ID, and the exit check does that on the owner's own one.
+
+| Step | Result |
+|---|---|
+| 1. `corepack enable` and `pnpm install --frozen-lockfile` | pnpm 12.8.1, as pinned |
+| 2. `oc preflight` | Every line `ok`, `confirm`, or `note`, as the guide says |
+| 3. `oc deploy` | 1 minute 41 seconds. Output as the guide shows it |
+| 4, 5. Owner signs in, adds a website, a visitor writes, the dashboard replies | Works. Another origin is refused with 403 |
+| 7. `relay deploy`, `set-apns`, `allow` with the ID from discovery, `deploy` with the relay | Works. Apple accepted the key, and the discovery document names the relay |
+| 8. `oc app variant --relay-env` | Its relay matches the discovery document exactly, which is what the app compares. A push grant answered 201 |
+| 10. `oc upgrade`, `oc relay deploy`, `oc relay check` | Works |
+| Removing everything, in the guide's order | Works, but the installation's Worker answered 10064 for about three minutes after its consumers were removed |
+
 ## Sources
 
 - [D1 limits](https://developers.cloudflare.com/d1/platform/limits/), [D1 database API](https://developers.cloudflare.com/d1/worker-api/d1-database/), [migrations](https://developers.cloudflare.com/d1/reference/migrations/), [foreign keys](https://developers.cloudflare.com/d1/sql-api/foreign-keys/), [read replication](https://developers.cloudflare.com/d1/best-practices/read-replication/), [Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/)

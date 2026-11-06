@@ -2,6 +2,8 @@
 
 Managed and independent configurations stay separate (spec rule 18). Only the configuration differs, and all code comes from the same tagged release.
 
+To set up your own from nothing, follow the [self-hosting guide](self-hosting.md). This document is the reference behind it.
+
 ## Prerequisites
 
 Run `pnpm oc preflight` to check them. It only reads, and `oc deploy` runs the same check before creating anything. It marks what Wrangler can't read as `confirm`, so check those yourself.
