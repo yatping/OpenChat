@@ -13,7 +13,7 @@ Spec §14 sets out most of this. Amendment A8 moves the relay URL to build time 
 | Push environment | **Build**, per profile | Must match the signed entitlement |
 | Team ID, signing | **Build** | EAS credentials |
 | **Allowed relays** | **Build** | Security: see below |
-| Locked installation URL | **Build**, optional | A white-label app can be restricted to one installation |
+| Locked installation URL | **Build**, optional | A white-label app could be restricted to one installation. The field exists in a variant, but the app does not use it yet |
 | Default branding | Build | |
 | Installation URLs | **Runtime** | Entered by users, stored per Connection |
 | Workspace list | **Runtime** | From the installation |
@@ -31,6 +31,27 @@ Tokens are only useful together with the matching Apple credentials, but they st
 **Nothing secret goes in a variant or in `extra`**: they are embedded in the app, and anyone can read them. Check with `pnpm exec expo config --type public`.
 
 A white-label customer adds a directory under `variants/`. The official variant holds only public values, because the APNs key exists only in the relay.
+
+`app.config.ts` checks the variant before anything else (`variantProblems` in `config/variant.ts`), and a build stops on any problem: an unknown field, a relay that is not a plain `https` origin, push on with no relay, a bad bundle ID or colour, or a missing image. Refusing unknown fields keeps a key or password from being added to the app by mistake.
+
+### Making a variant
+
+```sh
+pnpm oc app variant --id acme --name "Acme Support" --bundle-id com.acme.support \
+  --relay-env production --color '#0f766e' --icon ./icon.png --splash ./splash.png
+```
+
+| Flag | |
+|---|---|
+| `--id` | The directory name, and `APP_VARIANT`. Lowercase letters, numbers, and hyphens. `official` and `local` are taken |
+| `--name` | The name under the icon. Up to 30 characters |
+| `--bundle-id` | Your own, registered under your Apple account. It is the APNs topic, and permanent once on the App Store |
+| `--relay-env` | Where you ran `oc relay deploy`. Its URL and relay ID become the only relay the app sends a token to. Or give `--relay-url` and `--relay-id`, or `--no-push` |
+| `--icon` | PNG, 1024 by 1024, with no transparency, which the App Store refuses. Optional: without it, the variant has the OpenChat icon until you replace `assets/icon.png` |
+| `--splash` | PNG. Optional, as for the icon |
+| `--color` | The splash background. Default `#2563eb` |
+
+It writes `apps/mobile/variants/<id>/variant.json` and copies the images. It refuses an existing directory, so edit `variant.json` to change one. Relative paths are taken from the repository root, where `pnpm oc` runs. In a fork, commit the variant: nothing in it is secret.
 
 ## Building
 
@@ -55,11 +76,13 @@ fastlane ios install                      # Needs the phone unlocked and connect
 
 `refresh_profile` also enables Push Notifications on the App ID, which M3 needs. `APP_VARIANT` chooses a white-label variant, as it does for prebuild. The certificate goes into a temporary keychain that is deleted after each build, and profiles stay in `credentials/`, which Git ignores. With the phone on Wi-Fi only, `install` timed out even though the phone showed as connected. It worked with a cable.
 
-| Build | APNs environment | Distribution |
-|---|---|---|
-| Development | **sandbox** | Device, with the development client |
-| Ad hoc | production | Registered devices |
-| App Store | production | **TestFlight uses production**, as does the App Store |
+| Build | Command | APNs environment | Distribution |
+|---|---|---|---|
+| Development | `pnpm prebuild`, then Xcode | **sandbox** | Device, with the development client |
+| Ad hoc | `fastlane ios refresh_profile`, then `fastlane ios device` | production | Registered devices |
+| App Store | `fastlane ios refresh_profile type:appstore`, then `fastlane ios release` | production | **TestFlight uses production**, as does the App Store |
+
+`fastlane ios release upload:true` also sends the build to TestFlight. That needs the app made once in App Store Connect (Apps, then +), which an API key cannot do. TestFlight refuses a build number it has had before, so set `APP_BUILD_NUMBER` higher for each upload. It defaults to 1.
 
 Set `APP_PROFILE` to anything other than `development` for a release build. Getting this wrong produces `BadDeviceToken` from APNs, and the relay's metric on that reason exists to catch it. The app reports the environment explicitly, because the build sets the entitlement.
 
@@ -157,9 +180,9 @@ An extension could replace "New message" with real text by fetching on the devic
 1. Enrol in the Apple Developer Program.
 2. Create an App ID with Push Notifications.
 3. Create an APNs key (`.p8`) and note the Key ID and Team ID.
-4. Add a variant with that bundle ID and the customer's relay URL.
-5. Deploy the relay and set credentials ([deployment](../operations/deployment.md#independent-relay-customers)).
+4. Deploy the relay and set credentials ([deployment](../operations/deployment.md#independent-relay-customers)).
+5. Add a variant with `oc app variant`, naming that relay.
 6. Build with `APP_VARIANT` set to that variant, using Xcode or fastlane.
 7. Distribute through TestFlight and the App Store.
 
-No managed relay credentials are used at any step, and core messaging works before step 5.
+No managed relay credentials are used at any step, and core messaging works before step 4.
