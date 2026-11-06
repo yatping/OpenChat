@@ -254,15 +254,40 @@ Provider abstraction. Templates. Rule model, cron sweep, and evaluation with `au
 
 **Depends on:** Q12, Q13.
 
-**Status**
+**Status: exit criteria met**, with the limits in the [exit check](#m4-exit-check).
+
 
 | Slice | State |
 |---|---|
 | Email sending | Done. Its alerts to members were removed again, by the owner's decision |
-| Consent and unsubscribe | Done, tested with a fake provider. Sending through real Cloudflare is left to the exit check |
-| Follow-up automation | Done, tested with a fake provider. Limits: one fixed template, and a new rule does not reach conversations already quiet |
+| Consent and unsubscribe | Done. [Tested on real Cloudflare](../architecture/cloudflare-validation.md#follow-up-email-on-real-cloudflare-2026-11-06) |
+| Follow-up automation | Done. [Tested on real Cloudflare](../architecture/cloudflare-validation.md#follow-up-email-on-real-cloudflare-2026-11-06) |
 | Transcripts, operations page, export and erasure | Dropped from M4 by the owner. Export, erasure, and the operations page are in M6 |
-| Exit check | Not started |
+| Exit check | [Done](#m4-exit-check) |
+
+<a id="m4-exit-check"></a>
+### M4 exit check
+
+Run on 2026-11-06 on a temporary installation, since removed, sending through Cloudflare Email Sending from `no-reply@holfun.com` to an outside Gmail address. Two workspaces, Acme Test and Beta Test, each had a follow-up rule of 5 minutes.
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| A qualifying inactive conversation sends one follow-up, even with duplicate deliveries and overlapping sweeps | **Met.** On real Cloudflare, each consenting visitor got exactly one follow-up per quiet period, sent about a minute after it was due, and a new public message started a new one. Duplicates and overlapping sweeps are shown in tests | [Live check](../architecture/cloudflare-validation.md#follow-up-email-on-real-cloudflare-2026-11-06), `follow-ups.test.ts` |
+| A browser disconnect alone triggers nothing | **Met.** A visitor socket opened and closed, and nothing was queued or sent until the wait had passed. Nothing in the follow-up path reads sockets | Live check, `follow-ups.test.ts` |
+| Unsubscribed contacts and those without consent are excluded, checked immediately before sending | **Met.** A visitor who did not tick the box got nothing. The owner unsubscribed from the Acme email: the page confirmed it, Acme listed the address, and Acme's next quiet period sent nothing, while Beta went on sending | Live check, `follow-ups.test.ts`, `email-consent.test.ts` |
+| Failed jobs are recorded with IDs only | **Met** in tests. On real Cloudflare the one failure recovered by retry, so nothing reached `failed_jobs` | `api.test.ts` |
+| A provider outage does not affect messaging | **Met.** With the sender address broken, the follow-up failed and retried, while a supervisor and the visitor kept messaging. Restoring it sent the follow-up 13 seconds later, once | Live check |
+
+**Limits**
+
+- **Email has two uses only**, by the owner's decision ([A15](../architecture/spec-review.md#amendments-to-the-specification)): follow-ups and account email. No alerts to members, transcripts, or weekly summary.
+- **One fixed template**, with no message text. It cannot be edited per workspace yet.
+- **A new rule, or a shorter wait, reaches a conversation only after its next public message.**
+- **Gmail did not show its own Unsubscribe button**, which it keeps for senders it treats as bulk mail. The unsubscribe link in the body works. Cloudflare accepted the `List-Unsubscribe` headers, but one-click from a mail app has not been seen working.
+- **Not seen on real Cloudflare:** `E_RECIPIENT_SUPPRESSED` after a bounce or complaint, and bounces or complaints reaching our own list, since subscribing to Cloudflare's events is not built.
+- **A crash between sending and recording** leaves that email unsent, and an answer lost after Cloudflare accepted a send can send twice, because Cloudflare documents no idempotency key.
+- **Not measured:** the daily sending limit, and delivery to mail providers other than Gmail.
+- **Moved to M6:** contact export and erasure, and a page to see and replay failed jobs.
 
 ## M5: Independent deployment (L)
 
