@@ -1,6 +1,6 @@
 # Expo configuration and white labelling
 
-The customer-facing step-by-step guide (Apple enrolment through App Store submission) is written in Milestone 5. This document fixes the design.
+The step-by-step guide, from Apple enrolment to push on a phone, is the [self-hosting guide](../operations/self-hosting.md). This document is the design and reference behind it.
 
 ## Build-time and runtime configuration
 
