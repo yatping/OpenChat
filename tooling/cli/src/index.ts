@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createDeployer } from './deploy';
+import { createRelayDeployer } from './relay';
 import { renderConfig, type DeploymentState } from './render-config';
 import { ABUSE_LIMITS } from '@openchat/shared';
 
@@ -15,6 +16,12 @@ function usage(): never {
                  [--public-url <https origin>] [--location <hint>] [--analytics] [--cloudflare-email] [--email-from <address>]
   pnpm oc recover --env <name> --email <address>
   pnpm oc render --env <name> --service <api|notification-relay>
+
+Your own notification relay, for your own iOS app and APNs key:
+  pnpm oc relay deploy --env <name> [--relay-id <id>] [--environment <production|sandbox>] [--location <hint>]
+  pnpm oc relay set-apns --env <name> --team-id <id> --key-id <id> --key-file <AuthKey.p8> --bundle-id <id>
+  pnpm oc relay allow --env <name> --installation <inst_...> [--remove]
+  pnpm oc relay check --env <name>
 
 RESEND_API_KEY and TURNSTILE_SECRET_KEY are read from the environment, so that they stay out of shell history.
 TURNSTILE_SECRET_KEY needs --turnstile-site-key. Websites can then require Turnstile for new visitors.
@@ -40,7 +47,29 @@ if (command === 'preflight') {
 }
 if (!env) usage();
 
+async function relay(name: string) {
+  const relays = createRelayDeployer(root);
+  const sub = rest[0];
+  if (sub === 'deploy') return relays.deploy({ name, relayId: flag('relay-id'), location: flag('location'), environment: flag('environment') });
+  if (sub === 'set-apns') {
+    const [teamId, keyId, keyFile, bundleId] = [flag('team-id'), flag('key-id'), flag('key-file'), flag('bundle-id')];
+    if (!teamId || !keyId || !keyFile || !bundleId) usage();
+    return relays.setApns(name, { teamId, keyId, keyFile, bundleId });
+  }
+  if (sub === 'allow') {
+    const installation = flag('installation');
+    if (!installation) usage();
+    return relays.allow(name, installation, rest.includes('--remove'));
+  }
+  if (sub === 'check') {
+    if (!(await relays.check(name))) process.exitCode = 1;
+    return;
+  }
+  usage();
+}
+
 async function main(name: string) {
+  if (command === 'relay') return relay(name);
   const deployer = createDeployer(root);
   if (command === 'deploy') {
     await deployer.deploy({

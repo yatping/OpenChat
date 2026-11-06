@@ -508,6 +508,20 @@ A throwaway installation, `oc-preview-m2`, deployed from a clean start with `oc 
 
 **Found while removing it.** `wrangler delete` failed once, straight after the queue consumers were removed, and worked when run again. The queues could not be deleted until it had. Check each step's result when removing an installation, and retry. D1 and the bucket can be deleted while the Worker is still running, which then answers `/health` with 200, so that alone does not prove a removal.
 
+## Relay CLI on real Cloudflare (2026-11-06)
+
+A throwaway relay, `oc-preview-r-relay`, made with `oc relay deploy`, and a throwaway installation, `oc-preview-r`, made with `oc deploy` and pointed at it. Both were then removed.
+
+| Checked | Result |
+|---|---|
+| `relay deploy` from nothing: database, two queues, migrations, deploy, two secrets, `/health` | 39 seconds |
+| `relay set-apns` with a real production key, read from its file by the CLI, then Apple's answer through the operator route | Apple accepted the key. The key is in no file under `.openchat` |
+| The operator route with a wrong token | 404 |
+| A push grant from the installation before `relay allow` | 503 `relay_unavailable`, because the relay refused it |
+| The same after `relay allow` | 201 with a grant |
+
+**Removing it.** A Worker that consumes a queue cannot be deleted (error 10064), and a queue with a consumer cannot be deleted either. Remove each consumer with `wrangler queues consumer remove`, then delete the Worker, then the queues. A deleted Worker went on answering `/health` with 200 for a short time.
+
 ## Sources
 
 - [D1 limits](https://developers.cloudflare.com/d1/platform/limits/), [D1 database API](https://developers.cloudflare.com/d1/worker-api/d1-database/), [migrations](https://developers.cloudflare.com/d1/reference/migrations/), [foreign keys](https://developers.cloudflare.com/d1/sql-api/foreign-keys/), [read replication](https://developers.cloudflare.com/d1/best-practices/read-replication/), [Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/)

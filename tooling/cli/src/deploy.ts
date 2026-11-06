@@ -10,6 +10,7 @@ import { generateOpaqueToken, generateSerializedKey, hashOpaqueToken } from '@op
 import { assertEmail, assertPublicUrl, bootstrapSql, recoverySql, resetLink } from './bootstrap';
 import { formatChecks, hasFailure, isMissingWorkersDev, runPreflight, WORKERS_DEV_HELP } from './preflight';
 import { renderConfig, type DeploymentState, mergeLimitFlags } from './render-config';
+import { createResource, describeFailure, sleep, UUID, wranglerIn } from './wrangler';
 
 export interface State extends Omit<DeploymentState, 'd1DatabaseId'> {
   d1DatabaseId?: string;
@@ -39,27 +40,12 @@ export interface DeployOptions {
   relayBundleIds?: string | undefined;
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 export function createDeployer(root: string) {
   const dirOf = (name: string) => join(root, '.openchat', name);
   const statePath = (name: string) => join(dirOf(name), 'state.json');
   const configPath = (name: string) => `../../.openchat/${name}/api.wrangler.jsonc`;
 
-  /** Always the project's pinned Wrangler. Output is captured, so that it can be searched and kept quiet. */
-  const wrangler = (args: string[], options: { input?: string; ci?: boolean } = {}): string =>
-    execFileSync('pnpm', ['--filter', '@openchat/api', 'exec', 'wrangler', ...args], {
-      cwd: root,
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      ...(options.input === undefined ? {} : { input: options.input }),
-      env: { ...process.env, ...(options.ci ? { CI: 'true' } : {}) },
-    });
-
-  const describeFailure = (error: unknown) => {
-    const failure = error as { stderr?: string; stdout?: string; message: string };
-    return `${failure.stderr ?? ''}${failure.stdout ?? ''}` || failure.message;
-  };
+  const wrangler = wranglerIn(root, '@openchat/api');
 
   const load = (name: string): State => (existsSync(statePath(name)) ? (JSON.parse(readFileSync(statePath(name), 'utf8')) as State) : { name });
   const save = (state: State) => {
@@ -67,21 +53,7 @@ export function createDeployer(root: string) {
     writeFileSync(statePath(state.name), `${JSON.stringify(state, null, 2)}\n`);
   };
 
-  /** The Queues API has returned an unexplained error 10013 for a valid request, so creation retries. */
-  async function create(label: string, args: string[]): Promise<string> {
-    for (let attempt = 1; ; attempt++) {
-      try {
-        return wrangler(args);
-      } catch (error) {
-        const detail = describeFailure(error);
-        if (/already exists|already taken|11009|10026/i.test(detail)) {
-          throw new Error(`${label} already exists, and this deployment did not create it. Choose another name.`, { cause: error });
-        }
-        if (attempt >= 4) throw new Error(`Could not create ${label}:\n${detail}`, { cause: error });
-        await sleep(5000 * attempt);
-      }
-    }
-  }
+  const create = (label: string, args: string[]) => createResource(wrangler, label, args);
 
   function render(state: State) {
     if (!state.d1DatabaseId) throw new Error('The database has not been created yet');
@@ -96,7 +68,7 @@ export function createDeployer(root: string) {
     if (!state.d1DatabaseId) {
       console.log(`Creating database ${prefix}`);
       const output = await create(`Database ${prefix}`, ['d1', 'create', prefix, ...(location ? ['--location', location] : [])]);
-      const id = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/.exec(output)?.[0];
+      const id = UUID.exec(output)?.[0];
       if (!id) throw new Error('Could not find the new database ID');
       state.d1DatabaseId = id;
       save(state);

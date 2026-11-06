@@ -142,22 +142,36 @@ Orango Labs runs it at `https://openchat-relay.orangolabs.com`, with the relay I
 
 ## Independent relay (customers)
 
+For an operator who ships their own iOS app with their own APNs key. The relay runs on your Cloudflare account, beside your installation, with no project-held credentials. It is always in private mode: it serves only the installations you admit.
+
 ```bash
 pnpm oc relay deploy --env production
-pnpm oc relay set-apns \
+pnpm oc relay set-apns --env production \
   --team-id ABCDE12345 --key-id KEY1234567 \
   --key-file ./AuthKey_KEY1234567.p8 \
   --bundle-id com.company.support
-pnpm oc relay allow --installation inst_01JC...
+pnpm oc relay allow --env production --installation inst_01JC...
 ```
 
-`set-apns` sets secrets through Wrangler and does not copy the key elsewhere. The customer then builds their app per [the iOS guide](../ios-build/expo-and-white-label.md), and points the installation to the relay:
+| Command | Does |
+|---|---|
+| `relay deploy` | Creates `oc-<env>-relay` (a Worker and a D1 database) and the queues `oc-<env>-relay-delivery` and `-dlq`, applies migrations, deploys, and checks `/health`. Generates `RELAY_TOKEN_KEY`, which encrypts device tokens, and an operator token, each once. Picks rate limit namespace IDs that no other Worker on the account uses. Prints the relay URL and ID. Running it again redeploys, and resumes a run that failed |
+| `relay set-apns` | Reads the `.p8` file, checks that it looks like an APNs key, and sends it to Wrangler as the secret `APNS_PRIVATE_KEY` on stdin. It is never printed, and never written anywhere else. Then asks Apple about the key and prints the answer |
+| `relay allow` | Adds an installation ID, from that installation's `/.well-known/openchat.json`, and redeploys. `--remove` takes one away |
+| `relay check` | Asks Apple about the key again |
+
+Options for `relay deploy`: `--relay-id` (default: the environment name; it cannot change later, because installations hold it), `--environment production|sandbox` (default `production`; a relay serves one), and `--location`.
+
+The relay's resource names do not clash with an installation's, so one environment name can hold both. What the CLI knows is in `.openchat/<env>/relay.json`, which Git ignores. The operator token is in `.openchat/<env>/relay-operator-token`, readable only by you. Worker secrets cannot be read back, and redeploys keep them.
+
+Then build your app per [the iOS guide](../ios-build/expo-and-white-label.md), and point the installation to the relay, with the URL and ID that `relay deploy` printed:
 
 ```bash
-pnpm oc config set relay --url https://relay.company.com --bundle-id com.company.support
+pnpm oc deploy --env production --relay-url https://oc-production-relay.<subdomain>.workers.dev \
+  --relay-id production --relay-bundle-ids com.company.support
 ```
 
-If both Workers are on one zone, use a service binding or Custom Domain, since plain `fetch` to a `workers.dev` or route target on that zone can fail with error 1042.
+Both Workers have `global_fetch_strictly_public`, so they reach each other on `workers.dev`. Without it, a Worker's `fetch` to another Worker on the same account fails with error 1042.
 
 The second acceptance journey in spec §20 is then tested in CI as far as is practical, using the mock transport, and manually against APNs for each release.
 
