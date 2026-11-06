@@ -10,7 +10,8 @@ import { generateOpaqueToken, generateSerializedKey, hashOpaqueToken } from '@op
 import { assertEmail, assertPublicUrl, bootstrapSql, recoverySql, resetLink } from './bootstrap';
 import { formatChecks, hasFailure, isMissingWorkersDev, runPreflight, WORKERS_DEV_HELP } from './preflight';
 import { renderConfig, type DeploymentState, mergeLimitFlags } from './render-config';
-import { createResource, describeFailure, sleep, UUID, wranglerIn } from './wrangler';
+import { compareVersions, releaseVersion, UNRECORDED_VERSION, UPGRADE_FROM_AT_LEAST } from './releases';
+import { createResource, describeFailure, type RunWrangler, sleep, UUID, wranglerIn } from './wrangler';
 
 export interface State extends Omit<DeploymentState, 'd1DatabaseId'> {
   d1DatabaseId?: string;
@@ -21,6 +22,19 @@ export interface State extends Omit<DeploymentState, 'd1DatabaseId'> {
   relayKeySet?: boolean;
   initialized?: boolean;
   publicBaseUrl?: string;
+  /** The release last deployed. Missing for deployments made before it was recorded. */
+  version?: string;
+  /** What `oc rollback` needs, recorded before the upgrade changed anything. */
+  lastUpgrade?: { from: string; to: string; at: string; previousVersionId: string; bookmark: string; rolledBackAt?: string };
+}
+
+export interface DeployerDeps {
+  wrangler?: RunWrangler;
+  fetch?: typeof fetch;
+  wait?: (ms: number) => Promise<unknown>;
+  /** Builds the dashboard and widget, and collects them as the Worker's assets. */
+  build?: () => void;
+  log?: (line: string) => void;
 }
 
 export interface DeployOptions {
@@ -40,12 +54,22 @@ export interface DeployOptions {
   relayBundleIds?: string | undefined;
 }
 
-export function createDeployer(root: string) {
+export function createDeployer(root: string, deps: DeployerDeps = {}) {
+  const fetch = deps.fetch ?? ((input, init) => globalThis.fetch(input, init));
+  const wait = deps.wait ?? sleep;
+  const log = deps.log ?? ((line: string) => console.log(line));
+  const build =
+    deps.build ??
+    (() => {
+      execFileSync('pnpm', ['build'], { cwd: root, stdio: ['ignore', 'ignore', 'inherit'] });
+      execFileSync('node', ['scripts/collect-assets.mjs'], { cwd: join(root, 'services/api'), stdio: 'inherit' });
+    });
+  const release = releaseVersion(root);
   const dirOf = (name: string) => join(root, '.openchat', name);
   const statePath = (name: string) => join(dirOf(name), 'state.json');
   const configPath = (name: string) => `../../.openchat/${name}/api.wrangler.jsonc`;
 
-  const wrangler = wranglerIn(root, '@openchat/api');
+  const wrangler = deps.wrangler ?? wranglerIn(root, '@openchat/api');
 
   const load = (name: string): State => (existsSync(statePath(name)) ? (JSON.parse(readFileSync(statePath(name), 'utf8')) as State) : { name });
   const save = (state: State) => {
@@ -53,7 +77,7 @@ export function createDeployer(root: string) {
     writeFileSync(statePath(state.name), `${JSON.stringify(state, null, 2)}\n`);
   };
 
-  const create = (label: string, args: string[]) => createResource(wrangler, label, args);
+  const create = (label: string, args: string[]) => createResource(wrangler, label, args, wait);
 
   function render(state: State) {
     if (!state.d1DatabaseId) throw new Error('The database has not been created yet');
@@ -66,7 +90,7 @@ export function createDeployer(root: string) {
   async function createResources(state: State, location: string | undefined) {
     const prefix = `oc-${state.name}`;
     if (!state.d1DatabaseId) {
-      console.log(`Creating database ${prefix}`);
+      log(`Creating database ${prefix}`);
       const output = await create(`Database ${prefix}`, ['d1', 'create', prefix, ...(location ? ['--location', location] : [])]);
       const id = UUID.exec(output)?.[0];
       if (!id) throw new Error('Could not find the new database ID');
@@ -74,7 +98,7 @@ export function createDeployer(root: string) {
       save(state);
     }
     if (!state.r2Created) {
-      console.log(`Creating bucket ${prefix}-attachments`);
+      log(`Creating bucket ${prefix}-attachments`);
       await create(`Bucket ${prefix}-attachments`, ['r2', 'bucket', 'create', `${prefix}-attachments`]);
       state.r2Created = true;
       save(state);
@@ -82,7 +106,7 @@ export function createDeployer(root: string) {
     state.queuesCreated ??= [];
     for (const queue of ['notifications', 'email', 'jobs'].flatMap((q) => [`${prefix}-${q}-dlq`, `${prefix}-${q}`])) {
       if (state.queuesCreated.includes(queue)) continue;
-      console.log(`Creating queue ${queue}`);
+      log(`Creating queue ${queue}`);
       await create(`Queue ${queue}`, ['queues', 'create', queue]);
       state.queuesCreated.push(queue);
       save(state);
@@ -90,13 +114,20 @@ export function createDeployer(root: string) {
   }
 
   function buildAndDeploy(state: State) {
-    console.log('Building');
-    execFileSync('pnpm', ['build'], { cwd: root, stdio: ['ignore', 'ignore', 'inherit'] });
-    execFileSync('node', ['scripts/collect-assets.mjs'], { cwd: join(root, 'services/api'), stdio: 'inherit' });
+    log('Building');
+    build();
     render(state);
-    console.log('Applying migrations');
+    migrate(state);
+    deployWorker(state);
+  }
+
+  function migrate(state: State) {
+    log('Applying migrations');
     wrangler(['d1', 'migrations', 'apply', `oc-${state.name}`, '--remote', '-c', configPath(state.name)], { ci: true });
-    console.log('Deploying the Worker');
+  }
+
+  function deployWorker(state: State) {
+    log('Deploying the Worker');
     let output: string;
     try {
       output = wrangler(['deploy', '-c', configPath(state.name)]);
@@ -119,7 +150,7 @@ export function createDeployer(root: string) {
   async function setSecrets(state: State, emailFrom: string | undefined) {
     if (!state.secretsSet) {
       // Only once: a new signing key would sign everyone out.
-      console.log('Generating secrets');
+      log('Generating secrets');
       const active = await generateSerializedKey(`key-${Date.now().toString(36)}`);
       putSecrets(state, { AUTH_SIGNING_KEY: JSON.stringify({ active }) });
       state.secretsSet = true;
@@ -127,7 +158,7 @@ export function createDeployer(root: string) {
     }
     if (state.relay && !state.relayKeySet) {
       // Only once: the relay holds the public half, and a new key would need rotation, which is not built yet.
-      console.log('Generating the relay signing key');
+      log('Generating the relay signing key');
       const active = await generateSerializedKey(`relay-${Date.now().toString(36)}`);
       putSecrets(state, { RELAY_SIGNING_KEY: JSON.stringify({ active }) });
       state.relayKeySet = true;
@@ -137,12 +168,12 @@ export function createDeployer(root: string) {
     if (state.cloudflareEmailFrom) {
       // Not secret, but set the same way as the Resend settings, so that switching needs no other change.
       putSecrets(state, { EMAIL_PROVIDER: 'cloudflare', SYSTEM_EMAIL_FROM: state.cloudflareEmailFrom });
-      console.log('Configured Cloudflare Email Sending');
+      log('Configured Cloudflare Email Sending');
     } else if (resendKey) {
       if (!emailFrom) throw new Error('RESEND_API_KEY needs --email-from, an address on a domain verified with Resend');
       assertEmail(emailFrom);
       putSecrets(state, { EMAIL_PROVIDER: 'resend', RESEND_API_KEY: resendKey, SYSTEM_EMAIL_FROM: emailFrom });
-      console.log('Configured Resend');
+      log('Configured Resend');
     }
   }
 
@@ -158,7 +189,7 @@ export function createDeployer(root: string) {
       workspaceName: options.workspaceName ?? 'My workspace',
       ownerTokenHash: await hashOpaqueToken(token),
     });
-    console.log('Creating the first owner');
+    log('Creating the first owner');
     wrangler(['d1', 'execute', `oc-${state.name}`, '--remote', '--yes', '-c', configPath(state.name), '--command', sql], { ci: true });
     state.initialized = true;
     save(state);
@@ -168,11 +199,11 @@ export function createDeployer(root: string) {
   /** A 401 for made-up credentials proves the Worker, D1, the Durable Object, and the signing key all work. */
   async function verify(state: State) {
     const base = state.publicBaseUrl!;
-    console.log('Verifying');
+    log('Verifying');
     let last = 'no answer';
     let loginFailing = false;
     for (let attempt = 0; attempt < 24; attempt++) {
-      if (attempt > 0) await sleep(5000);
+      if (attempt > 0) await wait(5000);
       try {
         const health = await fetch(`${base}/health`);
         const discovery = await fetch(`${base}/.well-known/openchat.json`);
@@ -205,17 +236,98 @@ export function createDeployer(root: string) {
       emailFrom: options.emailFrom,
       publicUrl: options.publicUrl,
     });
-    console.log(formatChecks(checks));
+    log(formatChecks(checks));
     return !hasFailure(checks);
+  }
+
+  /** Deploying an older release over a newer one could run code that does not know the schema. */
+  function refuseOlder(state: State) {
+    if (state.version && compareVersions(release, state.version) < 0) {
+      throw new Error(`This checkout is ${release}, older than the deployed ${state.version}. Check out ${state.version} or newer. To undo an upgrade, use oc rollback.`);
+    }
+  }
+
+  const currentVersionId = (state: State): string => {
+    const status = JSON.parse(wrangler(['deployments', 'status', '--json', '-c', configPath(state.name)])) as { versions?: { version_id: string; percentage: number }[] };
+    const id = [...(status.versions ?? [])].sort((a, b) => b.percentage - a.percentage)[0]?.version_id;
+    if (!id) throw new Error('Could not find the version of the Worker that is running now');
+    return id;
+  };
+
+  const restoreHelp = (state: State, bookmark: string) =>
+    `Only if data is damaged, restore the database to how it was before the upgrade. This discards every write since then, and cannot be undone:\n  pnpm --filter @openchat/api exec wrangler d1 time-travel restore oc-${state.name} --bookmark ${bookmark} -c ${configPath(state.name)}`;
+
+  async function rollBackWorker(state: State, versionId: string, message: string) {
+    wrangler(['rollback', versionId, '--name', `oc-${state.name}`, '--message', message, '--yes'], { ci: true });
+    await verify(state);
   }
 
   return {
     preflight,
 
+    /**
+     * Upgrades a deployment to this checkout. The old Worker runs against the new schema until the new
+     * one is live, which the expand/contract rule makes safe. See docs/operations/deployment.md#upgrades.
+     */
+    async upgrade(name: string) {
+      const state = load(name);
+      if (!state.initialized || !state.publicBaseUrl) throw new Error(`No deployment named ${name} in .openchat. To make one, use oc deploy.`);
+      const from = state.version ?? UNRECORDED_VERSION;
+      refuseOlder(state);
+      if (compareVersions(from, UPGRADE_FROM_AT_LEAST) < 0) throw new Error(`${release} cannot upgrade ${from} directly. Upgrade to ${UPGRADE_FROM_AT_LEAST} first.`);
+      if (!preflight({})) throw new Error('\nFix the items marked FAIL, then run this again. Nothing was changed.');
+
+      log(`Upgrading ${name} from ${from} to ${release}`);
+      build();
+      render(state);
+      const previousVersionId = currentVersionId(state);
+      const bookmark = (JSON.parse(wrangler(['d1', 'time-travel', 'info', `oc-${name}`, '--json', '-c', configPath(name)], { ci: true })) as { bookmark?: string }).bookmark;
+      if (!bookmark) throw new Error('Could not record a Time Travel bookmark, so nothing was changed');
+      state.lastUpgrade = { from, to: release, at: new Date().toISOString(), previousVersionId, bookmark };
+      save(state);
+      log(`Recorded the Worker version ${previousVersionId} and the database bookmark ${bookmark}`);
+
+      try {
+        migrate(state);
+      } catch (error) {
+        throw new Error(`A migration failed. The old Worker is still running and was not changed.\n${describeFailure(error)}\n\n${restoreHelp(state, bookmark)}`, { cause: error });
+      }
+      deployWorker(state);
+      try {
+        await verify(state);
+      } catch (error) {
+        log(`${(error as Error).message}\nRolling the Worker back to ${previousVersionId}`);
+        await rollBackWorker(state, previousVersionId, `oc upgrade: ${release} was unhealthy`);
+        state.lastUpgrade.rolledBackAt = new Date().toISOString();
+        save(state);
+        throw new Error(`The upgrade to ${release} was rolled back, and ${from} is running again. The database keeps the new schema, which ${from} can use.\n\n${restoreHelp(state, bookmark)}`, { cause: error });
+      }
+      state.version = release;
+      save(state);
+      log(`\nUpgraded ${name} to ${release}: ${state.publicBaseUrl}`);
+      log(`To undo it: pnpm oc rollback --env ${name}`);
+    },
+
+    /** Puts back the Worker from before the last upgrade. The database is left alone. */
+    async rollback(name: string) {
+      const state = load(name);
+      const last = state.lastUpgrade;
+      if (!last || last.rolledBackAt) throw new Error(`No upgrade of ${name} to roll back`);
+      render(state);
+      log(`Rolling ${name} back from ${last.to} to ${last.from}`);
+      await rollBackWorker(state, last.previousVersionId, `oc rollback to ${last.from}`);
+      last.rolledBackAt = new Date().toISOString();
+      state.version = last.from;
+      save(state);
+      log(`\n${last.from} is running again. The database keeps the new schema, which ${last.from} can use.`);
+      log(restoreHelp(state, last.bookmark));
+    },
+
     async deploy(options: DeployOptions) {
       if (options.publicUrl) assertPublicUrl(options.publicUrl);
       if (options.ownerEmail) assertEmail(options.ownerEmail);
       const state = load(options.name);
+      refuseOlder(state);
       if (options.limitFlag) state.limits = mergeLimitFlags(state.limits, options.limitFlag);
       if (!state.initialized && !options.ownerEmail) throw new Error('A first deploy needs --owner-email');
       if (options.analytics) state.analyticsEngine = true;
@@ -240,14 +352,16 @@ export function createDeployer(root: string) {
       if (options.turnstileSiteKey) putSecrets(state, { TURNSTILE_SECRET_KEY: process.env.TURNSTILE_SECRET_KEY!, TURNSTILE_SITE_KEY: options.turnstileSiteKey });
       const ownerLink = await initialize(state, options);
       await verify(state);
+      state.version = release;
+      save(state);
 
-      console.log(`\nDeployed: ${state.publicBaseUrl}`);
+      log(`\nDeployed ${release}: ${state.publicBaseUrl}`);
       if (ownerLink) {
-        console.log(`\nSet the owner's password within one hour. This link is shown only once:\n${ownerLink}`);
+        log(`\nSet the owner's password within one hour. This link is shown only once:\n${ownerLink}`);
       }
       if (!process.env.RESEND_API_KEY && !state.cloudflareEmailFrom) {
-        console.log('\nNo email provider was set in this run. Without one, resets and new account links are not delivered.');
-        console.log(`Use --cloudflare-email, or RESEND_API_KEY, with --email-from, then deploy again. Until then: pnpm oc recover --env ${options.name} --email <address>`);
+        log('\nNo email provider was set in this run. Without one, resets and new account links are not delivered.');
+        log(`Use --cloudflare-email, or RESEND_API_KEY, with --email-from, then deploy again. Until then: pnpm oc recover --env ${options.name} --email <address>`);
       }
     },
 
@@ -261,7 +375,7 @@ export function createDeployer(root: string) {
       const output = wrangler(['d1', 'execute', `oc-${name}`, '--remote', '--yes', '--json', '-c', configPath(name), '--command', recoverySql(email, await hashOpaqueToken(token))], { ci: true });
       const changes = (JSON.parse(output) as { meta?: { changes?: number } }[])[0]?.meta?.changes ?? 0;
       if (changes !== 1) throw new Error(`No active account for ${email}`);
-      console.log(`Set a new password within one hour. Using this link signs the account out everywhere:\n${resetLink(state.publicBaseUrl, token)}`);
+      log(`Set a new password within one hour. Using this link signs the account out everywhere:\n${resetLink(state.publicBaseUrl, token)}`);
     },
   };
 }

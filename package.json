@@ -1,5 +1,6 @@
 {
   "name": "openchat",
+  "version": "0.2.0-dev",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "packageManager": "pnpm@12.8.1",
@@ -10,6 +11,7 @@
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "test:upgrade": "pnpm --filter @openchat/e2e exec tsx upgrade-test.ts",
     "test:e2e": "pnpm --filter @openchat/dashboard --filter @openchat/widget build && pnpm --filter @openchat/e2e test:e2e",
     "test:isolation": "pnpm --filter @openchat/api exec vitest run test/isolation.test.ts",
     "lint": "eslint .",

@@ -304,7 +304,7 @@ Polished CLI: `deploy`, `upgrade`, `relay deploy`, `relay set-apns`. White-label
 | Slice | State |
 |---|---|
 | `oc relay deploy`, `set-apns`, `allow`, `check` | Built. Tested with a fake Wrangler, and on real Cloudflare with a real key ([validation](../architecture/cloudflare-validation.md#relay-cli-on-real-cloudflare-2026-11-06)) |
-| `oc upgrade` and `oc rollback`, with a CI upgrade test from v0.1.0 | Not started |
+| `oc upgrade` and `oc rollback`, with a CI upgrade test from v0.1.0 | Built. The CI test runs both versions on local D1. The commands are tested with a fake Wrangler and on real Cloudflare |
 | White-label variant template and `oc app variant` | Not started |
 | Self-hosting guide, to be followed literally | Not started |
 | Exit check, run by the owner on their own account | Not started. A separate Apple account stays a limit |
