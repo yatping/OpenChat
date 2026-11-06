@@ -24,7 +24,7 @@ Spike results are in [Phase 0 spike results](#phase-0-spike-results).
 | Workers static assets | Fits | Preferred over Pages for atomic deploys |
 | Rate limiting binding | Partly | Approximate and per location |
 | APNs from a Worker | **Risk, reduced** | Reached APNs from every Worker context in S1, but still rests on undocumented proxy behaviour |
-| Cloudflare Email Service | Optional, driver built | Beta. Sending to any recipient needs Workers Paid and a domain on Cloudflare DNS. 3,000 emails a month included, then $0.35 per 1,000. The `send_email` binding documents no idempotency key. Checked on 2026-11-04 against the [docs](https://developers.cloudflare.com/email-service/); nothing has been sent |
+| Cloudflare Email Service | Used for all email ([Q13](open-questions.md)). [Reset email](#cloudflare-email-service-2026-11-04) and [follow-ups](#follow-up-email-on-real-cloudflare-2026-11-06) sent for real | Beta. Sending to any recipient needs Workers Paid and a domain on Cloudflare DNS. 3,000 emails a month included, then $0.35 per 1,000. The `send_email` binding documents no idempotency key. Checked on 2026-11-04 against the [docs](https://developers.cloudflare.com/email-service/) |
 | Wrangler as deploy tool | Fits | The `cf` CLI is in beta; do not adopt it yet |
 
 ## D1
@@ -216,6 +216,17 @@ Measured on 2026-11-04 on a throwaway deployment, which was then removed.
 | Queue consumer picking up a job after a deploy | About 10 seconds in one sample |
 | `oc deploy` from nothing to verified | About 80 seconds on a laptop, including the build |
 
+
+### Follow-up email on real Cloudflare, 2026-11-06
+
+On a temporary installation, since removed, with `oc deploy --cloudflare-email --email-from no-reply@holfun.com` and two workspaces:
+
+- **Sending:** follow-ups from both workspaces reached an outside Gmail inbox, not spam. Gmail showed the sender names as each workspace's name, so one sending address can carry a different name per workspace. SPF, DKIM, and DMARC all passed.
+- **Timing:** with a 5 minute rule, each was sent about a minute after it was due, by the per-minute cron and then the queue.
+- **Headers:** Cloudflare accepted the `List-Unsubscribe` and `List-Unsubscribe-Post` headers, since a header off its allowlist fails the whole send. Gmail showed no Unsubscribe button of its own, which it keeps for senders it treats as bulk mail.
+- **Outage:** setting `SYSTEM_EMAIL_FROM` to an address the binding does not allow made the send fail, and its job retried. Restoring it sent the email 13 seconds later, once.
+- **Not seen:** a bounce, a complaint, or `E_RECIPIENT_SUPPRESSED`.
+- **Edge rejection:** a script calling the deployed Worker must not set `cf-connecting-ip`. Cloudflare's edge answers 403 before the Worker runs.
 
 ### Cloudflare Email Service suppressions and headers, 2026-11-06
 
