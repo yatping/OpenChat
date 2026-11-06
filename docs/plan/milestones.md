@@ -283,7 +283,7 @@ Run on 2026-11-06 on a temporary installation, since removed, sending through Cl
 - **Email has two uses only**, by the owner's decision ([A15](../architecture/spec-review.md#amendments-to-the-specification)): follow-ups and account email. No alerts to members, transcripts, or weekly summary.
 - **One fixed template**, with no message text. It cannot be edited per workspace yet.
 - **A new rule, or a shorter wait, reaches a conversation only after its next public message.**
-- **Gmail did not show its own Unsubscribe button**, which it keeps for senders it treats as bulk mail. The unsubscribe link in the body works. Cloudflare accepted the `List-Unsubscribe` headers, but one-click from a mail app has not been seen working.
+- **Gmail did not show its own Unsubscribe button**, which it keeps for senders it treats as bulk mail. The unsubscribe link in the body works, and the `List-Unsubscribe` headers reached Gmail, but one-click from a mail app has not been seen working.
 - **Not seen on real Cloudflare:** `E_RECIPIENT_SUPPRESSED` after a bounce or complaint, and bounces or complaints reaching our own list, since subscribing to Cloudflare's events is not built.
 - **A crash between sending and recording** leaves that email unsent, and an answer lost after Cloudflare accepted a send can send twice, because Cloudflare documents no idempotency key.
 - **Not measured:** the daily sending limit, and delivery to mail providers other than Gmail.

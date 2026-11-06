@@ -223,7 +223,7 @@ On a temporary installation, since removed, with `oc deploy --cloudflare-email -
 
 - **Sending:** follow-ups from both workspaces reached an outside Gmail inbox, not spam. Gmail showed the sender names as each workspace's name, so one sending address can carry a different name per workspace. SPF, DKIM, and DMARC all passed.
 - **Timing:** with a 5 minute rule, each was sent about a minute after it was due, by the per-minute cron and then the queue.
-- **Headers:** Cloudflare accepted the `List-Unsubscribe` and `List-Unsubscribe-Post` headers, since a header off its allowlist fails the whole send. Gmail showed no Unsubscribe button of its own, which it keeps for senders it treats as bulk mail.
+- **Headers:** the `List-Unsubscribe` and `List-Unsubscribe-Post` headers reached Gmail, as "Show original" showed. Gmail showed no Unsubscribe button of its own, which it keeps for senders it treats as bulk mail.
 - **Outage:** setting `SYSTEM_EMAIL_FROM` to an address the binding does not allow made the send fail, and its job retried. Restoring it sent the email 13 seconds later, once.
 - **Not seen:** a bounce, a complaint, or `E_RECIPIENT_SUPPRESSED`.
 - **Edge rejection:** a script calling the deployed Worker must not set `cf-connecting-ip`. Cloudflare's edge answers 403 before the Worker runs.
