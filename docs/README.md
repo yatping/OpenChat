@@ -50,7 +50,7 @@ Files named `*.draft.*` are design artifacts. Phase 0 moves them into `packages/
 | Document | Purpose |
 |---|---|
 | [development/local-dev.md](development/local-dev.md) | Local development workflow, including what cannot run locally |
-| [operations/self-hosting.md](operations/self-hosting.md) | **Step by step:** your own backend, relay, and iOS app, from nothing |
+| [operations/self-hosting.md](operations/self-hosting.md) | **Step by step:** your own backend, with the official app or your own |
 | [operations/deployment.md](operations/deployment.md) | Production deployment and upgrades, managed and independent |
 | [operations/abuse-limits.md](operations/abuse-limits.md) | Every abuse limit, what people see, and how to change the four that are settings |
 | [ios-build/expo-and-white-label.md](ios-build/expo-and-white-label.md) | Expo configuration, build profiles, and white-label builds |

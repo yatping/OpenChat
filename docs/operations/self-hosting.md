@@ -1,10 +1,19 @@
 # Self-hosting guide
 
-This guide takes you from nothing to your own OpenChat: the backend on your Cloudflare account, your own notification relay, and your own iOS app with push, signed under your own Apple account. Nothing in it uses credentials held by the OpenChat project.
+This guide takes you from nothing to your own OpenChat. Either way, you self-host: the backend, your conversations, and your data are on your own Cloudflare account. What you choose is whether to also run the iPhone side yourself.
+
+| | **Path 1: your backend, the official app** | **Path 2: your backend, your own app** |
+|---|---|---|
+| You run | The backend, on your Cloudflare account | The backend, a notification relay, and your own iOS app |
+| Your team uses | The dashboard in a browser, and the official OpenChat app | The dashboard, and an app with your name and icon |
+| Push notifications go through | The OpenChat project's relay. It holds your team's device tokens and your workspace names, and sees when a notification is sent, but never receives message content or anything about your visitors | Your relay, with your own Apple push key |
+| You need | A Cloudflare account | Also an Apple Developer account and a Mac with Xcode |
+| Steps | [1 to 6](#part-1-everyone) | [1 to 5](#part-1-everyone), then [7 to 10](#part-2-your-own-app) |
+| Time | About 30 minutes | About two hours, most of it in Apple's portals |
+
+**Most people want path 1.** Choose path 2 only if you want your own branded app, or no dependency on the OpenChat project at all. You can start with path 1 and move to path 2 later: the backend stays as it is.
 
 Follow the steps in order. Each one says what you should see. If you see something else, stop and look in [When something goes wrong](#when-something-goes-wrong).
-
-Allow about two hours the first time, most of it in Apple's portals. You can stop after [step 5](#5-put-the-chat-widget-on-your-website) and have a working chat widget and team inbox, with no Apple account at all.
 
 The background for each step is in [deployment](deployment.md) and [the iOS build guide](../ios-build/expo-and-white-label.md).
 
@@ -12,16 +21,18 @@ The background for each step is in [deployment](deployment.md) and [the iOS buil
 
 | | For | Notes |
 |---|---|---|
-| A Mac | Everything | macOS, with a terminal |
-| [Xcode](https://apps.apple.com/app/xcode/id497799835) | The app | Open it once after installing, and accept the licence |
-| [Homebrew](https://brew.sh) | Installing the tools below | |
-| Git | Getting the code | Comes with Xcode |
+| A Mac | Everything | macOS, with a terminal. Linux may work for path 1, but has not been tried |
+| [Xcode](https://apps.apple.com/app/xcode/id497799835) | Path 2 | Open it once after installing, and accept the licence |
+| [Homebrew](https://brew.sh) | Path 2 | |
+| Git | Getting the code | On a Mac, it comes with Xcode's command line tools |
 | Node 24 | The CLI | From [nodejs.org](https://nodejs.org), or `nvm install 24` |
-| CocoaPods and fastlane | The app | `brew install cocoapods fastlane` |
+| CocoaPods and fastlane | Path 2 | `brew install cocoapods fastlane` |
 | A Cloudflare account | The backend | On the **Workers Paid** plan. The free plan cannot run password hashing |
-| An Apple Developer Program membership | The app and push | [Enrol](https://developer.apple.com/programs/enroll/). It can take a day or more to be approved |
-| An iPhone | Trying the app | With a cable |
+| An Apple Developer Program membership | Path 2 | [Enrol](https://developer.apple.com/programs/enroll/). It can take a day or more to be approved |
+| An iPhone | Path 2, or the official app | With a cable, for path 2 |
 | A website you can edit | The chat widget | Optional. Any page where you can add one line of HTML |
+
+## Part 1: everyone
 
 ## 1. Get the code
 
@@ -101,9 +112,38 @@ Enabling a domain sets its DMARC policy to `reject`, so use a subdomain if anyth
 
 Open your site. You should see a chat button in the bottom corner. Send a message from it. You should see it arrive in the dashboard inbox within a second, and a reply from the dashboard appear in the widget.
 
-You now have working customer chat. The rest of this guide adds your own iPhone app with push notifications.
+You now have working customer chat. For path 1, go on to step 6. For path 2, skip to [step 7](#7-prepare-apple).
 
-## 6. Prepare Apple
+## 6. Push through the official app
+
+The official app, and the project's relay that sends its notifications, need nothing from you but your installation ID. Two things to know first:
+
+- **The official app is not on the App Store yet.** Until it is, your team uses the dashboard in a browser, and gets no push notifications.
+- **The project's relay admits installations one at a time for now**, until its terms and privacy policy are published.
+
+To ask for access, find your installation ID, which starts with `inst_`:
+
+```bash
+curl -s https://oc-production.<subdomain>.workers.dev/.well-known/openchat.json
+```
+
+Then [open an issue](https://github.com/yatping/OpenChat/issues/new) titled "Relay access", with that ID. It is not secret: anyone can read it at that address. Once you are told it is admitted, point your backend at the project's relay:
+
+```bash
+pnpm oc deploy --env production \
+  --relay-url https://openchat-relay.orangolabs.com \
+  --relay-id managed --relay-bundle-ids com.orangolabs.openchat
+```
+
+You should see `Deployed` again. Then, in the official app on each iPhone: enter your backend's address, `oc-production.<subdomain>.workers.dev`, sign in, and allow notifications. In the app's **Settings**, you should see **Notifications** with switches. Lock the phone and send a message from your widget: a notification should arrive within a few seconds.
+
+Path 1 is done. Keep it up to date with [step 11](#11-keep-it-up-to-date).
+
+## Part 2: your own app
+
+This adds your own relay and your own iPhone app. Do steps 1 to 5 first. You do not need step 6.
+
+## 7. Prepare Apple
 
 Do this in your browser, signed in to your Apple Developer account. You will collect six things. Write each down as you go.
 
@@ -119,7 +159,7 @@ Do this in your browser, signed in to your Apple Developer account. You will col
 Items 3 and 4 are two different keys, and both are `.p8` files. Keep them apart. Apple lets you download each **only once**, so store them somewhere safe and private. Never put any of them in the repository: Git already ignores `.p8` and `.p12` files.
 
 1. **Team ID.** [developer.apple.com/account](https://developer.apple.com/account), under Membership details. Ten characters, such as `ABCDE12345`.
-2. **Bundle ID.** Choose it now, in reverse-domain form, such as `com.company.support`. You do not register it by hand: fastlane does it in [step 8](#8-build-your-app). It cannot change once the app is on the App Store.
+2. **Bundle ID.** Choose it now, in reverse-domain form, such as `com.company.support`. You do not register it by hand: fastlane does it in [step 9](#9-build-your-app). It cannot change once the app is on the App Store.
 3. **APNs key.** [Certificates, Identifiers & Profiles > Keys](https://developer.apple.com/account/resources/authkeys/list), then **+**. Name it, tick **Apple Push Notifications service (APNs)**, and configure it as **Sandbox & Production**, **Team Scoped (All Topics)**. Continue, register, and download the `.p8`. The key ID is in its file name, `AuthKey_<key ID>.p8`. Apple allows only a few APNs keys per team. If yours already has a team-scoped one, you can use it.
 4. **App Store Connect API key.** [App Store Connect > Users and Access > Integrations > App Store Connect API](https://appstoreconnect.apple.com/access/integrations/api), then **+** under Team Keys. Give it the **App Manager** role (if fastlane later cannot register the bundle ID, make one with **Admin**). Download the `.p8`, and note its key ID and the **Issuer ID** shown above the list.
 5. **Distribution certificate.** If your team already has an Apple Distribution certificate on this Mac, export it as in the last part of this item. Otherwise:
@@ -128,7 +168,7 @@ Items 3 and 4 are two different keys, and both are `.p8` files. Keep them apart.
    - In Keychain Access, under **My Certificates**, find **Apple Distribution: \<your team\>**, right-click it, choose **Export**, save as `.p12`, and set a password.
 6. **iPhone UDID.** Connect the iPhone by cable, open Finder, select the iPhone, and click the line under its name until it shows the UDID. Right-click to copy it. Then [Devices > +](https://developer.apple.com/account/resources/devices/add), and register it.
 
-## 7. Deploy your relay
+## 8. Deploy your relay
 
 The relay sends your app's notifications through Apple, with your APNs key. It runs on your Cloudflare account, beside the backend.
 
@@ -143,7 +183,7 @@ Relay: https://oc-production-relay.<subdomain>.workers.dev
 Relay ID: production
 ```
 
-Load your APNs key into it, with the values from step 6. The `.p8` here is the **APNs** key, item 3:
+Load your APNs key into it, with the values from step 7. The `.p8` here is the **APNs** key, item 3:
 
 ```bash
 pnpm oc relay set-apns --env production \
@@ -176,7 +216,7 @@ pnpm oc deploy --env production \
 
 You should see `Deployed` again. The backend remembers these settings for later deploys.
 
-## 8. Build your app
+## 9. Build your app
 
 Make your app's settings, which hold only public values. Use your own 1024 by 1024 PNG icon with no transparency, or leave out `--icon` and `--splash` to use OpenChat's for now:
 
@@ -207,7 +247,7 @@ APP_VARIANT=company fastlane ios install
 
 `refresh_profile` registers your bundle ID with Apple, turns on push for it, and makes a profile that lists your registered devices. `device` takes several minutes, and should end with `Built build/ios/CompanySupport-adhoc.ipa`. `install` puts it on the iPhone. If the iPhone refuses to open it, go to **Settings > Privacy & Security > Developer Mode**, turn it on, and restart.
 
-## 9. Try it
+## 10. Try it
 
 1. Open your app on the iPhone. For **Address**, enter `oc-production.<subdomain>.workers.dev`, then sign in.
 2. Allow notifications when asked.
@@ -218,11 +258,11 @@ You should see a notification on the iPhone within a few seconds. Tap it, and th
 
 To send the app to testers through TestFlight, or to the App Store, see [build profiles](../ios-build/expo-and-white-label.md#building).
 
-### With the official OpenChat app
+### The official app, with your own relay
 
-The official OpenChat app can also connect to your backend, and messaging works fully. It cannot use your relay, because it only sends its device token to relays built into it, so it has no push. Its Settings say: "This installation uses a notification service this app cannot use. Messages still arrive in the inbox."
+Once your backend uses your own relay, the official OpenChat app can still connect to it, and messaging works fully. It has no push, because it only sends its device token to the project's relay, which is built into it. Its Settings say: "This installation uses a notification service this app cannot use. Messages still arrive in the inbox."
 
-## 10. Keep it up to date
+## 11. Keep it up to date
 
 When a new release comes out, read its notes, then:
 
@@ -231,12 +271,12 @@ git fetch --tags
 git checkout <new tag>
 pnpm install --frozen-lockfile
 pnpm oc upgrade --env production
-pnpm oc relay deploy --env production
+pnpm oc relay deploy --env production     # path 2 only
 ```
 
 `oc upgrade` records how to undo itself before changing anything, and puts the old version back by itself if the new one is unhealthy. If you find a problem later, `pnpm oc rollback --env production` puts the previous version back. See [upgrades](deployment.md#upgrades-oc-upgrade).
 
-Rebuild the app only when the release notes say the app changed.
+For path 2, rebuild your app only when the release notes say the app changed. For path 1, the official app updates through the App Store.
 
 ## When something goes wrong
 
@@ -256,4 +296,4 @@ Rebuild the app only when the release notes say the app changed.
 
 ## Removing everything
 
-There is no single command yet. In the Cloudflare dashboard, or with `pnpm --filter @openchat/api exec wrangler`, delete in this order, because Cloudflare refuses otherwise: each queue's consumer, the Workers `oc-production` and `oc-production-relay`, the queues, the R2 bucket `oc-production-attachments`, and the D1 databases `oc-production` and `oc-production-relay`. Deleting a Worker can go on failing for a few minutes after its consumers are removed, with error 10064. Wait and try again. Then delete `.openchat/production`.
+There is no single command yet. In the Cloudflare dashboard, or with `pnpm --filter @openchat/api exec wrangler`, delete in this order, because Cloudflare refuses otherwise: each queue's consumer, the Workers `oc-production` and, for path 2, `oc-production-relay`, the queues, the R2 bucket `oc-production-attachments`, and the D1 databases `oc-production` and `oc-production-relay`, the last for path 2 only. Deleting a Worker can go on failing for a few minutes after its consumers are removed, with error 10064. Wait and try again. Then delete `.openchat/production`.

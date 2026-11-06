@@ -306,8 +306,20 @@ Polished CLI: `deploy`, `upgrade`, `relay deploy`, `relay set-apns`. White-label
 | `oc relay deploy`, `set-apns`, `allow`, `check` | Built. Tested with a fake Wrangler, and on real Cloudflare with a real key ([validation](../architecture/cloudflare-validation.md#relay-cli-on-real-cloudflare-2026-11-06)) |
 | `oc upgrade` and `oc rollback`, with a CI upgrade test from v0.1.0 | Built. The CI test runs both versions on local D1. The commands are tested with a fake Wrangler and on real Cloudflare |
 | White-label variant template and `oc app variant` | Built: `oc app variant`, a check of every variant before a build, and an App Store lane beside the ad-hoc one. Locking an app to one installation is not built |
-| Self-hosting guide, to be followed literally | Written: [self-hosting.md](../operations/self-hosting.md). Its Cloudflare steps were followed from a fresh clone on real Cloudflare. The Apple steps are first followed in the exit check |
-| Exit check, run by the owner on their own account | Not started. A separate Apple account stays a limit |
+| Self-hosting guide, to be followed literally | Written: [self-hosting.md](../operations/self-hosting.md), with two paths: the backend with the official app and managed relay, which most people will want, or also your own relay and app. Its Cloudflare steps were followed from a fresh clone on real Cloudflare |
+| Exit check | **Accepted by the owner on reading the guide, 2026-11-06, without running it.** See [below](#m5-exit-check) |
+
+<a id="m5-exit-check"></a>
+**Exit check.** The owner read the guide and accepted M5 without following it. So the first criterion, someone who did not build it following only the documentation, has **not been demonstrated**. What has been checked:
+
+| Criterion | Evidence | Gap |
+|---|---|---|
+| Backend and relay from the documentation | The guide's Cloudflare steps, followed from a fresh clone ([validation](../architecture/cloudflare-validation.md#self-hosting-guide-followed-on-real-cloudflare-2026-11-06)) | Followed by the person who wrote them |
+| A signed app with push, no managed credentials | Each command run separately: a relay with a real key that Apple accepted, an installation admitted and granted, a variant read by Expo, and signed ad-hoc and App Store builds of the official variant | No app was built from a new variant, no new bundle ID was registered, and no push reached a phone through an independent relay. A separate Apple account was never used, and the owner's team is at its limit of two APNs keys, so a test would reuse one |
+| The official app without push, explained | The app's status text, and its test for a relay not in its build | Not seen on a phone against an independent relay |
+| Upgrade test, including rollback | Passes in CI from v0.1.0, and was run on real Cloudflare | None |
+
+Before the official app or the managed relay is opened to others, someone other than its author should follow the guide end to end.
 
 ## M6: Hardening and release (M)
 
