@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api, errorMessage, preference, queryClient, session } from '../app-context';
 import { InboxPanel } from '../inbox/inbox-panel';
-import { FollowUpRulesPanel, NotificationsPanel, SuppressionsPanel } from './notifications-panel';
+import { FollowUpRulesPanel, SuppressionsPanel } from './email-panels';
 import { PeoplePage } from './people-page';
 import { CopyableSnippet, WorkspacesAdminPage } from './workspaces-admin-page';
 
@@ -67,12 +67,22 @@ function MembersPanel({ membership }: { membership: Membership }) {
   );
 }
 
+function EmailPanels({ workspaceId, isSupervisor }: { workspaceId: string; isSupervisor: boolean }) {
+  if (!isSupervisor) return <p className="card text-sm">A supervisor sets up follow-up emails to visitors.</p>;
+  return (
+    <div className="space-y-6">
+      <FollowUpRulesPanel workspaceId={workspaceId} />
+      <SuppressionsPanel workspaceId={workspaceId} />
+    </div>
+  );
+}
+
 const WORKSPACE_PREFERENCE = 'openchat.workspace';
 
 export function WorkspaceApp() {
   const me = useQuery({ queryKey: ['me'], queryFn: api.getMe });
   const [selectedId, setSelectedId] = useState(() => preference.get(WORKSPACE_PREFERENCE));
-  const [tab, setTab] = useState<'inbox' | 'websites' | 'members' | 'notifications'>('inbox');
+  const [tab, setTab] = useState<'inbox' | 'websites' | 'members' | 'email'>('inbox');
   const [adminPage, setAdminPage] = useState<'people' | 'workspaces' | null>(null);
   const isAdmin = me.data?.isInstallationAdmin === true;
 
@@ -112,13 +122,13 @@ export function WorkspaceApp() {
         // The key gives each workspace fresh component state, so nothing typed in one appears in another.
         <div key={current.workspace.id} className="space-y-6">
           <nav className="flex flex-wrap gap-2" aria-label="Sections">
-            {(['inbox', 'websites', 'members', 'notifications'] as const).map((name) => (
+            {(['inbox', 'websites', 'members', 'email'] as const).map((name) => (
               <button key={name} className={tab === name ? 'button capitalize' : 'button-quiet capitalize'} aria-current={tab === name ? 'page' : undefined} onClick={() => setTab(name)}>
                 {name}
               </button>
             ))}
           </nav>
-          {tab === 'inbox' ? <InboxWithMembers membership={current} /> : tab === 'websites' ? <WebsitesPanel membership={current} /> : tab === 'notifications' ? <div className="space-y-6"><NotificationsPanel workspaceId={current.workspace.id} />{current.role === 'supervisor' && <><FollowUpRulesPanel workspaceId={current.workspace.id} /><SuppressionsPanel workspaceId={current.workspace.id} /></>}</div> : <MembersPanel membership={current} />}
+          {tab === 'inbox' ? <InboxWithMembers membership={current} /> : tab === 'websites' ? <WebsitesPanel membership={current} /> : tab === 'email' ? <EmailPanels workspaceId={current.workspace.id} isSupervisor={current.role === 'supervisor'} /> : <MembersPanel membership={current} />}
         </div>
       )}
     </div>

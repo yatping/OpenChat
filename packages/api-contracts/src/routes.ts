@@ -253,16 +253,9 @@ export const PushSubscriptionSchema = z
   .object({ id: z.string(), relaySubscriptionId: z.string(), platform: z.enum(['ios']), deviceLabel: z.string().nullable(), createdAt: z.iso.datetime(), updatedAt: z.iso.datetime() })
   .openapi('PushSubscription');
 
-/** What a member can be emailed about, which is not the same list as push. */
-export const EMAIL_ALERT_EVENTS = ['new_conversation', 'conversation_unanswered'] as const;
-
+/** Only `push`. Members are not emailed about conversations (amendment A15). Adding a value is an additive change. */
 export const NotificationPreferencesSchema = z
-  .object({
-    preferences: z
-      .array(z.object({ eventType: z.enum([...NOTIFICATION_EVENTS, 'conversation_unanswered']), channel: z.enum(['push', 'email']), enabled: z.boolean() }))
-      .max(NOTIFICATION_EVENTS.length + EMAIL_ALERT_EVENTS.length)
-      .refine((list) => list.every((p) => (p.channel === 'email' ? (EMAIL_ALERT_EVENTS as readonly string[]).includes(p.eventType) : p.eventType !== 'conversation_unanswered')), 'That event does not exist on that channel'),
-  })
+  .object({ preferences: z.array(z.object({ eventType: z.enum(NOTIFICATION_EVENTS), channel: z.enum(['push']), enabled: z.boolean() })).max(NOTIFICATION_EVENTS.length) })
   .openapi('NotificationPreferences');
 
 export const createPushGrantRoute = createRoute({
@@ -317,7 +310,7 @@ export const getNotificationPreferencesRoute = createRoute({
   path: '/api/v1/workspaces/{workspaceId}/notification-preferences',
   tags: ['push'],
   operationId: 'getNotificationPreferences',
-  summary: "The caller's preferences. Push starts on, and email starts off.",
+  summary: "The caller's preferences. An event with no choice made is on.",
   security: bearer,
   request: { params: workspaceParams },
   responses: { 200: { description: 'Preferences', ...json(NotificationPreferencesSchema) }, default: problemResponse },

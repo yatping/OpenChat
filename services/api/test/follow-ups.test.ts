@@ -365,6 +365,30 @@ describe('just before sending', () => {
     expect(sent).toHaveLength(1);
   });
 
+  it('records a send Cloudflare refuses for a past bounce or complaint, and does not retry', async () => {
+    const { jobs } = await queuedFollowUp();
+    sendImpl = () => Promise.reject(new EmailSendError(null, 'E_RECIPIENT_SUPPRESSED'));
+    expect((await deliver('oc-local-email', jobs))[0]!.acked).toBe(true);
+    const row = await env.DB.prepare(`SELECT status, recipient_hash AS h FROM email_deliveries`).first<{ status: string; h: string }>();
+    expect(row!.status).toBe('suppressed');
+    expect(row!.h).not.toContain('@');
+  });
+
+  it('does not send again after dying between sending and recording it', async () => {
+    const { jobs } = await queuedFollowUp();
+    const { ruleId, conversationId, triggerKey } = jobs[0]!.payload as Record<string, string>;
+    await env.DB.prepare(`INSERT INTO email_deliveries (id, workspace_id, dedupe_key, template, recipient_hash, status, created_at, updated_at) VALUES ('mail_x', ?1, ?2, 'follow_up', 'h', 'claimed', 1, 1)`).bind(W, `follow_up:${ruleId}:${conversationId}:${triggerKey}`).run();
+    expect((await deliver('oc-local-email', jobs))[0]!.acked).toBe(true);
+    expect(sent).toEqual([]);
+  });
+
+  it('drops alert jobs queued by a Worker from before they were removed', async () => {
+    const old = (type: string) => ({ v: 1, type, id: `job_${type}`, idempotencyKey: type, workspaceId: W, occurredAt: new Date().toISOString(), payload: {} }) as unknown as Job;
+    const outcomes = await deliver('oc-local-email', [old('email.alert'), old('email.send')]);
+    expect(outcomes.every((o) => o.acked)).toBe(true);
+    expect(sent).toEqual([]);
+  });
+
   it('an email outage leaves messaging alone', async () => {
     const { jobs, id, token } = await queuedFollowUp();
     sendImpl = () => Promise.reject(new EmailSendError(503));

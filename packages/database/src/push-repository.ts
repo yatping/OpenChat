@@ -71,24 +71,24 @@ export function pushRepository(database: Database, ctx: WorkspaceContext) {
       return outbox?.meta.changes === 1;
     },
 
-    async listPreferences(): Promise<{ eventType: string; channel: 'push' | 'email'; enabled: boolean }[]> {
+    async listPreferences(): Promise<{ eventType: string; enabled: boolean }[]> {
       const { results } = await d1
-        .prepare(`SELECT event_type AS eventType, channel, enabled FROM notification_preferences WHERE workspace_id = ?1 AND member_id = ?2`)
+        .prepare(`SELECT event_type AS eventType, enabled FROM notification_preferences WHERE workspace_id = ?1 AND member_id = ?2 AND channel = 'push'`)
         .bind(w, ctx.memberId)
-        .all<{ eventType: string; channel: 'push' | 'email'; enabled: number }>();
-      return results.map((row) => ({ eventType: row.eventType, channel: row.channel, enabled: row.enabled === 1 }));
+        .all<{ eventType: string; enabled: number }>();
+      return results.map((row) => ({ eventType: row.eventType, enabled: row.enabled === 1 }));
     },
 
-    async replacePreferences(preferences: { eventType: string; channel: 'push' | 'email'; enabled: boolean }[]): Promise<void> {
+    async replacePreferences(preferences: { eventType: string; enabled: boolean }[]): Promise<void> {
       await d1.batch([
-        d1.prepare(`DELETE FROM notification_preferences WHERE workspace_id = ?1 AND member_id = ?2`).bind(w, ctx.memberId),
+        d1.prepare(`DELETE FROM notification_preferences WHERE workspace_id = ?1 AND member_id = ?2 AND channel = 'push'`).bind(w, ctx.memberId),
         ...preferences.map((p) =>
           d1
             .prepare(
-              `INSERT INTO notification_preferences (workspace_id, member_id, event_type, channel, enabled, updated_at) VALUES (?1, ?2, ?3, ?5, ?4, ${DB_NOW_MS})
+              `INSERT INTO notification_preferences (workspace_id, member_id, event_type, channel, enabled, updated_at) VALUES (?1, ?2, ?3, 'push', ?4, ${DB_NOW_MS})
                ON CONFLICT (workspace_id, member_id, event_type, channel) DO UPDATE SET enabled = excluded.enabled, updated_at = excluded.updated_at`,
             )
-            .bind(w, ctx.memberId, p.eventType, p.enabled ? 1 : 0, p.channel),
+            .bind(w, ctx.memberId, p.eventType, p.enabled ? 1 : 0),
         ),
       ]);
     },

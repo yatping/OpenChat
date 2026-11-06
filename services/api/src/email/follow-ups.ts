@@ -16,21 +16,16 @@ import {
   type Database,
 } from '@openchat/database';
 import type { EmailProvider } from '@openchat/email';
-import { newId, type JobEnvelope } from '@openchat/shared';
+import type { JobEnvelope } from '@openchat/shared';
 import type { Env } from '../env';
-import { deliverOnce, emailConfigured, systemFrom } from './alerts';
+import { deliverOnce, emailConfigured, envelope, systemFrom } from './delivery';
 
 export const EVALUATE_JOB = 'automation.evaluate';
 export const FOLLOW_UP_JOB = 'email.follow_up';
 
-const LIFETIME_MS = 24 * 60 * 60_000;
 const SWEEP_LIMIT = 200;
 
 type FollowUpPayload = { ruleId: string; conversationId: string; triggerKey: string };
-
-function envelope<T>(type: string, idempotencyKey: string, workspaceId: string, payload: T): JobEnvelope<T> {
-  return { v: 1, type, id: newId('job'), idempotencyKey, workspaceId, occurredAt: new Date().toISOString(), notAfter: new Date(Date.now() + LIFETIME_MS).toISOString(), payload };
-}
 
 /** Clearing after queueing means a crash between them queues twice, which the claim below absorbs. */
 export async function sweepFollowUps(env: Env, db: Database): Promise<void> {
