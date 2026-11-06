@@ -1,6 +1,6 @@
 {
   "name": "openchat",
-  "version": "0.2.0-dev",
+  "version": "0.2.0",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "packageManager": "pnpm@12.8.1",
