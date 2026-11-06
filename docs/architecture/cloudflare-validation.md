@@ -522,6 +522,22 @@ A throwaway relay, `oc-preview-r-relay`, made with `oc relay deploy`, and a thro
 
 **Removing it.** A Worker that consumes a queue cannot be deleted (error 10064), and a queue with a consumer cannot be deleted either. Remove each consumer with `wrangler queues consumer remove`, then delete the Worker, then the queues. A deleted Worker went on answering `/health` with 200 for a short time.
 
+## Upgrade and rollback on real Cloudflare (2026-11-06)
+
+A throwaway installation, `oc-preview-u`, deployed with the CLI from a v0.1.0 checkout, then upgraded with `oc upgrade` from this one, and removed.
+
+| Checked | Result |
+|---|---|
+| `oc upgrade` from 0.1.0, recorded as missing, to 0.2.0-dev | 64 seconds. It recorded the running Worker version and a Time Travel bookmark before changing anything |
+| A conversation written by 0.1.0, read and written to after the upgrade | Works |
+| `oc rollback` | The recorded version was running again, per `wrangler deployments status`, and 0.1.0 read and wrote to the conversation, including what 0.2.0-dev wrote |
+| A second `oc rollback` | Refused: no upgrade to roll back |
+| `oc upgrade` again after the rollback | Works |
+
+The automatic rollback of an unhealthy Worker has only run against a fake Wrangler. No migrations were added between the two versions, so this checked the procedure, not a schema change. The CI test covers schema changes on local D1.
+
+**Removing it** needed the same order as the relay, and the Worker delete answered 10064 for a short time after the consumers were removed. A retry about 20 seconds later worked.
+
 ## Sources
 
 - [D1 limits](https://developers.cloudflare.com/d1/platform/limits/), [D1 database API](https://developers.cloudflare.com/d1/worker-api/d1-database/), [migrations](https://developers.cloudflare.com/d1/reference/migrations/), [foreign keys](https://developers.cloudflare.com/d1/sql-api/foreign-keys/), [read replication](https://developers.cloudflare.com/d1/best-practices/read-replication/), [Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/)

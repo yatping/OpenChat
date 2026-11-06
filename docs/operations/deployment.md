@@ -103,21 +103,33 @@ The [abuse limits](abuse-limits.md) have defaults that suit most installations. 
 
 ## Upgrades: `oc upgrade`
 
-A migration and a deploy are not atomic. Safety relies on the [expand/contract rule](../architecture/data-model.md#migration-strategy).
+A migration and a deploy are not atomic. Safety relies on the [expand/contract rule](../architecture/data-model.md#migration-strategy): every migration must work with the Worker before it.
 
-1. Check out the release tag, install with a frozen lockfile, and compare versions.
-2. Refuse the upgrade if the release notes declare a required intermediate version.
-3. Record the D1 Time Travel bookmark.
+```bash
+git fetch --tags && git checkout v0.2.0
+pnpm install --frozen-lockfile
+pnpm oc upgrade --env production
+```
+
+1. Refuse a checkout older than what is deployed, and a jump past the oldest release this one can upgrade from (`UPGRADE_FROM_AT_LEAST` in `tooling/cli/src/releases.ts`, which the release notes repeat). A deployment made before versions were recorded counts as `0.1.0`.
+2. Run the same checks as `oc preflight`, and build.
+3. Record the Worker version now running and the D1 Time Travel bookmark, in `.openchat/<env>/state.json`. If either cannot be read, stop with nothing changed.
 4. Apply migrations. The *old* Worker keeps running against the new schema.
-5. Deploy the new Worker.
-6. Durable Objects update on hibernation, or at `max_delay`.
-7. Verify, and print the result.
+5. Deploy the new Worker. Durable Objects update on hibernation, or after the deferred update window.
+6. Verify, as `oc deploy` does. If the new Worker is unhealthy, roll the Worker back by itself, and say so.
+
+`oc deploy` also records the version, and refuses an older checkout. The release is the root `package.json` version.
 
 | Failure | Response |
 |---|---|
 | Migration fails | Stop. The old Worker keeps running. Behaviour of a partly applied file is still to be confirmed (S4) |
-| New Worker is unhealthy | `wrangler rollback`. The schema stays, which is safe under expand/contract |
-| Data corruption | Time Travel restore. **Destructive, and it discards later writes.** Last resort |
+| New Worker is unhealthy | Rolled back by `oc upgrade`. The schema stays, which is safe under expand/contract |
+| A problem found later | `pnpm oc rollback --env <name>` puts back the Worker from before the last upgrade. The schema stays |
+| Data corruption | Time Travel restore to the recorded bookmark. **Destructive, and it discards every later write.** Last resort, so the CLI only prints the command |
+
+A Worker version with a Durable Object migration that the old version lacks may not be possible to roll back to. No release has one yet.
+
+**Tested in CI.** `pnpm test:upgrade --from v0.1.0` runs the release's Worker on local D1 and writes a conversation, a reply, and an internal note. This checkout's migrations and Worker then take over the same database, and old sessions, messages, and the note's privacy are checked. Then the release's Worker runs again on the new schema, as after `oc rollback`, and reads and writes. A migration that renamed a column the code reads made it fail, as it should. `oc upgrade` and `oc rollback` themselves are tested against a fake Wrangler, since CI has no Cloudflare account.
 
 ## CI/CD
 

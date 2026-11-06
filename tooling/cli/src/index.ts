@@ -14,6 +14,8 @@ function usage(): never {
   pnpm oc preflight [--analytics] [--public-url <https origin>] [--cloudflare-email] [--email-from <address>]
   pnpm oc deploy --env <name> --owner-email <address> [--owner-name <name>] [--workspace <name>]
                  [--public-url <https origin>] [--location <hint>] [--analytics] [--cloudflare-email] [--email-from <address>]
+  pnpm oc upgrade --env <name>      after checking out a newer release
+  pnpm oc rollback --env <name>     puts back the Worker from before the last upgrade
   pnpm oc recover --env <name> --email <address>
   pnpm oc render --env <name> --service <api|notification-relay>
 
@@ -90,6 +92,8 @@ async function main(name: string) {
     });
     return;
   }
+  if (command === 'upgrade') return deployer.upgrade(name);
+  if (command === 'rollback') return deployer.rollback(name);
   if (command === 'recover') {
     const email = flag('email');
     if (!email) usage();
