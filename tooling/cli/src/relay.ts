@@ -110,6 +110,17 @@ export interface SetApnsOptions {
   bundleId: string;
 }
 
+const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
+
+/** What the relay's operator erase route answers. */
+export interface RelayErasure {
+  installation: boolean;
+  workspaces: number;
+  subscriptions: number;
+  devices: number;
+  notifications: number;
+}
+
 export interface RelayDeps {
   wrangler?: RunWrangler;
   fetch?: typeof fetch;
@@ -202,9 +213,13 @@ export function createRelayDeployer(root: string, deps: RelayDeps = {}) {
   }
 
   /** Asks the relay to send Apple a request that is sure to fail, and reads why. */
-  async function check(state: RelayState): Promise<CheckResult> {
+  function operatorToken(state: RelayState): string {
     if (!existsSync(operatorTokenPath(state.name))) throw new Error(`The operator token for ${state.name} is not on this computer`);
-    const token = readFileSync(operatorTokenPath(state.name), 'utf8').trim();
+    return readFileSync(operatorTokenPath(state.name), 'utf8').trim();
+  }
+
+  async function check(state: RelayState): Promise<CheckResult> {
+    const token = operatorToken(state);
     let last: CheckResult = { outcome: 'unreachable' };
     // A new secret or version can take a few seconds to reach every location.
     for (let attempt = 0; attempt < 6; attempt++) {
@@ -353,6 +368,35 @@ export function createRelayDeployer(root: string, deps: RelayDeps = {}) {
       assertInstallationId(installationId);
       if (!setBlocked(state, installationId, !unblock)) throw new Error(`${installationId} has not registered with this relay`);
       log(unblock ? `Unblocked ${installationId}.` : `Blocked ${installationId}. Within 30 seconds, every request it signs is refused, so it can no longer send notifications.`);
+    },
+
+    /**
+     * Erases everything the relay holds about an installation, for a request that reached the operator directly.
+     * It is taken off the admitted list first, so that it cannot register again in between.
+     */
+    async erase(name: string, installationId: string): Promise<RelayErasure> {
+      const state = loadDeployed(name);
+      assertInstallationId(installationId);
+      const token = operatorToken(state);
+      if (state.allowedInstallations.includes(installationId)) {
+        state.allowedInstallations = state.allowedInstallations.filter((id) => id !== installationId);
+        save(state);
+        deployWorker(state);
+        log(`Removed ${installationId} from the admitted list.`);
+      }
+      const response = await get(`${state.url}/v1/operator/erase`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ installationId }),
+      });
+      if (response.status !== 200) throw new Error(`The relay answered ${response.status}. Nothing was erased.`);
+      const erased = (await response.json()) as RelayErasure;
+      log(
+        erased.installation
+          ? `Erased ${installationId}: its key, ${count(erased.workspaces, 'workspace')}, ${count(erased.subscriptions, 'subscription')}, ${count(erased.notifications, 'delivery record')}, and ${count(erased.devices, 'device')} left with no subscription.`
+          : `${installationId} was not registered. ${count(erased.devices, 'device')} with no subscription erased.`,
+      );
+      return erased;
     },
 
     /** Counts only. The relay holds no content to show. */

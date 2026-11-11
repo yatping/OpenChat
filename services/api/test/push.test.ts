@@ -210,6 +210,17 @@ describe('grants', () => {
     expect((await memberSays('one')).status).toBe(201);
   });
 
+  it('registers again on the next grant after the relay erased this installation', async () => {
+    await grantFor('one');
+    await env.DB.prepare(`UPDATE workspaces SET name = 'Renamed' WHERE id = ?1`).bind(W).run();
+    relayAnswer = () => new Response('{"code":"unauthorized"}', { status: 401 });
+    expect((await grantFor('one')).status).toBe(503);
+    relayAnswer = () => new Response('{}', { status: 201 });
+    sent = [];
+    expect((await grantFor('one')).status).toBe(201);
+    expect(sent.map((s) => s.path)).toEqual(['/v1/installations/register', '/v1/workspaces/register']);
+  });
+
   it('is refused with no relay configured', async () => {
     const response = await call('POST', `/api/v1/workspaces/${W}/push/grants`, { token: tokens.one!, env: withoutRelay });
     expect(response.status).toBe(409);
@@ -530,5 +541,103 @@ describe('when someone loses access', () => {
     queued = [];
     await sweepOutbox(withRelay, Date.now());
     expect(queued).toMatchObject([{ type: 'notification.unregister', payload: { memberId: 'mem_one' } }]);
+  });
+});
+
+describe('an admin disconnecting from the relay', () => {
+  beforeEach(async () => {
+    await env.DB.prepare(`UPDATE users SET is_installation_admin = 1 WHERE id = 'user_two'`).run();
+  });
+  const status = async (name = 'two', options: { env?: Env } = {}) => call('GET', '/api/v1/admin/push', { token: tokens[name]!, ...options });
+  const disconnect = (name = 'two') => call('POST', '/api/v1/admin/push/disconnect', { token: tokens[name]! });
+  const reconnect = (name = 'two') => call('POST', '/api/v1/admin/push/reconnect', { token: tokens[name]! });
+  const grantFor = (name: string) => call('POST', `/api/v1/workspaces/${W}/push/grants`, { token: tokens[name]! });
+  const subscriptionCount = async () => (await env.DB.prepare(`SELECT COUNT(*) AS n FROM push_subscriptions`).first<{ n: number }>())!.n;
+
+  it('shows the relay, whether it accepted this installation, and how many phones', async () => {
+    expect(await (await status()).json()).toEqual({ state: 'connected', relay: { id: 'managed', url: RELAY }, registered: false, subscriptions: 0 });
+    await grantFor('one');
+    await subscribe('one');
+    expect(await (await status()).json()).toMatchObject({ registered: true, subscriptions: 1 });
+    expect(await (await status('two', { env: withoutRelay })).json()).toMatchObject({ state: 'not_configured', relay: null, registered: false });
+  });
+
+  it('asks the relay to erase everything, deletes the handles here, and turns push off', async () => {
+    await grantFor('one');
+    await subscribe('one');
+    sent = [];
+    const response = await disconnect();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ state: 'disconnected', relay: { id: 'managed', url: RELAY }, registered: false, subscriptions: 0 });
+    expect(sent.map((s) => s.path)).toEqual(['/v1/installations/unregister']);
+    expect(sent[0]!.body).toEqual({});
+    expect(sent[0]!.headers.get('x-workspace-id')).toBeNull();
+    expect(await subscriptionCount()).toBe(0);
+    const audit = await env.DB.prepare(`SELECT action, actor_id AS actorId, target_id AS targetId FROM audit_log WHERE action = 'relay.disconnected'`).first();
+    expect(audit).toEqual({ action: 'relay.disconnected', actorId: 'user_two', targetId: 'managed' });
+  });
+
+  it('then registers nothing: no grant, no handle, no relay in discovery, and queued pushes are dropped', async () => {
+    await subscribe('one');
+    await visitorStarts();
+    expect((await disconnect()).status).toBe(200);
+    sent = [];
+    const grant = await grantFor('one');
+    expect(grant.status).toBe(409);
+    expect(((await grant.json()) as { code: string }).code).toBe('push_not_configured');
+    expect((await call('POST', `/api/v1/workspaces/${W}/push/subscriptions`, { token: tokens.one!, body: { relaySubscriptionId: 'sub_again' } })).status).toBe(409);
+    expect(((await (await call('GET', '/.well-known/openchat.json')).json()) as { relay: unknown }).relay).toBeNull();
+    // A dispatch job queued before the disconnect.
+    queued.push({ type: 'notification.dispatch', idempotencyKey: 'old', workspaceId: W, payload: { notifications: [{ workspaceId: W, event: 'new_message', recipientId: 'mem_one', conversationId: CONV, notificationId: 'ntf_old' }] } });
+    const outcomes = await runQueue();
+    expect(outcomes.every((o) => o.acked)).toBe(true);
+    expect(sent).toEqual([]);
+  });
+
+  it('is still off when the relay cannot be reached, and repeating it finishes the erasure', async () => {
+    await subscribe('one');
+    relayAnswer = () => new Response('{}', { status: 500 });
+    const first = await disconnect();
+    expect(first.status).toBe(503);
+    expect(((await first.json()) as { code: string }).code).toBe('relay_unavailable');
+    expect(await (await status()).json()).toMatchObject({ state: 'disconnected', subscriptions: 0 });
+    expect((await grantFor('one')).status).toBe(409);
+    relayAnswer = () => new Response(null, { status: 204 });
+    expect((await disconnect()).status).toBe(200);
+  });
+
+  it('treats a relay that no longer knows the installation as erased', async () => {
+    relayAnswer = () => new Response('{"code":"unauthorized"}', { status: 401 });
+    expect((await disconnect()).status).toBe(200);
+  });
+
+  it('reconnects: phones register the installation again on their next grant', async () => {
+    await grantFor('one');
+    await disconnect();
+    sent = [];
+    const response = await reconnect();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ state: 'connected', registered: false });
+    expect((await grantFor('one')).status).toBe(201);
+    expect(sent.map((s) => s.path)).toEqual(['/v1/installations/register', '/v1/workspaces/register']);
+  });
+
+  it('applies only to that relay: moving to another one turns push on again', async () => {
+    await disconnect();
+    const response = await call('POST', `/api/v1/workspaces/${W}/push/grants`, { token: tokens.one!, env: { ...withRelay, RELAY_ID: 'other' } });
+    expect(response.status).toBe(201);
+  });
+
+  it('is 404 for someone who is not an installation admin, and changes nothing', async () => {
+    await subscribe('one');
+    sent = [];
+    for (const response of [await status('one'), await disconnect('one'), await reconnect('one')]) expect(response.status).toBe(404);
+    expect(sent).toEqual([]);
+    expect(await subscriptionCount()).toBe(1);
+  });
+
+  it('is refused with no relay configured', async () => {
+    const response = await call('POST', '/api/v1/admin/push/disconnect', { token: tokens.two!, env: withoutRelay });
+    expect(response.status).toBe(409);
   });
 });

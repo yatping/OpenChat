@@ -3,9 +3,9 @@ import { type Context, Hono } from 'hono';
 import type { z } from 'zod';
 import type { Env } from '../env';
 import { documentProvesControl, normalizeBaseUrl } from './domain-proof';
-import { registerInstallationBody, registerWorkspaceBody, revokeWorkspaceBody, sanitizeDisplayName } from './schemas';
-import { findActiveKey, hasInstallation, insertInstallation, revokeWorkspace, upsertWorkspace } from './store';
-import { admitToGuard, checkSignature, MAX_BODY_BYTES, type Rejection, readSignedHeaders, type SignedHeaders, verifyKnownInstallation } from './verify';
+import { registerInstallationBody, registerWorkspaceBody, revokeWorkspaceBody, sanitizeDisplayName, unregisterInstallationBody } from './schemas';
+import { eraseInstallation, findActiveKey, hasInstallation, insertInstallation, revokeWorkspace, upsertWorkspace } from './store';
+import { admitToGuard, checkSignature, clearKeyCache, MAX_BODY_BYTES, type Rejection, readSignedHeaders, type SignedHeaders, verifyKnownInstallation } from './verify';
 
 type Ctx = Context<{ Bindings: Env }>;
 
@@ -106,6 +106,24 @@ export function relayRoutes(fetcher: typeof fetch) {
     const result = await verifyWorkspaceRequest(c, revokeWorkspaceBody);
     if (!result.ok) return result.response;
     await revokeWorkspace(c.env.DB, result.signed.installationId, result.parsed.workspaceId, Date.now());
+    return c.body(null, 204);
+  });
+
+  // An installation leaving. Signed for the installation, not a workspace. Repeating it after success answers 401,
+  // because the key it signed with is gone too.
+  routes.post('/v1/installations/unregister', async (c) => {
+    const read = await readRequest(c);
+    if (!read.ok) return read.response;
+    const { signed, body, request } = read;
+    if (signed.workspaceId !== undefined) return problem(c, { status: 400, code: 'malformed_request' });
+    const rejected = await verifyKnownInstallation(c.env, request, signed);
+    if (rejected) return problem(c, rejected);
+    const refused = await admitToGuard(c.env, signed.installationId, signed.requestId);
+    if (refused) return problem(c, refused);
+    if (!parseBody(unregisterInstallationBody, body)) return problem(c, { status: 400, code: 'malformed_request' });
+    await eraseInstallation(c.env.DB, signed.installationId);
+    // Other isolates forget the key within 30 seconds. Until then a request passes the signature check and finds nothing.
+    clearKeyCache();
     return c.body(null, 204);
   });
 

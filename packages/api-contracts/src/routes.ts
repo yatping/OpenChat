@@ -1112,3 +1112,43 @@ export const updateWebsiteRoute = createRoute({
   },
   responses: { 200: { description: 'Updated', ...json(WebsiteSchema) }, default: problemResponse },
 });
+
+export const RelayStatusSchema = z
+  .object({
+    state: z.enum(['not_configured', 'connected', 'disconnected']).openapi({
+      description: 'not_configured: no relay in this deployment. disconnected: an admin disconnected from the configured relay, which erased what it held, and push is off.',
+    }),
+    relay: z.object({ id: z.string(), url: z.string() }).nullable(),
+    /** Whether the relay has accepted this installation. It registers when a phone first asks for push. */
+    registered: z.boolean(),
+    subscriptions: z.number().int().openapi({ description: 'Phones registered for push, across every workspace.' }),
+  })
+  .openapi('RelayStatus');
+
+export const getRelayStatusRoute = createRoute({
+  ...adminRoute,
+  method: 'get',
+  path: '/api/v1/admin/push',
+  operationId: 'getRelayStatus',
+  summary: 'The notification relay this installation uses, and whether push is on',
+  responses: { 200: { description: 'Relay status', ...json(RelayStatusSchema) }, default: problemResponse },
+});
+
+export const disconnectRelayRoute = createRoute({
+  ...adminRoute,
+  method: 'post',
+  path: '/api/v1/admin/push/disconnect',
+  operationId: 'disconnectRelay',
+  summary: 'Turn push off, and have the relay erase everything it holds about this installation. Push stays off until reconnected.',
+  description: 'Repeat it if it answers 503: push is already off, and only the erasure at the relay is left.',
+  responses: { 200: { description: 'Disconnected, and erased at the relay', ...json(RelayStatusSchema) }, default: problemResponse },
+});
+
+export const reconnectRelayRoute = createRoute({
+  ...adminRoute,
+  method: 'post',
+  path: '/api/v1/admin/push/reconnect',
+  operationId: 'reconnectRelay',
+  summary: 'Turn push back on. Phones register again the next time the app starts.',
+  responses: { 200: { description: 'Reconnected', ...json(RelayStatusSchema) }, default: problemResponse },
+});

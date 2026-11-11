@@ -22,6 +22,7 @@ function setup(options: { granted?: boolean; config?: PushConfig; relayDown?: bo
     calls.push({ url, body: JSON.parse(String(init?.body)) as Record<string, unknown>, auth: new Headers(init?.headers).get('authorization') });
     if (url.endsWith('/v1/devices/register')) {
       const body = calls.at(-1)!.body;
+      if (body.device && state.deviceUnknown) return json({ code: 'invalid_device' }, 401);
       return json({ deviceId: 'dev_1', subscriptionId: `sub_${++n}`, ...(body.device ? {} : { deviceSecret: 'secret' }) }, 201);
     }
     if (url.endsWith('/v1/devices/token') && state.deviceUnknown) return json({ code: 'invalid_device' }, 401);
@@ -154,6 +155,20 @@ describe('a new token', () => {
     const last = calls.at(-1)!;
     expect(last.url).toBe(`${RELAY}/v1/devices/register`);
     expect(last.body.device).toBeUndefined();
+  });
+});
+
+describe('a device the relay erased', () => {
+  it('registers again as new, with the same grant, when an installation left the relay', async () => {
+    const { sync, state, calls, api, registrar } = setup();
+    await sync(['work_a']);
+    state.deviceUnknown = true;
+    await sync(['work_a', 'work_b']);
+    const registers = calls.filter((c) => c.url.endsWith('/v1/devices/register')).slice(1);
+    expect(registers.map((c) => c.body.device)).toEqual([{ id: 'dev_1', secret: 'secret' }, undefined]);
+    expect(registers[0]!.body.grant).toBe(registers[1]!.body.grant);
+    expect(api.createPushGrant).toHaveBeenCalledTimes(2);
+    expect(registrar.getStatus()).toBe('on');
   });
 });
 

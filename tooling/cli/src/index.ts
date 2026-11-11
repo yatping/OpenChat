@@ -25,6 +25,7 @@ Your own notification relay, for your own iOS app and APNs key:
   pnpm oc relay set-apns --env <name> --team-id <id> --key-id <id> --key-file <AuthKey.p8> --bundle-id <id>
   pnpm oc relay allow --env <name> --installation <inst_...> [--remove]
   pnpm oc relay block --env <name> --installation <inst_...> [--unblock]
+  pnpm oc relay erase --env <name> --installation <inst_...>
   pnpm oc relay stats --env <name>
   pnpm oc relay check --env <name>
 
@@ -38,6 +39,7 @@ TURNSTILE_SECRET_KEY needs --turnstile-site-key. Websites can then require Turns
 
 Push, on deploy. All three together, and remembered for later deploys. The signing key is generated once:
   --relay-url <https://...> --relay-id <id> --relay-bundle-ids <a,b>
+  --no-relay   takes it out again. Disconnect in the dashboard first, so that the relay erases its records.
 
 Limits for every website, on deploy. Each is remembered for later deploys, and "default" goes back to its default:
 ${Object.values(ABUSE_LIMITS).map((limit) => `  --${limit.flag} <${limit.min} to ${limit.max}>, default ${limit.default}`).join('\n')}`);
@@ -100,6 +102,12 @@ async function relay(name: string) {
     if (!installation) usage();
     return relays.block(name, installation, rest.includes('--unblock'));
   }
+  if (sub === 'erase') {
+    const installation = flag('installation');
+    if (!installation) usage();
+    await relays.erase(name, installation);
+    return;
+  }
   if (sub === 'stats') {
     await relays.stats(name);
     return;
@@ -129,6 +137,7 @@ async function main(name: string) {
       relayUrl: flag('relay-url'),
       relayId: flag('relay-id'),
       relayBundleIds: flag('relay-bundle-ids'),
+      noRelay: rest.includes('--no-relay'),
       cloudflareEmail: rest.includes('--cloudflare-email'),
     });
     return;

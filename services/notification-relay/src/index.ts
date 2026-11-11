@@ -1,6 +1,7 @@
 import { type ApnsTransport, RELAY_PROTOCOL_VERSION } from '@openchat/notification-protocol';
 import { createLogger } from '@openchat/shared';
-import { Hono } from 'hono';
+import { type Context, Hono } from 'hono';
+import { z } from 'zod';
 import { runApnsSelfCheck } from './apns/self-check';
 import { WorkersFetchTransport } from './apns/transport';
 import { type DeliveryMessage, handleDeliveryBatch } from './delivery/consumer';
@@ -8,11 +9,15 @@ import { deleteOldNotifications, notificationRoutes } from './delivery/routes';
 import { deviceRoutes } from './devices/routes';
 import type { Env } from './env';
 import { relayRoutes } from './requests/routes';
+import { ID_PATTERN } from './requests/schemas';
+import { deleteOrphanDevices, eraseInstallation } from './requests/store';
+import { clearKeyCache } from './requests/verify';
 
 export { ApnsCredential } from './apns/credential';
 export { RelayGuard } from './requests/guard';
 
 const log = createLogger();
+const operatorEraseBody = z.strictObject({ installationId: z.string().regex(ID_PATTERN) });
 
 async function tokenMatches(presented: string, expected: string): Promise<boolean> {
   const digest = (value: string) => crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
@@ -26,11 +31,25 @@ export function createApp(transportFor: () => ApnsTransport = () => new WorkersF
   app.get('/health', (c) => c.json({ status: 'ok' as const }));
 
   // For the relay's operator. Answers 404 to everyone else, or if no operator token is set.
-  app.post('/v1/operator/apns-check', async (c) => {
+  const isOperator = async (c: Context<{ Bindings: Env }>) => {
     const expected = c.env.RELAY_OPERATOR_TOKEN;
     const presented = /^Bearer (.+)$/.exec(c.req.header('authorization') ?? '')?.[1];
-    if (!expected || !presented || !(await tokenMatches(presented, expected))) return c.json(notFound, 404);
+    return Boolean(expected && presented && (await tokenMatches(presented, expected)));
+  };
+
+  app.post('/v1/operator/apns-check', async (c) => {
+    if (!(await isOperator(c))) return c.json(notFound, 404);
     return c.json(await runApnsSelfCheck(c.env, transportFor()));
+  });
+
+  // For a request to erase that reaches the operator some other way, such as by email.
+  app.post('/v1/operator/erase', async (c) => {
+    if (!(await isOperator(c))) return c.json(notFound, 404);
+    const body = operatorEraseBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ code: 'malformed_request', status: 400, title: 'malformed request', protocolVersion: RELAY_PROTOCOL_VERSION }, 400);
+    const erased = await eraseInstallation(c.env.DB, body.data.installationId);
+    clearKeyCache();
+    return c.json(erased);
   });
 
   app.route('/', relayRoutes(fetcher));
@@ -50,6 +69,7 @@ export default {
   },
   async scheduled(_controller, env) {
     await deleteOldNotifications(env.DB, Date.now());
+    await deleteOrphanDevices(env.DB, Date.now());
     const result = await runApnsSelfCheck(env, new WorkersFetchTransport());
     if (result.outcome === 'not_configured') return;
     const fields = { jobType: 'apns_self_check', errorCode: result.outcome, durationMs: result.durationMs, ...(result.status ? { status: result.status } : {}) };

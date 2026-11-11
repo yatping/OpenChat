@@ -71,7 +71,7 @@ describe('readApnsKey', () => {
   });
 });
 
-function setup(answers: { checkOutcome?: string; exists?: boolean; registered?: boolean } = {}) {
+function setup(answers: { checkOutcome?: string; exists?: boolean; registered?: boolean; eraseStatus?: number } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'oc-relay-'));
   mkdirSync(join(root, 'services/notification-relay'), { recursive: true });
   writeFileSync(join(root, 'services/notification-relay/wrangler.template.jsonc'), template);
@@ -87,11 +87,16 @@ function setup(answers: { checkOutcome?: string; exists?: boolean; registered?: 
     if (key.startsWith('d1 execute') && key.includes('GROUP BY')) return JSON.stringify([{ results: [{ installation: INSTALLATION, notifications: 30 }] }]);
     return '';
   };
-  const requests: { url: string; authorization?: string }[] = [];
+  const requests: { url: string; authorization?: string; body?: string }[] = [];
   const fakeFetch = (async (url: string, init?: RequestInit) => {
     const authorization = (init?.headers as Record<string, string> | undefined)?.authorization;
     requests.push({ url, ...(authorization ? { authorization } : {}) });
     if (url.endsWith('/health')) return new Response('{"status":"ok"}', { status: 200 });
+    if (url.endsWith('/v1/operator/erase')) {
+      requests.at(-1)!.body = String(init?.body);
+      if (answers.eraseStatus) return new Response('{}', { status: answers.eraseStatus });
+      return Response.json({ installation: answers.registered !== false, workspaces: 2, subscriptions: 5, devices: 3, notifications: 40 });
+    }
     return Response.json({ outcome: answers.checkOutcome ?? 'ok', status: 400, reason: 'BadDeviceToken' });
   }) as typeof fetch;
   const lines: string[] = [];
@@ -207,6 +212,31 @@ describe('oc relay', () => {
     const unregistered = setup({ registered: false });
     await unregistered.relays.deploy({ name: 'acme' });
     await expect(unregistered.relays.block('acme', INSTALLATION, false)).rejects.toThrow(/has not registered/);
+  });
+
+  it('erases an installation through the operator route, after taking it off the admitted list', async () => {
+    const { relays, calls, requests, lines } = setup();
+    await relays.deploy({ name: 'acme' });
+    await relays.allow('acme', INSTALLATION, false);
+    calls.length = 0;
+    requests.length = 0;
+    const erased = await relays.erase('acme', INSTALLATION);
+    expect(erased).toMatchObject({ installation: true, devices: 3 });
+    expect(calls.map((c) => c.args.split(' -c ')[0])).toEqual(['deploy']);
+    expect(relays.load('acme')!.allowedInstallations).toEqual([]);
+    expect(requests).toEqual([{ url: 'https://oc-acme-relay.acme.workers.dev/v1/operator/erase', authorization: expect.stringMatching(/^Bearer .{20,}/), body: JSON.stringify({ installationId: INSTALLATION }) }]);
+    expect(lines.at(-1)).toBe(`Erased ${INSTALLATION}: its key, 2 workspaces, 5 subscriptions, 40 delivery records, and 3 devices left with no subscription.`);
+  });
+
+  it('says when there was nothing to erase, and fails loudly when the relay refuses', async () => {
+    const missing = setup({ registered: false });
+    await missing.relays.deploy({ name: 'acme' });
+    await missing.relays.erase('acme', INSTALLATION);
+    expect(missing.lines.at(-1)).toBe(`${INSTALLATION} was not registered. 3 devices with no subscription erased.`);
+    const refused = setup({ eraseStatus: 404 });
+    await refused.relays.deploy({ name: 'acme' });
+    await expect(refused.relays.erase('acme', INSTALLATION)).rejects.toThrow('The relay answered 404. Nothing was erased.');
+    await expect(refused.relays.erase('acme', "inst_x'; --")).rejects.toThrow(/inst_/);
   });
 
   it('reports counts, and what looks stuck', async () => {

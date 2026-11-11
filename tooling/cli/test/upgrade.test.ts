@@ -135,3 +135,20 @@ describe('oc rollback', () => {
     await expect(deployer.rollback('acme')).rejects.toThrow(/No upgrade of acme to roll back/);
   });
 });
+
+describe('oc deploy --no-relay', () => {
+  const relay = { url: 'https://relay.example.org', id: 'managed', bundleIds: 'com.example.app' };
+
+  it('takes the relay out, and says to disconnect in the dashboard first', async () => {
+    const { deployer, state, lines } = setup({ state: { version: '0.2.0', relay, relayKeySet: true } });
+    await deployer.deploy({ name: 'acme', noRelay: true });
+    expect(state().relay).toBeUndefined();
+    expect(lines.join('\n')).toContain('disconnect in the dashboard first');
+  });
+
+  it('cannot go with a new relay', async () => {
+    const { deployer, calls } = setup({ state: { version: '0.2.0', relay } });
+    await expect(deployer.deploy({ name: 'acme', noRelay: true, relayUrl: relay.url, relayId: 'x', relayBundleIds: 'y' })).rejects.toThrow(/--no-relay cannot go with/);
+    expect(calls).toEqual([]);
+  });
+});

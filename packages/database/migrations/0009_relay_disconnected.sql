@@ -1,0 +1,1 @@
+ALTER TABLE `installation` ADD `relay_disconnected_id` text;

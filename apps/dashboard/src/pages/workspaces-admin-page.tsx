@@ -216,6 +216,59 @@ function ManagedWorkspace({ workspace }: { workspace: { id: string; name: string
   );
 }
 
+/**
+ * Push for the whole installation. Disconnecting has the relay erase what it holds about this installation, which is
+ * how its operator meets a request to erase. See docs/notification-relay/protocol.md#erasure.
+ */
+function RelayPanel() {
+  const client = useQueryClient();
+  const status = useQuery({ queryKey: ['relay-status'], queryFn: () => api.getRelayStatus() });
+  const onSuccess = (data: Awaited<ReturnType<typeof api.getRelayStatus>>) => client.setQueryData(['relay-status'], data);
+  // A failed disconnect still turned push off here, so the status is read again either way.
+  const disconnect = useMutation({ mutationFn: () => api.disconnectRelay(), onSuccess, onSettled: () => client.invalidateQueries({ queryKey: ['relay-status'] }) });
+  const reconnect = useMutation({ mutationFn: () => api.reconnectRelay(), onSuccess });
+  const relay = status.data;
+  if (!relay) return <Failure error={status.error} />;
+  return (
+    <section className="card space-y-2" aria-label="Push notifications">
+      <h2 className="font-medium">Push notifications</h2>
+      {relay.state === 'not_configured' && <p className="text-sm text-slate-600 dark:text-slate-400">This installation has no notification relay. Messages still reach the app while it is open.</p>}
+      {relay.state === 'connected' && (
+        <>
+          <p className="text-sm">
+            Through {relay.relay?.url}. {relay.registered ? `${relay.subscriptions} ${relay.subscriptions === 1 ? 'phone is' : 'phones are'} registered.` : 'No phone has registered yet.'}
+          </p>
+          <p className="text-xs text-slate-600 dark:text-slate-400">
+            The relay holds this installation's address, its workspace names, and opaque IDs for each phone. Disconnecting asks it to erase all of that, and turns push off for everyone.
+          </p>
+          <button
+            className="button-quiet"
+            disabled={disconnect.isPending}
+            onClick={() => window.confirm('Disconnect from the relay? Push stops for everyone, and the relay erases what it holds about this installation.') && disconnect.mutate()}
+          >
+            Disconnect and erase
+          </button>
+        </>
+      )}
+      {relay.state === 'disconnected' && (
+        <>
+          <p className="text-sm">Push is off. You disconnected from {relay.relay?.url}.</p>
+          <button className="button-quiet" disabled={reconnect.isPending} onClick={() => reconnect.mutate()}>
+            Reconnect
+          </button>
+          {disconnect.isError && <p className="text-xs text-slate-600 dark:text-slate-400">The relay has not confirmed the erasure yet.</p>}
+          {disconnect.isError && (
+            <button className="button-quiet" disabled={disconnect.isPending} onClick={() => disconnect.mutate()}>
+              Try the erasure again
+            </button>
+          )}
+        </>
+      )}
+      <Failure error={disconnect.error ?? reconnect.error} />
+    </section>
+  );
+}
+
 /** For installation admins, who need no membership for any of this. Conversations do need one. See ADR-0016. */
 export function WorkspacesAdminPage() {
   const workspaces = useQuery({ queryKey: ['admin-workspaces'], queryFn: () => api.listAdminWorkspaces({ limit: 100 }) });
@@ -224,6 +277,7 @@ export function WorkspacesAdminPage() {
   const workspace = list.find((w) => w.id === chosen) ?? list[0];
   return (
     <section className="space-y-4" aria-label="Manage workspaces">
+      <RelayPanel />
       <Failure error={workspaces.error} />
       <NewWorkspace onCreated={setChosen} />
       {workspaces.data?.nextCursor && <p className="notice">Only the first 100 are shown.</p>}

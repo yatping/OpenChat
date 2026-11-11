@@ -37,6 +37,11 @@ export const installation = sqliteTable(
     publicBaseUrl: text('public_base_url').notNull(),
     /** The relay that has accepted this installation. Compared with the configured one, so that a change registers again. */
     relayRegisteredId: text('relay_registered_id'),
+    /**
+     * The relay an installation admin disconnected from, which erased what it held. While it is still the configured
+     * one, push is off, so that a phone asking for a grant does not quietly register the installation again.
+     */
+    relayDisconnectedId: text('relay_disconnected_id'),
     signupPolicy: text('signup_policy', { enum: ['invite_only', 'open'] }).notNull().default('invite_only'),
     systemEmailEnc: text('system_email_enc'),
     createdAt: ts('created_at'),
