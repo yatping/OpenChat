@@ -553,6 +553,19 @@ The [guide](../operations/self-hosting.md) was followed from a fresh clone of `m
 | 10. `oc upgrade`, `oc relay deploy`, `oc relay check` | Works |
 | Removing everything, in the guide's order | Works, but the installation's Worker answered 10064 for about three minutes after its consumers were removed |
 
+## Blocking a relay installation on real Cloudflare (2026-11-11)
+
+`relay allow --remove` from M5 said the installation's devices would get no more notifications. That was wrong: the allowlist is checked only when an installation first registers. It now also blocks the installation in the relay's database. A throwaway relay and installation, `preview-b`, then removed:
+
+| Step | A push grant in a new workspace, which makes the installation sign a request to the relay |
+|---|---|
+| Admitted | 201 |
+| `relay block`, then 35 seconds | 503 `relay_unavailable`: the relay refused it |
+| `relay block --unblock`, then 35 seconds | 201 |
+| `relay allow --remove`, then 35 seconds | 503 |
+
+`relay stats` then showed 0 active and 1 blocked installation. Removing the installation's Worker answered 10064 for over four minutes after its consumers were removed.
+
 ## Sources
 
 - [D1 limits](https://developers.cloudflare.com/d1/platform/limits/), [D1 database API](https://developers.cloudflare.com/d1/worker-api/d1-database/), [migrations](https://developers.cloudflare.com/d1/reference/migrations/), [foreign keys](https://developers.cloudflare.com/d1/sql-api/foreign-keys/), [read replication](https://developers.cloudflare.com/d1/best-practices/read-replication/), [Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/)

@@ -233,7 +233,7 @@ Push is M3, so an agent gets no alert while the app is closed. Before anyone rel
 **Limits**
 
 - **The managed relay is in private mode**, at `openchat-relay.orangolabs.com`. Opening it needs legal review of terms and a privacy policy ([Q5](../architecture/open-questions.md)). It has been checked end to end with a fake device token, and no phone has used it yet, because the phone test used a temporary relay.
-- **Not built:** rotating an installation's signing key or `RELAY_TOKEN_KEY`; `/health/notifications`; delivery metrics for the operator; an operator route to revoke an installation, which today means editing the relay's D1 by hand.
+- **Not built:** rotating an installation's signing key or `RELAY_TOKEN_KEY`; `/health/notifications`; alerts on delivery. Since 2026-11-11, `oc relay stats` gives the operator counts, and `oc relay block` cuts off an installation.
 - **Triggers missing:** `mention`, because mentions do not exist; `conversation_transferred`, sent as `conversation_assigned`; `conversation_updated`.
 - **Not measured:** throughput; the relay's rate limit bindings on real Cloudflare; the daily self-check firing from cron.
 - **Not exercised on a phone:** a real token change, sign-out while offline, and more than one device.

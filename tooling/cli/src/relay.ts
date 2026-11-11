@@ -39,6 +39,18 @@ const BUNDLE_ID = /^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
 const MARK = '-'.repeat(5);
 const PRIVATE_KEY = new RegExp(`^${MARK}BEGIN PRIVATE KEY${MARK}\\r?\\n[A-Za-z0-9+/=\\r\\n]+${MARK}END PRIVATE KEY${MARK}\\s*$`);
 
+export interface RelayStats {
+  installations: number;
+  blocked: number;
+  devices: number;
+  notifications: number;
+  delivered: number;
+  invalidTokens: number;
+  failed: number;
+  stuck: number;
+  busiest?: { installation: string; notifications: number }[];
+}
+
 export const relayPrefix = (name: string) => `oc-${name}-relay`;
 
 /** `relativeRoot` is the path from the rendered file back to the relay's directory. */
@@ -230,6 +242,26 @@ export function createRelayDeployer(root: string, deps: RelayDeps = {}) {
     if (state.allowedInstallations.length === 0) log(`Then admit your installation: pnpm oc relay allow --env ${state.name} --installation <inst_...>`);
   };
 
+  const assertInstallationId = (id: string) => {
+    if (!isId('installation', id)) throw new Error("An installation ID looks like inst_ followed by 26 characters. It is in the installation's /.well-known/openchat.json");
+  };
+
+  /** Only ever given numbers and checked IDs, so the SQL holds nothing from outside. */
+  const query = <T>(state: RelayState, sql: string): T[] => {
+    const output = wrangler(['d1', 'execute', relayPrefix(state.name), '--remote', '--yes', '--json', '-c', configPath(state.name), '--command', sql], { ci: true });
+    return (JSON.parse(output) as { results?: T[] }[])[0]?.results ?? [];
+  };
+
+  /** Returns whether the installation has registered. */
+  const setBlocked = (state: RelayState, installationId: string, blocked: boolean): boolean => {
+    const output = wrangler(
+      ['d1', 'execute', relayPrefix(state.name), '--remote', '--yes', '--json', '-c', configPath(state.name), '--command', `UPDATE installations SET status = '${blocked ? 'revoked' : 'active'}' WHERE id = '${installationId}'; SELECT count(*) AS n FROM installations WHERE id = '${installationId}'`],
+      { ci: true },
+    );
+    const results = JSON.parse(output) as { results?: { n?: number }[] }[];
+    return (results.at(-1)?.results?.[0]?.n ?? 0) > 0;
+  };
+
   return {
     load,
 
@@ -299,7 +331,7 @@ export function createRelayDeployer(root: string, deps: RelayDeps = {}) {
 
     async allow(name: string, installationId: string, remove: boolean) {
       const state = loadDeployed(name);
-      if (!isId('installation', installationId)) throw new Error('An installation ID looks like inst_ followed by 26 characters. It is in the installation\'s /.well-known/openchat.json');
+      assertInstallationId(installationId);
       const has = state.allowedInstallations.includes(installationId);
       if (remove ? !has : has) {
         log(remove ? `${installationId} was not admitted` : `${installationId} is already admitted`);
@@ -308,8 +340,47 @@ export function createRelayDeployer(root: string, deps: RelayDeps = {}) {
       state.allowedInstallations = remove ? state.allowedInstallations.filter((id) => id !== installationId) : [...state.allowedInstallations, installationId];
       save(state);
       deployWorker(state);
-      log(remove ? `Removed ${installationId}. Its devices get no more notifications.` : `Admitted ${installationId}.`);
+      // The list is checked only when an installation first registers, so one already registered is cut off in the database.
+      const registered = setBlocked(state, installationId, remove);
+      if (remove) log(registered ? `Removed and blocked ${installationId}. Within 30 seconds, it can no longer send notifications.` : `Removed ${installationId}. It had not registered, so it cannot now.`);
+      else log(`Admitted ${installationId}.`);
       log(`Admitted: ${state.allowedInstallations.join(', ') || 'none'}`);
+    },
+
+    /** Cuts off an installation that has registered, in either mode. Its devices stay, so unblocking restores it. */
+    async block(name: string, installationId: string, unblock: boolean) {
+      const state = loadDeployed(name);
+      assertInstallationId(installationId);
+      if (!setBlocked(state, installationId, !unblock)) throw new Error(`${installationId} has not registered with this relay`);
+      log(unblock ? `Unblocked ${installationId}.` : `Blocked ${installationId}. Within 30 seconds, every request it signs is refused, so it can no longer send notifications.`);
+    },
+
+    /** Counts only. The relay holds no content to show. */
+    async stats(name: string): Promise<RelayStats> {
+      const state = loadDeployed(name);
+      const since = Date.now() - 24 * 60 * 60 * 1000;
+      const [totals] = query<RelayStats>(
+        state,
+        `SELECT (SELECT count(*) FROM installations WHERE status = 'active') AS installations,
+          (SELECT count(*) FROM installations WHERE status = 'revoked') AS blocked,
+          (SELECT count(*) FROM devices) AS devices,
+          (SELECT count(*) FROM notifications WHERE created_at > ${since}) AS notifications,
+          (SELECT coalesce(sum(delivered), 0) FROM notifications WHERE created_at > ${since}) AS delivered,
+          (SELECT coalesce(sum(invalid_token), 0) FROM notifications WHERE created_at > ${since}) AS invalidTokens,
+          (SELECT coalesce(sum(failed), 0) FROM notifications WHERE created_at > ${since}) AS failed,
+          (SELECT count(*) FROM notifications WHERE status IN ('queued', 'delivering') AND created_at < ${Date.now() - 10 * 60 * 1000}) AS stuck`,
+      );
+      const busiest = query<{ installation: string; notifications: number }>(
+        state,
+        `SELECT installation_id AS installation, count(*) AS notifications FROM notifications WHERE created_at > ${since} GROUP BY installation_id ORDER BY notifications DESC LIMIT 5`,
+      );
+      const stats = totals!;
+      log(`Installations: ${stats.installations} active, ${stats.blocked} blocked`);
+      log(`Devices: ${stats.devices}`);
+      log(`Last 24 hours: ${stats.notifications} notifications, ${stats.delivered} delivered, ${stats.invalidTokens} to tokens Apple refused, ${stats.failed} failed`);
+      if (stats.stuck > 0) log(`Waiting more than 10 minutes: ${stats.stuck}. Check the delivery queue.`);
+      if (busiest.length > 0) log(`Busiest installations, last 24 hours:\n${busiest.map((b) => `  ${b.installation}  ${b.notifications}`).join('\n')}`);
+      return { ...stats, busiest };
     },
 
     async check(name: string) {

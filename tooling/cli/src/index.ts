@@ -24,6 +24,8 @@ Your own notification relay, for your own iOS app and APNs key:
   pnpm oc relay deploy --env <name> [--relay-id <id>] [--environment <production|sandbox>] [--location <hint>]
   pnpm oc relay set-apns --env <name> --team-id <id> --key-id <id> --key-file <AuthKey.p8> --bundle-id <id>
   pnpm oc relay allow --env <name> --installation <inst_...> [--remove]
+  pnpm oc relay block --env <name> --installation <inst_...> [--unblock]
+  pnpm oc relay stats --env <name>
   pnpm oc relay check --env <name>
 
 A white-label build of the iOS app, in apps/mobile/variants/<id>. Nothing in it is secret:
@@ -92,6 +94,15 @@ async function relay(name: string) {
     const installation = flag('installation');
     if (!installation) usage();
     return relays.allow(name, installation, rest.includes('--remove'));
+  }
+  if (sub === 'block') {
+    const installation = flag('installation');
+    if (!installation) usage();
+    return relays.block(name, installation, rest.includes('--unblock'));
+  }
+  if (sub === 'stats') {
+    await relays.stats(name);
+    return;
   }
   if (sub === 'check') {
     if (!(await relays.check(name))) process.exitCode = 1;
