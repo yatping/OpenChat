@@ -221,6 +221,33 @@ test('an agent corrects a contact, and the list shows the name', async ({ page }
   await expect(page.getByRole('heading', { name })).toBeVisible();
 });
 
+test('an installation admin exports a contact, then erases them, and the visitor is gone', async ({ page, browser }) => {
+  await signIn(page, OWNER);
+  const visitor = await startVisitor('Please delete my data');
+  await row(page, visitor).click();
+  const rights = page.getByRole('form', { name: 'Contact' }).getByLabel('Personal data');
+
+  const [download] = await Promise.all([page.waitForEvent('download'), rights.getByRole('button', { name: 'Export data' }).click()]);
+  expect(download.suggestedFilename()).toMatch(/^contact-cont_.+\.json$/);
+  const exported = JSON.parse(await (await download.createReadStream()).toArray().then((chunks) => Buffer.concat(chunks).toString('utf8'))) as { conversations: { messages: { content: string }[] }[] };
+  expect(exported.conversations[0]!.messages[0]!.content).toBe('Please delete my data');
+
+  page.once('dialog', (dialog) => void dialog.accept());
+  await rights.getByRole('button', { name: 'Erase contact' }).click();
+  await expect(row(page, visitor)).toHaveCount(0);
+  await expect(page.getByText('Choose a conversation.')).toBeAttached();
+  // The visitor's own token went with them.
+  expect((await fetch(`${BASE_URL}/api/v1/widget/conversations/${visitor.conversationId}/messages`, { headers: visitorHeaders(visitor.token) })).status).toBe(401);
+
+  // An agent who is not an admin is not offered either.
+  const agent = await openSession(browser, AGENT);
+  const other = await startVisitor('Hello again');
+  await row(agent, other).click();
+  await expect(agent.getByRole('form', { name: 'Contact' })).toBeVisible();
+  await expect(agent.getByRole('button', { name: 'Erase contact' })).toHaveCount(0);
+  await agent.context().close();
+});
+
 test('tags appear for other agents as they change, and a visitor never sees them', async ({ page, browser }) => {
   await signIn(page, OWNER);
   const visitor = await startVisitor();

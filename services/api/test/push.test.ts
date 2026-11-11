@@ -525,8 +525,12 @@ describe('when the relay answers badly', () => {
   it('records a request the relay calls malformed, and does not retry it', async () => {
     relayAnswer = (path) => (path === '/v1/notifications/batch' ? new Response('{"code":"malformed_request"}', { status: 400 }) : new Response('{}', { status: 201 }));
     expect((await settle()).acked).toBe(true);
-    const failed = await env.DB.prepare(`SELECT job_type AS t FROM failed_jobs`).first<{ t: string }>();
+    const failed = await env.DB.prepare(`SELECT job_type AS t, envelope_json AS e FROM failed_jobs`).first<{ t: string; e: string }>();
     expect(failed?.t).toBe('notification.dispatch');
+    // The notification's text is message content, and failed_jobs keeps IDs only.
+    const stored = JSON.parse(failed!.e) as { payload: Record<string, unknown> };
+    expect(stored.payload.notifications).toBeDefined();
+    expect(stored.payload).not.toHaveProperty('text');
   });
 
   it('registers again after a relay that lost its data, and then delivers', async () => {

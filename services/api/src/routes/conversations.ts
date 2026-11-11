@@ -1,5 +1,5 @@
-import { downloadAttachmentRoute, uploadAttachmentRoute, createAgentTicketRoute, createTagRoute, deleteTagRoute, getContactRoute, listTagsRoute, setConversationTagsRoute, updateContactRoute, getConversationRoute, listConversationsRoute, listMessagesRoute, markConversationReadRoute, sendMessageRoute, updateConversationRoute } from '@openchat/api-contracts';
-import { agentAttachment, beginAgentUpload, createAgentTicket, createTag, deleteTag, getContact, listTags, setConversationTags, updateContact, getConversation, listConversations, listMessages, markConversationRead, sendMessage, updateConversation, workspaceContext } from '@openchat/core';
+import { downloadAttachmentRoute, uploadAttachmentRoute, createAgentTicketRoute, createTagRoute, deleteTagRoute, getContactRoute, exportContactRoute, eraseContactRoute, listTagsRoute, setConversationTagsRoute, updateContactRoute, getConversationRoute, listConversationsRoute, listMessagesRoute, markConversationReadRoute, sendMessageRoute, updateConversationRoute } from '@openchat/api-contracts';
+import { agentAttachment, beginAgentUpload, createAgentTicket, createTag, deleteTag, getContact, exportContact, eraseContact, listTags, setConversationTags, updateContact, getConversation, listConversations, listMessages, markConversationRead, sendMessage, updateConversation, workspaceContext } from '@openchat/core';
 import type { Context } from 'hono';
 import { authDeps, type App, type AppEnv } from '../context';
 import { receiveUpload, sendFile } from '../attachments';
@@ -27,6 +27,22 @@ export function registerConversationRoutes(app: App) {
     const { workspaceId, contactId } = c.req.valid('param');
     const { db, ctx } = await scoped(c, workspaceId);
     return c.json(await updateContact(db, ctx, contactId, c.req.valid('json')), 200);
+  });
+
+  app.openapi(exportContactRoute, async (c) => {
+    const { workspaceId, contactId } = c.req.valid('param');
+    const { db, ctx } = await scoped(c, workspaceId);
+    const data = await exportContact(db, ctx, contactId, c.req.valid('query').include === 'notes');
+    return c.json(data, 200, { 'content-disposition': `attachment; filename="contact-${contactId}.json"`, 'cache-control': 'no-store' });
+  });
+
+  app.openapi(eraseContactRoute, async (c) => {
+    const { workspaceId, contactId } = c.req.valid('param');
+    const { db, ctx } = await scoped(c, workspaceId);
+    await eraseContact(db, ctx, contactId);
+    // Deletes the files from storage now, and the sweep retries if this fails.
+    dispatchSoon(c, workspaceId, [contactId]);
+    return c.body(null, 204);
   });
 
   app.openapi(listTagsRoute, async (c) => {

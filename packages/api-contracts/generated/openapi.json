@@ -1456,6 +1456,218 @@
           "lastSeenAt"
         ]
       },
+      "ContactExport": {
+        "type": "object",
+        "properties": {
+          "exportedAt": {
+            "type": "string"
+          },
+          "includesInternalNotes": {
+            "type": "boolean"
+          },
+          "contact": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Contact"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "attributes": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "additionalProperties": {}
+                  },
+                  "followUpConsentAt": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "followUpConsentSource": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "createdAt": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "attributes",
+                  "followUpConsentAt",
+                  "followUpConsentSource",
+                  "createdAt"
+                ]
+              }
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "browsers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "websiteId": {
+                  "type": "string"
+                },
+                "firstSeenAt": {
+                  "type": "string"
+                },
+                "lastSeenAt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "websiteId",
+                "firstSeenAt",
+                "lastSeenAt"
+              ]
+            }
+          },
+          "conversations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "websiteId": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "subject": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "messages": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "from": {
+                        "type": "string",
+                        "enum": [
+                          "visitor",
+                          "member",
+                          "system"
+                        ],
+                        "description": "Who wrote it, without naming colleagues."
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "internal": {
+                        "type": "boolean"
+                      },
+                      "content": {
+                        "type": "string"
+                      },
+                      "createdAt": {
+                        "type": "string"
+                      },
+                      "attachments": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "filename": {
+                              "type": "string"
+                            },
+                            "contentType": {
+                              "type": "string"
+                            },
+                            "size": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "filename",
+                            "contentType",
+                            "size"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "from",
+                      "type",
+                      "internal",
+                      "content",
+                      "createdAt",
+                      "attachments"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "websiteId",
+                "status",
+                "subject",
+                "createdAt",
+                "messages"
+              ]
+            }
+          },
+          "emailSuppressions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "email": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "email",
+                "reason",
+                "createdAt"
+              ]
+            }
+          }
+        },
+        "required": [
+          "exportedAt",
+          "includesInternalNotes",
+          "contact",
+          "tags",
+          "browsers",
+          "conversations",
+          "emailSuppressions"
+        ],
+        "description": "Everything this workspace holds about one contact, for a request from that person. Files are listed, not included."
+      },
       "Tag": {
         "type": "object",
         "properties": {
@@ -2665,6 +2877,118 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Contact"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "conversations"
+        ],
+        "operationId": "eraseContact",
+        "summary": "Erase a contact, with their conversations, messages, and files",
+        "description": "For an installation admin who is a member of this workspace. Another member gets 403, and anyone else 404. Recorded in the audit log. Cannot be undone. Email suppressions for their address stay, so that an address that opted out stays out.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "contactId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Erased"
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/contacts/{contactId}/export": {
+      "get": {
+        "tags": [
+          "conversations"
+        ],
+        "operationId": "exportContact",
+        "summary": "Export what this workspace holds about a contact",
+        "description": "For an installation admin who is a member of this workspace. Another member gets 403, and anyone else 404. Recorded in the audit log. Internal notes are left out unless `include=notes`, because the export is usually given to the person it is about.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "contactId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "notes"
+              ]
+            },
+            "required": false,
+            "name": "include",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Export",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactExport"
                 }
               }
             }

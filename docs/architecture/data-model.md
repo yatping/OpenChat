@@ -34,7 +34,7 @@ Beyond the spec's entities, the schema adds what stated requirements need:
 | `tags`, `conversation_tags`, `contact_tags` | Tagging |
 | `push_subscriptions` | Replaces `Devices`. Holds handles, never APNs tokens, and `preview_key`, the phone's public key that each notification is encrypted to ([ADR-0017](decisions/0017-encrypted-notifications.md)). Migration `0010` deleted rows without one. Migration `0011` dropped `workspaces.relay_display_name`, because the relay holds no workspace names |
 | `email_suppressions`, `email_deliveries` | Suppression and duplicate prevention |
-| `email_unsubscribe_links` | One row per link sent, with a hash of its token. Contact erasure must remove these too |
+| `email_unsubscribe_links` | One row per link sent, with a hash of its token. [Contact erasure](#contact-export-and-erasure) removes a contact's links |
 | `contacts.follow_up_consent_*` | Consent evidence |
 | `automation_runs` | At most one follow-up per rule and quiet period |
 | `outbox`, `job_receipts`, `failed_jobs` | Reliable dispatch, consumer idempotency, durable failure records |
@@ -105,6 +105,28 @@ For a table with no `last_mutation_id`, such as `workspace_members`, the first s
 ### Pattern 3: reads that inform a write
 
 Authorisation reads happen before the batch, and that is acceptable because the batch re-checks tenancy in its own SQL. A membership revoked in the gap between the two allows at most one further write. Where that matters, such as last-owner protection, the rule goes in the statement's `WHERE` clause.
+
+## Contact export and erasure
+
+For a person's request to see, or delete, what a workspace holds about them. Both need an installation admin who is an active member of the workspace ([ADR-0016](decisions/0016-installation-admin-replaces-workspace-managers.md): managing does not include reading). Any other member gets 403, and anyone else 404.
+
+**Export** (`GET …/contacts/{id}/export`) reads in one batch, so it is one consistent view: the contact, including attributes and follow-up consent; their tags; their browsers (`visitors`); their conversations with every message; each file's name, type, and size, not its content; and the email suppression for their address. A message says only whether a visitor, a colleague, or the system wrote it, never which colleague. Internal notes are left out unless `include=notes`, because the export is usually handed to the person it is about. Reading changes nothing and is not audited.
+
+**Erasure** (`DELETE …/contacts/{id}`) is one batch in [Pattern 2a](#pattern-2a-the-audit-row-as-the-guard). The audit row `contact.erased` holds IDs only. Every statement after it depends on that row:
+
+| Removed | How |
+|---|---|
+| The contact, their browsers, conversations, messages, read positions, events, contact and conversation tags, and automation runs | Deleting the contact, by cascade |
+| File rows | Deleted first, because a file also refers to its message, without a cascade |
+| Files in R2 | An outbox row, `contact.erased`, lists the conversation IDs. Dispatch deletes everything under `w/<workspace>/c/<conversation>/`, including files never sent, and the sweep retries until it is done |
+| `email_unsubscribe_links` | By the contact's address, both as read before the batch and as stored at commit |
+| `email_deliveries` | By the hash of the address, as the delivery log stores it |
+| `failed_jobs` | Rows whose envelope names one of the conversations |
+| Another contact's `merged_into_contact_id` pointing here | Set to NULL. Merging is not built, so none exist yet |
+
+**Kept, on purpose:** the `email_suppressions` row, so that an address that opted out stays out if it comes back as a new contact. The outbox rows of earlier events, which hold IDs only, and are purged on their usual schedule.
+
+**Not reached:** a push job already queued holds a notification's text for at most an hour, when it expires. The relay holds nothing about contacts. Copies in D1 Time Travel last 30 days. Erasure does not close a visitor's open socket. Nothing more is published to it, because the conversation is gone, and it cannot get a new ticket, because the visitor's token is gone too.
 
 ## Concurrency and capacity rules
 

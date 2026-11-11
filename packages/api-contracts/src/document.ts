@@ -53,6 +53,8 @@ import {
   listTagsRoute,
   setConversationTagsRoute,
   updateContactRoute,
+  exportContactRoute,
+  eraseContactRoute,
   createVisitorTicketRoute,
   getConversationRoute,
   getDiscoveryRoute,
@@ -78,6 +80,8 @@ import {
 export const ALL_ROUTES = [
   getContactRoute,
   updateContactRoute,
+  exportContactRoute,
+  eraseContactRoute,
   listTagsRoute,
   createTagRoute,
   deleteTagRoute,

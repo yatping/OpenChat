@@ -111,6 +111,16 @@ export interface ContactRow {
   lastSeenAt: number;
 }
 
+export interface ContactExportRows {
+  contact: ContactRow & { attributesJson: string | null; followUpConsentAt: number | null; followUpConsentSource: string | null; createdAt: number };
+  tags: string[];
+  browsers: { id: string; websiteId: string; firstSeenAt: number; lastSeenAt: number }[];
+  conversations: { id: string; websiteId: string; status: string; subject: string | null; createdAt: number }[];
+  messages: { id: string; conversationId: string; senderType: 'visitor' | 'member' | 'system'; type: string; visibility: 'public' | 'internal'; content: string; createdAt: number }[];
+  files: { messageId: string; filename: string; contentType: string; size: number }[];
+  suppressions: { email: string; reason: string; createdAt: number }[];
+}
+
 export interface ConversationRow {
   id: string;
   websiteId: string;
@@ -175,6 +185,10 @@ export const MESSAGE_SELECT = `SELECT m.id, m.workspace_id AS workspaceId, ${ATT
 const CONTACT_SELECT = `SELECT id, name, email, phone, first_seen_at AS firstSeenAt, last_seen_at AS lastSeenAt FROM contacts`;
 const MAX_TAGS = 500;
 
+/** The member is an installation admin, and active here. ADR-0016: managing does not include reading, so both are needed. */
+const memberIsAdmin = (workspace: string, member: string) => `EXISTS (SELECT 1 FROM workspace_members cm JOIN users cu ON cu.id = cm.user_id
+    WHERE cm.workspace_id = ${workspace} AND cm.id = ${member} AND cm.status = 'active' AND cu.is_installation_admin = 1 AND cu.disabled_at IS NULL)`;
+
 /** The tags are read by primary key per row, and a page is at most 100 rows. */
 export const CONVERSATION_TAGS_JSON = `(SELECT COALESCE(json_group_array(json_object('id', t.id, 'name', t.name)), '[]')
        FROM conversation_tags ct JOIN tags t ON t.workspace_id = ct.workspace_id AND t.id = ct.tag_id
@@ -214,6 +228,101 @@ export function repositories(database: Database, ctx: WorkspaceContext) {
           .bind(...field(change.name), ...field(change.email), ...field(change.phone), w, contactId)
           .run();
         return result.meta.changes === 1;
+      },
+      /** Whether the caller may export or erase contacts: an installation admin who is an active member here. */
+      async callerIsAdmin(): Promise<boolean> {
+        return (await d1.prepare(`SELECT 1 WHERE ${memberIsAdmin('?1', '?2')}`).bind(w, ctx.memberId).first()) !== null;
+      },
+
+      /** Read in one batch, so that it is one consistent view. Internal notes only when asked for. */
+      async exportData(contactId: string, includeNotes: boolean): Promise<ContactExportRows | null> {
+        const notes = includeNotes ? '' : `AND m.visibility = 'public'`;
+        const [contact, tags, browsers, conversations, messages, files, suppressions] = await d1.batch([
+          d1
+            .prepare(
+              `SELECT id, name, email, phone, attributes_json AS attributesJson, follow_up_consent_at AS followUpConsentAt,
+                      follow_up_consent_source AS followUpConsentSource, first_seen_at AS firstSeenAt, last_seen_at AS lastSeenAt, created_at AS createdAt
+                 FROM contacts WHERE workspace_id = ?1 AND id = ?2`,
+            )
+            .bind(w, contactId),
+          d1.prepare(`SELECT t.name FROM contact_tags ct JOIN tags t ON t.workspace_id = ct.workspace_id AND t.id = ct.tag_id WHERE ct.workspace_id = ?1 AND ct.contact_id = ?2 ORDER BY t.name`).bind(w, contactId),
+          d1.prepare(`SELECT id, website_id AS websiteId, created_at AS firstSeenAt, last_seen_at AS lastSeenAt FROM visitors WHERE workspace_id = ?1 AND contact_id = ?2 ORDER BY created_at`).bind(w, contactId),
+          d1.prepare(`SELECT id, website_id AS websiteId, status, subject, created_at AS createdAt FROM conversations WHERE workspace_id = ?1 AND contact_id = ?2 ORDER BY created_at`).bind(w, contactId),
+          d1
+            .prepare(
+              `SELECT m.id, m.conversation_id AS conversationId, m.sender_type AS senderType, m.message_type AS type, m.visibility, m.content, m.created_at AS createdAt
+                 FROM messages m JOIN conversations c ON c.workspace_id = m.workspace_id AND c.id = m.conversation_id
+                WHERE m.workspace_id = ?1 AND c.contact_id = ?2 ${notes} ORDER BY m.conversation_id, m.seq`,
+            )
+            .bind(w, contactId),
+          d1
+            .prepare(
+              `SELECT a.message_id AS messageId, a.filename, a.content_type AS contentType, a.size
+                 FROM attachments a JOIN conversations c ON c.workspace_id = a.workspace_id AND c.id = a.conversation_id
+                 JOIN messages m ON m.workspace_id = a.workspace_id AND m.id = a.message_id
+                WHERE a.workspace_id = ?1 AND c.contact_id = ?2 ${notes} ORDER BY a.created_at`,
+            )
+            .bind(w, contactId),
+          d1
+            .prepare(
+              `SELECT s.email, s.reason, s.created_at AS createdAt FROM email_suppressions s
+                WHERE s.workspace_id = ?1 AND s.email = (SELECT email FROM contacts WHERE workspace_id = ?1 AND id = ?2)`,
+            )
+            .bind(w, contactId),
+        ]);
+        const row = contact?.results[0] as ContactExportRows['contact'] | undefined;
+        if (!row) return null;
+        return {
+          contact: row,
+          tags: (tags?.results as { name: string }[]).map((t) => t.name),
+          browsers: browsers?.results as ContactExportRows['browsers'],
+          conversations: conversations?.results as ContactExportRows['conversations'],
+          messages: messages?.results as ContactExportRows['messages'],
+          files: files?.results as ContactExportRows['files'],
+          suppressions: suppressions?.results as ContactExportRows['suppressions'],
+        };
+      },
+
+      /**
+       * Pattern 2: the audit row goes in first, only if the contact is here and the caller is an admin who is a member,
+       * and every deletion after it depends on that row. Deleting the contact cascades to its browsers, conversations,
+       * messages, read positions, events, tags, and automation runs. The outbox row tells dispatch to delete the
+       * conversations' files from storage, which it retries until done. `email` and `emailHash` are the address as read
+       * before, in case it changes in between; the address in the row at commit is removed as well.
+       */
+      async erase(contactId: string, previous: { email: string | null; emailHash: string | null }): Promise<boolean> {
+        const audit = newId('audit');
+        const done = `EXISTS (SELECT 1 FROM audit_log WHERE id = ?3)`;
+        const theirs = `(SELECT id FROM conversations WHERE workspace_id = ?1 AND contact_id = ?2)`;
+        const [logged] = await d1.batch([
+          d1
+            .prepare(
+              `INSERT INTO audit_log (id, workspace_id, actor_type, actor_id, action, target_type, target_id, created_at)
+               SELECT ?3, ?1, 'user', (SELECT user_id FROM workspace_members WHERE id = ?4), 'contact.erased', 'contact', ?2, ${DB_NOW_MS}
+                WHERE EXISTS (SELECT 1 FROM contacts WHERE workspace_id = ?1 AND id = ?2) AND ${memberIsAdmin('?1', '?4')}`,
+            )
+            .bind(w, contactId, audit, ctx.memberId),
+          d1
+            .prepare(
+              `INSERT INTO outbox (id, workspace_id, topic, aggregate_id, payload_json, created_at)
+               SELECT ?4, ?1, 'contact.erased', ?2, json_object('conversationIds', (SELECT json_group_array(id) FROM conversations WHERE workspace_id = ?1 AND contact_id = ?2)), ${DB_NOW_MS}
+                WHERE ${done}`,
+            )
+            .bind(w, contactId, audit, newId('outbox')),
+          d1
+            .prepare(`DELETE FROM email_unsubscribe_links WHERE workspace_id = ?1 AND email IN (?4, (SELECT email FROM contacts WHERE workspace_id = ?1 AND id = ?2)) AND ${done}`)
+            .bind(w, contactId, audit, previous.email),
+          d1.prepare(`DELETE FROM email_deliveries WHERE workspace_id = ?1 AND recipient_hash = ?4 AND ${done}`).bind(w, contactId, audit, previous.emailHash),
+          // A failed job's envelope can hold a notification's text, and names the conversation it was about.
+          d1
+            .prepare(`DELETE FROM failed_jobs WHERE workspace_id = ?1 AND EXISTS (SELECT 1 FROM ${theirs} t WHERE instr(failed_jobs.envelope_json, t.id) > 0) AND ${done}`)
+            .bind(w, contactId, audit),
+          // Messages and files both cascade from a conversation, but a file also refers to its message without a cascade.
+          d1.prepare(`DELETE FROM attachments WHERE workspace_id = ?1 AND conversation_id IN ${theirs} AND ${done}`).bind(w, contactId, audit),
+          d1.prepare(`UPDATE contacts SET merged_into_contact_id = NULL WHERE workspace_id = ?1 AND merged_into_contact_id = ?2 AND ${done}`).bind(w, contactId, audit),
+          d1.prepare(`DELETE FROM contacts WHERE workspace_id = ?1 AND id = ?2 AND ${done}`).bind(w, contactId, audit),
+        ]);
+        return logged?.meta.changes === 1;
       },
     },
 

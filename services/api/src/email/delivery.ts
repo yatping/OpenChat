@@ -1,4 +1,5 @@
 /** What every email job shares: one send per key, and a log that holds a hash and never an address. */
+import { emailRecipientHash } from '@openchat/core';
 import { claimEmailDelivery, finishEmailDelivery, type Database } from '@openchat/database';
 import { EmailSendError, type EmailMessage, type EmailProvider } from '@openchat/email';
 import { createLogger, newId, type JobEnvelope } from '@openchat/shared';
@@ -15,11 +16,6 @@ export function envelope<T>(type: string, idempotencyKey: string, workspaceId: s
   return { v: 1, type, id: newId('job'), idempotencyKey, workspaceId, occurredAt: new Date().toISOString(), notAfter: new Date(Date.now() + LIFETIME_MS).toISOString(), payload };
 }
 
-async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
 /**
  * Claim, send, record. A repeated job finds the claim and sends nothing. A crash between sending and recording leaves
  * the claim, and nothing sends again, because a missed email is better than a duplicate. A row marked `failed` can be
@@ -27,7 +23,7 @@ async function sha256Hex(value: string): Promise<string> {
  */
 export async function deliverOnce(db: Database, email: EmailProvider, input: { workspaceId: string; dedupeKey: string; template: string; to: string; message: () => EmailMessage | Promise<EmailMessage> }): Promise<void> {
   const { workspaceId, dedupeKey, template } = input;
-  if (!(await claimEmailDelivery(db, { workspaceId, dedupeKey, template, recipientHash: await sha256Hex(input.to.toLowerCase()) }))) {
+  if (!(await claimEmailDelivery(db, { workspaceId, dedupeKey, template, recipientHash: await emailRecipientHash(input.to) }))) {
     createLogger({ workspaceId }).info('email_already_claimed');
     return;
   }

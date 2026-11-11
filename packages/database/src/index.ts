@@ -15,7 +15,7 @@ export {
   type ConversationChange,
   type ConversationFilter,
   type ConversationPriority,
-  type ConversationRow, type ContactRow, type TagRow,
+  type ConversationRow, type ContactRow, type ContactExportRows, type TagRow,
   type ConversationStatus,
   type MemberRow,
   type Repositories,

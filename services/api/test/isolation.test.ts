@@ -70,6 +70,9 @@ const CASES: Record<string, Case> = {
   markVisitorConversationRead: { kind: 'visitor', body: { deliveredSeq: 0, readSeq: 0 }, ownerStatus: 204 },
   getContact: { kind: 'workspace', ownerStatus: 200 },
   updateContact: { kind: 'workspace', body: { name: 'Taken over' }, ownerStatus: 200 },
+  // The owner here is a supervisor, not an installation admin. contact-privacy.test.ts covers an admin.
+  exportContact: { kind: 'workspace', ownerStatus: 403 },
+  eraseContact: { kind: 'workspace', ownerStatus: 403 },
   listTags: { kind: 'workspace', ownerStatus: 200 },
   createTag: { kind: 'workspace', body: { name: 'taken-over' }, ownerStatus: 201 },
   deleteTag: { kind: 'workspace', ownerStatus: 204 },

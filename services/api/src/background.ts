@@ -9,9 +9,20 @@ import { AppError, createLogger, newId, retryDelaySeconds, type JobEnvelope } fr
 import { sweepOutbox } from './dispatch';
 import { RETIRED_HANDLERS } from './email/delivery';
 import { FOLLOW_UP_HANDLERS } from './email/follow-ups';
-import { NOTIFICATION_HANDLERS } from './push/fanout';
+import { DISPATCH_JOB, NOTIFICATION_HANDLERS } from './push/fanout';
 import { RelayError } from './push/relay-client';
 import type { Env } from './env';
+
+/**
+ * What `failed_jobs` keeps of a job: everything but a notification's text, which is message content. A replayed
+ * notification without it is dropped, as one from before encrypted notifications is.
+ */
+function storedEnvelope(job: JobEnvelope): string {
+  if (job.type !== DISPATCH_JOB || typeof job.payload !== 'object' || job.payload === null) return JSON.stringify(job);
+  const payload = { ...(job.payload as Record<string, unknown>) };
+  delete payload.text;
+  return JSON.stringify({ ...job, payload });
+}
 
 export const HEARTBEAT_JOB = 'system.heartbeat';
 
@@ -106,7 +117,7 @@ export async function handleQueue(batch: MessageBatch, env: Env, deps: Backgroun
           idempotencyKey: job?.idempotencyKey ?? message.id,
           workspaceId: job?.workspaceId ?? null,
           attempts: message.attempts,
-          envelopeJson: job ? JSON.stringify(job) : '{}',
+          envelopeJson: job ? storedEnvelope(job) : '{}',
         });
         log.error('job_dead_lettered', { jobType: job?.type ?? 'unknown', attempts: message.attempts });
         message.ack();
@@ -146,7 +157,7 @@ export async function handleQueue(batch: MessageBatch, env: Env, deps: Backgroun
           idempotencyKey: job.idempotencyKey,
           workspaceId: job.workspaceId,
           attempts: message.attempts,
-          envelopeJson: JSON.stringify(job),
+          envelopeJson: storedEnvelope(job),
         });
         message.ack();
       } else {
