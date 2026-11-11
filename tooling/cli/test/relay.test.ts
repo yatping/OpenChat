@@ -71,7 +71,7 @@ describe('readApnsKey', () => {
   });
 });
 
-function setup(answers: { checkOutcome?: string; exists?: boolean } = {}) {
+function setup(answers: { checkOutcome?: string; exists?: boolean; registered?: boolean } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'oc-relay-'));
   mkdirSync(join(root, 'services/notification-relay'), { recursive: true });
   writeFileSync(join(root, 'services/notification-relay/wrangler.template.jsonc'), template);
@@ -82,6 +82,9 @@ function setup(answers: { checkOutcome?: string; exists?: boolean } = {}) {
     if (answers.exists && key.startsWith('d1 create')) throw Object.assign(new Error('failed'), { stderr: 'A database with that name already exists' });
     if (key.startsWith('d1 create')) return `Created database\n"database_id": "${DB_ID}"`;
     if (key.startsWith('deploy')) return 'Deployed oc-acme-relay\n  https://oc-acme-relay.acme.workers.dev\n';
+    if (key.startsWith('d1 execute') && key.includes('UPDATE installations')) return JSON.stringify([{ results: [] }, { results: [{ n: answers.registered === false ? 0 : 1 }] }]);
+    if (key.startsWith('d1 execute') && key.includes('AS installations')) return JSON.stringify([{ results: [{ installations: 3, blocked: 1, devices: 7, notifications: 40, delivered: 38, invalidTokens: 1, failed: 1, stuck: 2 }] }]);
+    if (key.startsWith('d1 execute') && key.includes('GROUP BY')) return JSON.stringify([{ results: [{ installation: INSTALLATION, notifications: 30 }] }]);
     return '';
   };
   const requests: { url: string; authorization?: string }[] = [];
@@ -174,16 +177,45 @@ describe('oc relay', () => {
     expect(calls).toEqual([]);
   });
 
-  it('admits and removes installations', async () => {
-    const { root, relays, calls } = setup();
+  it('admits installations, and blocks one that is removed, since the list only gates registration', async () => {
+    const { root, relays, calls, lines } = setup();
     await relays.deploy({ name: 'acme' });
     calls.length = 0;
     await relays.allow('acme', INSTALLATION, false);
     await relays.allow('acme', INSTALLATION, false);
-    expect(calls.map((c) => c.args.split(' -c ')[0])).toEqual(['deploy']);
+    expect(calls.map((c) => c.args.split(' -c ')[0])).toEqual(['deploy', 'd1 execute oc-acme-relay --remote --yes --json']);
+    expect(calls[1]!.args).toContain(`SET status = 'active' WHERE id = '${INSTALLATION}'`);
     expect(readFileSync(join(root, '.openchat/acme/notification-relay.wrangler.jsonc'), 'utf8')).toContain(`"RELAY_ALLOWED_INSTALLATIONS": "${INSTALLATION}"`);
+    calls.length = 0;
     await relays.allow('acme', INSTALLATION, true);
+    expect(calls.at(-1)!.args).toContain(`SET status = 'revoked' WHERE id = '${INSTALLATION}'`);
+    expect(lines.at(-2)).toBe(`Removed and blocked ${INSTALLATION}. Within 30 seconds, it can no longer send notifications.`);
     expect(relays.load('acme')!.allowedInstallations).toEqual([]);
     expect(readFileSync(join(root, '.openchat/acme/notification-relay.wrangler.jsonc'), 'utf8')).toContain('"RELAY_ALLOWED_INSTALLATIONS": ""');
   });
+
+  it('blocks and unblocks, and says when an installation never registered', async () => {
+    const { relays, calls, lines } = setup();
+    await relays.deploy({ name: 'acme' });
+    calls.length = 0;
+    await relays.block('acme', INSTALLATION, false);
+    expect(calls.map((c) => c.args)).toEqual([expect.stringContaining(`SET status = 'revoked' WHERE id = '${INSTALLATION}'`)]);
+    await relays.block('acme', INSTALLATION, true);
+    expect(calls[1]!.args).toContain("SET status = 'active'");
+    expect(lines.at(-1)).toBe(`Unblocked ${INSTALLATION}.`);
+    await expect(relays.block('acme', "inst_x'; DROP TABLE devices; --", false)).rejects.toThrow(/inst_/);
+    const unregistered = setup({ registered: false });
+    await unregistered.relays.deploy({ name: 'acme' });
+    await expect(unregistered.relays.block('acme', INSTALLATION, false)).rejects.toThrow(/has not registered/);
+  });
+
+  it('reports counts, and what looks stuck', async () => {
+    const { relays, lines } = setup();
+    await relays.deploy({ name: 'acme' });
+    const stats = await relays.stats('acme');
+    expect(stats).toMatchObject({ installations: 3, blocked: 1, devices: 7, delivered: 38, stuck: 2, busiest: [{ installation: INSTALLATION, notifications: 30 }] });
+    expect(lines).toContain('Last 24 hours: 40 notifications, 38 delivered, 1 to tokens Apple refused, 1 failed');
+    expect(lines).toContain('Waiting more than 10 minutes: 2. Check the delivery queue.');
+  });
+
 });

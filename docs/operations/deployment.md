@@ -152,7 +152,8 @@ Orango Labs runs it at `https://openchat-relay.orangolabs.com`, with the relay I
 - **Production APNs only**, because the key is production only. A relay serves one environment.
 - **Configuration** is in the operator's `.openchat/managed-relay/`, which Git ignores. Worker secrets cannot be read back, so `RELAY_TOKEN_KEY` and the operator token are kept with the signing keys. Losing `RELAY_TOKEN_KEY` means every device has to register again.
 - **To admit an installation:** add its ID, from its `/.well-known/openchat.json`, to `RELAY_ALLOWED_INSTALLATIONS`, and deploy the relay. Then deploy the installation with `--relay-url https://openchat-relay.orangolabs.com --relay-id managed --relay-bundle-ids com.orangolabs.openchat`.
-- **Not built:** monitoring of delivery rate, APNs error reasons, and queue age. See the [M3 limits](../plan/milestones.md#m3-exit-check).
+- **Monitoring:** `oc relay stats` gives counts: installations, blocked ones, devices, and the last day's notifications, delivered, refused by Apple, failed, and waiting over 10 minutes, with the five busiest installations. Nothing alerts on them yet, and APNs error reasons are not broken down.
+- **To cut off an installation**, in either mode: `oc relay block`. Every request it signs is then refused within 30 seconds, the key cache's lifetime. Its devices are kept, so `--unblock` restores it. Removing an ID from `RELAY_ALLOWED_INSTALLATIONS` alone does not do this, because the list is checked only at first registration. `oc relay allow --remove` does both.
 
 ## Independent relay (customers)
 
@@ -171,7 +172,9 @@ pnpm oc relay allow --env production --installation inst_01JC...
 |---|---|
 | `relay deploy` | Creates `oc-<env>-relay` (a Worker and a D1 database) and the queues `oc-<env>-relay-delivery` and `-dlq`, applies migrations, deploys, and checks `/health`. Generates `RELAY_TOKEN_KEY`, which encrypts device tokens, and an operator token, each once. Picks rate limit namespace IDs that no other Worker on the account uses. Prints the relay URL and ID. Running it again redeploys, and resumes a run that failed |
 | `relay set-apns` | Reads the `.p8` file, checks that it looks like an APNs key, and sends it to Wrangler as the secret `APNS_PRIVATE_KEY` on stdin. It is never printed, and never written anywhere else. Then asks Apple about the key and prints the answer |
-| `relay allow` | Adds an installation ID, from that installation's `/.well-known/openchat.json`, and redeploys. `--remove` takes one away |
+| `relay allow` | Adds an installation ID, from that installation's `/.well-known/openchat.json`, and redeploys. `--remove` takes one away, and also blocks it, because the list alone is checked only when an installation first registers |
+| `relay block` | Refuses every request an installation signs, within 30 seconds. `--unblock` undoes it. Its devices are kept |
+| `relay stats` | Counts only: installations, devices, and the last day's notifications by outcome, with the busiest installations |
 | `relay check` | Asks Apple about the key again |
 
 Options for `relay deploy`: `--relay-id` (default: the environment name; it cannot change later, because installations hold it), `--environment production|sandbox` (default `production`; a relay serves one), and `--location`.
