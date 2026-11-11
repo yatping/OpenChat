@@ -13,6 +13,9 @@ export const registerWorkspaceBody = z.strictObject({ workspaceId: id, displayNa
 
 export const revokeWorkspaceBody = z.strictObject({ workspaceId: id });
 
+/** Asks for everything about the installation to be erased. Nothing else may come with it. */
+export const unregisterInstallationBody = z.strictObject({});
+
 /** Shown as a notification title, so nothing here may disguise it: no control, format, or line characters. */
 export function sanitizeDisplayName(value: string | undefined): string | null {
   if (value === undefined) return null;

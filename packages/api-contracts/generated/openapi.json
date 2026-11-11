@@ -2488,6 +2488,51 @@
           "role",
           "status"
         ]
+      },
+      "RelayStatus": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "not_configured",
+              "connected",
+              "disconnected"
+            ],
+            "description": "not_configured: no relay in this deployment. disconnected: an admin disconnected from the configured relay, which erased what it held, and push is off."
+          },
+          "relay": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "url"
+            ]
+          },
+          "registered": {
+            "type": "boolean"
+          },
+          "subscriptions": {
+            "type": "integer",
+            "description": "Phones registered for push, across every workspace."
+          }
+        },
+        "required": [
+          "state",
+          "relay",
+          "registered",
+          "subscriptions"
+        ]
       }
     },
     "parameters": {}
@@ -6920,6 +6965,115 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Website"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/push": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "operationId": "getRelayStatus",
+        "summary": "The notification relay this installation uses, and whether push is on",
+        "responses": {
+          "200": {
+            "description": "Relay status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayStatus"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/push/disconnect": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "operationId": "disconnectRelay",
+        "summary": "Turn push off, and have the relay erase everything it holds about this installation. Push stays off until reconnected.",
+        "description": "Repeat it if it answers 503: push is already off, and only the erasure at the relay is left.",
+        "responses": {
+          "200": {
+            "description": "Disconnected, and erased at the relay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayStatus"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/push/reconnect": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "operationId": "reconnectRelay",
+        "summary": "Turn push back on. Phones register again the next time the app starts.",
+        "responses": {
+          "200": {
+            "description": "Reconnected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayStatus"
                 }
               }
             }

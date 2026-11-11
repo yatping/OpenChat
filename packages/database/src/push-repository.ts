@@ -100,6 +100,8 @@ export function pushRepository(database: Database, ctx: WorkspaceContext) {
 export interface RelayRegistration {
   installationId: string;
   installationRelayId: string | null;
+  /** Set by an admin who disconnected from this relay. Nothing registers with it while it matches. */
+  relayDisconnectedId: string | null;
   workspaceName: string;
   workspaceStatus: 'unregistered' | 'registered' | 'revoked';
   workspaceDisplayName: string | null;
@@ -108,7 +110,7 @@ export interface RelayRegistration {
 export function relayRegistration(database: Database, workspaceId: string): Promise<RelayRegistration | null> {
   return rawHandle(database)
     .prepare(
-      `SELECT i.id AS installationId, i.relay_registered_id AS installationRelayId, w.name AS workspaceName,
+      `SELECT i.id AS installationId, i.relay_registered_id AS installationRelayId, i.relay_disconnected_id AS relayDisconnectedId, w.name AS workspaceName,
               w.relay_workspace_status AS workspaceStatus, w.relay_display_name AS workspaceDisplayName
          FROM workspaces w, installation i WHERE w.id = ?1`,
     )

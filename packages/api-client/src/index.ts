@@ -31,6 +31,7 @@ import type {
   assignPersonRoute,
   createPersonRoute,
   listAdminWorkspacesRoute,
+  getRelayStatusRoute,
   listPeopleRoute,
   updateWebsiteRoute,
   updateWorkspaceRoute,
@@ -63,6 +64,7 @@ export type PersonInput = BodyOf<typeof createPersonRoute>;
 export type PersonAssignment = BodyOf<typeof assignPersonRoute>;
 export type People = Json200<typeof listPeopleRoute>;
 export type AdminWorkspaces = Json200<typeof listAdminWorkspacesRoute>;
+export type RelayStatus = Json200<typeof getRelayStatusRoute>;
 export type LoginInput = BodyOf<typeof loginRoute>;
 export type CreatedWorkspace = Json201<typeof createWorkspaceRoute>;
 export type Conversation = Json200<typeof getConversationRoute>;
@@ -169,6 +171,9 @@ export function createClient(options: ClientOptions) {
     listAdminWebsites: (workspaceId: string) => get<{ data: Website[] }>(`${adminWorkspace(workspaceId)}/websites`),
     createWebsite: (workspaceId: string, input: WebsiteInput) => request<Website>('POST', `${adminWorkspace(workspaceId)}/websites`, input),
     updateWebsite: (workspaceId: string, websiteId: string, input: WebsiteUpdate) => request<Website>('PATCH', `${adminWorkspace(workspaceId)}/websites/${encodeURIComponent(websiteId)}`, input),
+    getRelayStatus: () => get<RelayStatus>('/api/v1/admin/push'),
+    disconnectRelay: () => request<RelayStatus>('POST', '/api/v1/admin/push/disconnect'),
+    reconnectRelay: () => request<RelayStatus>('POST', '/api/v1/admin/push/reconnect'),
     listWebsites: (workspaceId: string) => get<{ data: Website[] }>(`${workspace(workspaceId)}/websites`),
 
     listConversations: (workspaceId: string, input: { status: Conversation['status']; assignee?: string | undefined; cursor?: string | undefined }) =>

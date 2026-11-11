@@ -137,6 +137,8 @@ pnpm oc deploy --env production \
 
 You should see `Deployed` again. Then, in the official app on each iPhone: enter your backend's address, `oc-production.<subdomain>.workers.dev`, sign in, and allow notifications. In the app's **Settings**, you should see **Notifications** with switches. Lock the phone and send a message from your widget: a notification should arrive within a few seconds.
 
+To stop using the project's relay later, in the dashboard choose **Workspaces**, then **Disconnect and erase** under **Push notifications**. Push stops, and the relay erases what it holds about your installation. Then run `pnpm oc deploy --env production --no-relay` to take it out of your deployment.
+
 Path 1 is done. Keep it up to date with [step 11](#11-keep-it-up-to-date).
 
 ## Part 2: your own app

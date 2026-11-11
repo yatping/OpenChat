@@ -11,7 +11,7 @@ import { AppError, createLogger } from '@openchat/shared';
 import type { Context } from 'hono';
 import { authDeps, type App, type AppEnv } from '../context';
 import { dispatchSoon } from '../dispatch';
-import { issueGrant, RelayError, relayConfig } from '../push/relay-client';
+import { connectedRelay, issueGrant, RelayDisconnectedError, RelayError } from '../push/relay-client';
 
 /** Authentication comes from the /api/v1/workspaces/* prefix in routes/workspaces.ts. */
 async function scoped(c: Context<AppEnv>, workspaceId: string) {
@@ -24,11 +24,13 @@ const notConfigured = () => new AppError(409, 'push_not_configured', 'This insta
 export function registerPushRoutes(app: App) {
   app.openapi(createPushGrantRoute, async (c) => {
     const { db, ctx } = await scoped(c, c.req.valid('param').workspaceId);
-    const relay = relayConfig(c.env);
+    const relay = await connectedRelay(c.env, db);
     if (!relay) throw notConfigured();
     try {
       return c.json(await issueGrant(db, relay, ctx.workspaceId, ctx.memberId), 201);
     } catch (error) {
+      // Disconnected after the check above.
+      if (error instanceof RelayDisconnectedError) throw notConfigured();
       // The app tries again later. Messaging does not depend on any of this.
       createLogger({ workspaceId: ctx.workspaceId }).warn('relay_registration_failed', { errorName: (error as Error).name, ...(error instanceof RelayError ? { status: error.status, errorCode: error.code } : {}) });
       throw new AppError(503, 'relay_unavailable', 'The notification relay cannot be reached right now');
@@ -42,7 +44,7 @@ export function registerPushRoutes(app: App) {
 
   app.openapi(recordPushSubscriptionRoute, async (c) => {
     const { db, ctx } = await scoped(c, c.req.valid('param').workspaceId);
-    const relay = relayConfig(c.env);
+    const relay = await connectedRelay(c.env, db);
     if (!relay) throw notConfigured();
     return c.json(await recordPushSubscription(db, ctx, { relayId: relay.id, ...c.req.valid('json') }), 201);
   });

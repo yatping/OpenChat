@@ -30,8 +30,25 @@ export function relayConfig(env: Env): RelayConfig | null {
   return { id: env.RELAY_ID, url: env.RELAY_URL.replace(/\/+$/, ''), bundleIds: env.RELAY_BUNDLE_IDS.split(',').map((id) => id.trim()).filter(Boolean), key: active };
 }
 
-export function discoveryRelay(env: Env) {
+/** The configured relay, unless an installation admin disconnected from it. Every path that could register goes through this. */
+export async function connectedRelay(env: Env, db: Database): Promise<RelayConfig | null> {
   const relay = relayConfig(env);
+  if (!relay) return null;
+  const installation = await getInstallation(db);
+  return installation?.relayDisconnectedId === relay.id ? null : relay;
+}
+
+/** Thrown instead of registering with a relay an admin disconnected from. */
+export class RelayDisconnectedError extends Error {
+  constructor() {
+    super('An installation admin disconnected from this relay');
+    this.name = 'RelayDisconnectedError';
+  }
+}
+
+export function discoveryRelay(env: Env, disconnectedId: string | null) {
+  const relay = relayConfig(env);
+  if (relay?.id === disconnectedId) return null;
   return relay && { id: relay.id, url: relay.url, bundleIds: relay.bundleIds, publicKeys: [{ id: relay.key.kid, alg: 'Ed25519' as const, key: relay.key.publicKey }] };
 }
 
@@ -109,6 +126,8 @@ function displayNameOf(name: string): string {
 export async function ensureRegistered(db: Database, relay: RelayConfig, workspaceId: string): Promise<string> {
   const known = await relayRegistration(db, workspaceId);
   if (!known) throw new Error('Workspace or installation is missing');
+  // Read in the same query as the rest, so that a job queued before the disconnect cannot register again.
+  if (known.relayDisconnectedId === relay.id) throw new RelayDisconnectedError();
   const { installationId } = known;
   let workspaceCurrent = known.workspaceStatus === 'registered';
   if (known.installationRelayId !== relay.id) {
@@ -129,7 +148,14 @@ export async function ensureRegistered(db: Database, relay: RelayConfig, workspa
 }
 
 export async function issueGrant(db: Database, relay: RelayConfig, workspaceId: string, memberId: string) {
-  const installationId = await ensureRegistered(db, relay, workspaceId);
+  let installationId: string;
+  try {
+    installationId = await ensureRegistered(db, relay, workspaceId);
+  } catch (error) {
+    // The relay erased this installation, so the next attempt registers it again.
+    if (error instanceof RelayError && error.unrecognised) await forgetRelayRegistration(db);
+    throw error;
+  }
   const iat = Math.floor(Date.now() / 1000);
   const exp = iat + GRANT_MAX_TTL_SECONDS;
   const grant = await signGrant(await importPrivateKey(relay.key.privateKey), relay.key.kid, { iss: installationId, aud: relay.id, wid: workspaceId, sub: memberId, jti: newId('grant'), iat, exp });
@@ -141,7 +167,23 @@ export async function sendNotifications(db: Database, relay: RelayConfig, worksp
     const installationId = await ensureRegistered(db, relay, workspaceId);
     await relayRequest(relay, installationId, '/v1/notifications/batch', { notifications }, workspaceId);
   } catch (error) {
+    // Pushes queued before an admin disconnected are dropped. Messaging does not depend on them.
+    if (error instanceof RelayDisconnectedError) return;
     if (error instanceof RelayError && error.unrecognised) await forgetRelayRegistration(db);
     throw error;
+  }
+}
+
+/**
+ * Push off first, then the relay erases everything it holds about this installation. A relay that no longer knows
+ * the installation has nothing to erase. Anything else is thrown, and repeating this finishes the job.
+ */
+export async function eraseAtRelay(db: Database, relay: RelayConfig): Promise<void> {
+  const installation = await getInstallation(db);
+  if (!installation) throw new Error('The installation is missing');
+  try {
+    await relayRequest(relay, installation.id, '/v1/installations/unregister', {});
+  } catch (error) {
+    if (!(error instanceof RelayError && error.unrecognised)) throw error;
   }
 }

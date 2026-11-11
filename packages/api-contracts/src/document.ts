@@ -14,6 +14,9 @@ import {
   assignPersonRoute,
   unassignPersonRoute,
   listAdminWorkspacesRoute,
+  getRelayStatusRoute,
+  disconnectRelayRoute,
+  reconnectRelayRoute,
   listAdminWebsitesRoute,
   createVisitorConversationRoute,
   uploadAttachmentRoute,
@@ -140,6 +143,9 @@ export const ALL_ROUTES = [
   listWebsitesRoute,
   createWebsiteRoute,
   updateWebsiteRoute,
+  getRelayStatusRoute,
+  disconnectRelayRoute,
+  reconnectRelayRoute,
 ] as const;
 
 export function buildOpenApiDocument() {

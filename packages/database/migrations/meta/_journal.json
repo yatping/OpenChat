@@ -64,6 +64,13 @@
       "when": 1793930314973,
       "tag": "0008_remove_member_email_alerts",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1794369789736,
+      "tag": "0009_relay_disconnected",
+      "breakpoints": true
     }
   ]
 }

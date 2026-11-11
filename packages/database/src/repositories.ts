@@ -490,8 +490,8 @@ export type Repositories = ReturnType<typeof repositories>;
 /** Reads with no tenant, for the discovery document. Deliberately narrow. */
 export async function getInstallation(database: Database) {
   return rawHandle(database)
-    .prepare(`SELECT id, name, public_base_url AS publicBaseUrl FROM installation LIMIT 1`)
-    .first<{ id: string; name: string; publicBaseUrl: string }>();
+    .prepare(`SELECT id, name, public_base_url AS publicBaseUrl, relay_disconnected_id AS relayDisconnectedId FROM installation LIMIT 1`)
+    .first<{ id: string; name: string; publicBaseUrl: string; relayDisconnectedId: string | null }>();
 }
 
 /** Consumer idempotency. True if this caller claimed the key first. */

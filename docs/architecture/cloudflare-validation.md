@@ -566,6 +566,20 @@ The [guide](../operations/self-hosting.md) was followed from a fresh clone of `m
 
 `relay stats` then showed 0 active and 1 blocked installation. Removing the installation's Worker answered 10064 for over four minutes after its consumers were removed.
 
+## Erasing an installation from a relay on real Cloudflare (2026-11-11)
+
+A throwaway relay and installation, `preview-e`, then removed. The installation registered through a push grant, and a stand-in device and subscription were written to the relay's D1 directly, since the relay had no APNs key. Counts are what the relay's D1 held for that installation afterwards.
+
+| Step | Relay rows (installation, key, workspaces, subscriptions, devices) | What the installation answered |
+|---|---|---|
+| Registered | 1, 1, 1, 1, 1 | Grant 201 |
+| Dashboard route **Disconnect and erase** | 0, 0, 0, 0, 0 | 200 `disconnected`. Then grant 409 `push_not_configured`, and discovery showed no relay |
+| The same again | Still 0 | 200: the relay answered 401, which counts as already erased |
+| **Reconnect**, then a grant | 1, then 1 workspace | Grant 201, registered again |
+| `oc relay erase` | 0, 0, 0, 0, 0 | The CLI took the installation off the admitted list first, and printed what was erased |
+
+After `oc relay erase`, grants still answered 201 for that workspace, because the installation still believed it was registered and signs grants itself. A phone presenting one is refused by the relay before anything is stored. The next relay request the installation makes is answered 401, and it then forgets the registration.
+
 ## Sources
 
 - [D1 limits](https://developers.cloudflare.com/d1/platform/limits/), [D1 database API](https://developers.cloudflare.com/d1/worker-api/d1-database/), [migrations](https://developers.cloudflare.com/d1/reference/migrations/), [foreign keys](https://developers.cloudflare.com/d1/sql-api/foreign-keys/), [read replication](https://developers.cloudflare.com/d1/best-practices/read-replication/), [Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/)

@@ -112,6 +112,23 @@ Rules: `aud` must match the relay, `exp` is at most 5 minutes after `iat`, and `
 
 The app calls it on logout and the installation does too, so a device offline during logout is still handled. A device that has deleted the app is handled by APNs returning 410.
 
+### 6. Erasure
+
+`POST /v1/installations/unregister` (signed for the installation, with no `X-Workspace-Id`, and an empty JSON object as the body) erases everything the relay holds about that installation, in one D1 batch:
+
+- its delivery records, subscriptions, workspaces, key, and the installation row;
+- every device left with no subscription afterwards. A device another installation still uses stays, with that installation's subscriptions.
+
+It answers 204. Afterwards the installation is a stranger: repeating the request answers 401, and it may register again later, through the same admission as any other. Other isolates forget its key within 30 seconds, and until then a signed request finds nothing to act on.
+
+An installation admin starts this from the dashboard (**Workspaces**, **Push notifications**, **Disconnect and erase**). The installation turns push off first and remembers that it disconnected from that relay (`installation.relay_disconnected_id`), so that a phone asking for a grant cannot register it again. It then deletes its own `push_subscriptions` rows. If the relay cannot be reached, push stays off and the admin repeats the action. **Reconnect** turns push on again, and phones register the next time the app starts.
+
+For a request that reaches the relay's operator some other way, such as by email, `POST /v1/operator/erase` does the same erasure, with the operator token, and answers what it deleted. `pnpm oc relay erase --env <name> --installation <id>` calls it, after taking the installation off the admitted list so that it cannot register again in between.
+
+An installation erased by the operator does not know it. It keeps signing grants, which the relay refuses before storing anything, until its next request to the relay is answered 401 and it forgets the registration.
+
+When the app next registers with a device the relay erased, the relay answers 401 `invalid_device` before spending the grant, and the app registers again as a new device with that grant.
+
 ## Signed request format
 
 | Header | Value |
@@ -279,8 +296,12 @@ Every read filters by `installation_id`. `workspaceId` is never used alone, beca
 | Nonces | 10 minutes |
 | Consumed grant IDs | 10 minutes |
 | Notification records, including dedupe | 30 days in full; dedupe window guaranteed for 72 hours |
-| Devices | Until removed, or APNs reports them invalid |
-| Inactive installations | Reported after 180 days of no traffic; removal per the operator's policy |
+| Installations, keys, workspaces, subscriptions | Until the installation unregisters, or the operator erases it ([Erasure](#6-erasure)). A subscription also goes when its device or member is removed, or its workspace revoked |
+| Devices | Until APNs reports the token invalid, or 7 days after the device's last subscription went. A device left with none by an erasure goes at once |
+| Per-installation request and quota counters in `RelayGuard` | 10 minutes after last use. They hold request IDs, and recipient IDs in quota names |
+| Inactive installations | Kept until erased. Finding ones with no traffic is not built yet |
+
+The daily cron deletes notification records past 30 days and devices left with no subscription for 7 days.
 
 APNs tokens are encrypted at rest with AES-256-GCM under a key derived from the `RELAY_TOKEN_KEY` Worker secret, which narrows the exposure of a database-only leak. `token_lookup` is a keyed hash of the token, so that uniqueness needs no plain token. Losing that secret loses the ability to deliver, until apps register again. Rotating it is not built yet.
 

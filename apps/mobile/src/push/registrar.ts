@@ -127,15 +127,27 @@ export function createPushRegistrar(deps: { config: PushConfig; native: PushNati
     const grant = await api.createPushGrant(workspaceId);
     // Discovery was checked, and this answer comes from the same installation, so it gets the same check.
     if (grant.relayUrl !== relayUrl) throw new Error('The grant names a different relay');
-    const answer = (await relayPost(`${relayUrl}/v1/devices/register`, {
-      grant: grant.grant,
-      platform: 'ios',
-      apnsToken: token,
-      bundleId: config.bundleId,
-      environment: config.environment,
-      locale: native.locale(),
-      ...(device ? { device: { id: device.id, secret: device.secret } } : {}),
-    })) as { deviceId: string; deviceSecret?: string; subscriptionId: string };
+    const send = (known: DeviceRecord | null) =>
+      relayPost(`${relayUrl}/v1/devices/register`, {
+        grant: grant.grant,
+        platform: 'ios',
+        apnsToken: token,
+        bundleId: config.bundleId,
+        environment: config.environment,
+        locale: native.locale(),
+        ...(known ? { device: { id: known.id, secret: known.secret } } : {}),
+      }) as Promise<{ deviceId: string; deviceSecret?: string; subscriptionId: string }>;
+    let answer: Awaited<ReturnType<typeof send>>;
+    try {
+      answer = await send(device);
+    } catch (error) {
+      // The relay erased this device, as it does when an installation leaves it. The grant is still unspent, since
+      // the relay checks the device first, so the phone registers again as new.
+      if (!(device && error instanceof RelayRefused && error.status === 401)) throw error;
+      await secure.remove(DEVICE_KEY);
+      device = null;
+      answer = await send(null);
+    }
     const registered = answer.deviceSecret ? { relayUrl, id: answer.deviceId, secret: answer.deviceSecret, token } : device;
     if (!registered) throw new Error('The relay gave no device secret');
     if (answer.deviceSecret) await secure.set(DEVICE_KEY, JSON.stringify(registered));

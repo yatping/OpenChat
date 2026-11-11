@@ -137,6 +137,31 @@ paths:
       responses:
         '204': { description: Revoked }
         default: { $ref: '#/components/responses/Problem' }
+  /v1/installations/unregister:
+    post:
+      tags: [installations]
+      operationId: unregisterInstallation
+      summary: Erase everything the relay holds about this installation
+      description: >-
+        Its key, workspaces, subscriptions, and delivery records, and every device left with no subscription. Signed
+        for the installation, with no workspace header. Repeating it after success answers 401, since the key is gone.
+        See protocol.md#erasure.
+      security:
+        - installationSignature: []
+      parameters:
+        - $ref: '#/components/parameters/installationId'
+        - $ref: '#/components/parameters/keyId'
+        - $ref: '#/components/parameters/requestId'
+        - $ref: '#/components/parameters/timestamp'
+        - $ref: '#/components/parameters/signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false }
+      responses:
+        '204': { description: Erased }
+        default: { $ref: '#/components/responses/Problem' }
   /v1/devices/register:
     post:
       tags: [devices]
@@ -232,6 +257,38 @@ paths:
       responses:
         '200':
           description: The outcome is ok, credential_error, unreachable, unexpected, or not_configured.
+        '404':
+          description: Any other caller, or no operator token is set.
+  /v1/operator/erase:
+    post:
+      summary: Erase an installation, for a request that reached the relay's operator directly
+      description: 'Takes `Authorization: Bearer` with RELAY_OPERATOR_TOKEN. The same erasure as /v1/installations/unregister. `oc relay erase` calls it.'
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [installationId]
+              properties:
+                installationId: { type: string, maxLength: 64 }
+      responses:
+        '200':
+          description: What was deleted. `installation` is false if it was never registered.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [installation, workspaces, subscriptions, devices, notifications]
+                properties:
+                  installation: { type: boolean }
+                  workspaces: { type: integer }
+                  subscriptions: { type: integer }
+                  devices: { type: integer }
+                  notifications: { type: integer }
+        '400': { description: Not an installation ID, or another field. }
         '404':
           description: Any other caller, or no operator token is set.
   /v1/notifications/send:

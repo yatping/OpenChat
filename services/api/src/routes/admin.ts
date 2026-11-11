@@ -4,10 +4,13 @@ import {
   createWebsiteRoute,
   createWorkspaceRoute,
   deactivatePersonRoute,
+  disconnectRelayRoute,
+  getRelayStatusRoute,
   listAdminWebsitesRoute,
   listAdminWorkspacesRoute,
   listPeopleRoute,
   reactivatePersonRoute,
+  reconnectRelayRoute,
   unassignPersonRoute,
   updateWebsiteRoute,
   updatePersonRoute,
@@ -20,24 +23,40 @@ import {
   createWebsite,
   createWorkspace,
   deactivatePerson,
+  disconnectRelay,
   listAdminWebsites,
   listAdminWorkspaces,
   listPeople,
   reactivatePerson,
+  reconnectRelay,
+  relayState,
   setInstallationAdmin,
   unassignPerson,
   updateWebsite,
   updateWorkspace,
 } from '@openchat/core';
+import { AppError, createLogger } from '@openchat/shared';
 import type { Context } from 'hono';
 import { authDeps, type App, type AppEnv } from '../context';
 import { dispatchSoon } from '../dispatch';
+import { eraseAtRelay, RelayError, relayConfig } from '../push/relay-client';
 import { requireAuth } from './auth';
 
 /** Deps plus proof of being an installation admin. Every route here starts with this. */
 async function admin(c: Context<AppEnv>) {
   const deps = await authDeps(c.env);
   return { deps, ctx: await adminContext(deps.db, c.get('principal')) };
+}
+
+async function relayStatus(c: Context<AppEnv>, db: Awaited<ReturnType<typeof authDeps>>['db'], ctx: Awaited<ReturnType<typeof adminContext>>) {
+  const relay = relayConfig(c.env);
+  const state = await relayState(db, ctx);
+  return {
+    state: !relay ? ('not_configured' as const) : state.disconnectedId === relay.id ? ('disconnected' as const) : ('connected' as const),
+    relay: relay && { id: relay.id, url: relay.url },
+    registered: relay !== null && state.registeredId === relay.id,
+    subscriptions: state.subscriptions,
+  };
 }
 
 export function registerAdminRoutes(app: App) {
@@ -100,6 +119,31 @@ export function registerAdminRoutes(app: App) {
   app.openapi(updateWorkspaceRoute, async (c) => {
     const { deps, ctx } = await admin(c);
     return c.json(await updateWorkspace(deps.db, ctx, c.req.valid('param').workspaceId, c.req.valid('json')), 200);
+  });
+
+  app.openapi(getRelayStatusRoute, async (c) => {
+    const { deps, ctx } = await admin(c);
+    return c.json(await relayStatus(c, deps.db, ctx), 200);
+  });
+
+  app.openapi(disconnectRelayRoute, async (c) => {
+    const { deps, ctx } = await admin(c);
+    const relay = relayConfig(c.env);
+    if (!relay) throw new AppError(409, 'push_not_configured', 'This installation has no notification relay');
+    await disconnectRelay(deps.db, ctx, relay.id);
+    try {
+      await eraseAtRelay(deps.db, relay);
+    } catch (error) {
+      createLogger().warn('relay_erasure_failed', { errorName: (error as Error).name, ...(error instanceof RelayError ? { status: error.status, errorCode: error.code } : {}) });
+      throw new AppError(503, 'relay_unavailable', 'Push is off, but the relay could not be reached to erase its records. Try again.');
+    }
+    return c.json(await relayStatus(c, deps.db, ctx), 200);
+  });
+
+  app.openapi(reconnectRelayRoute, async (c) => {
+    const { deps, ctx } = await admin(c);
+    await reconnectRelay(deps.db, ctx);
+    return c.json(await relayStatus(c, deps.db, ctx), 200);
   });
 
   app.openapi(listAdminWebsitesRoute, async (c) => {

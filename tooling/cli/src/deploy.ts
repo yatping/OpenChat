@@ -52,6 +52,8 @@ export interface DeployOptions {
   relayUrl?: string | undefined;
   relayId?: string | undefined;
   relayBundleIds?: string | undefined;
+  /** Takes the relay out of the deployment. Disconnect in the dashboard first, so that the relay erases its records. */
+  noRelay?: boolean;
 }
 
 export function createDeployer(root: string, deps: DeployerDeps = {}) {
@@ -331,6 +333,11 @@ export function createDeployer(root: string, deps: DeployerDeps = {}) {
       if (options.limitFlag) state.limits = mergeLimitFlags(state.limits, options.limitFlag);
       if (!state.initialized && !options.ownerEmail) throw new Error('A first deploy needs --owner-email');
       if (options.analytics) state.analyticsEngine = true;
+      if (options.noRelay) {
+        if (options.relayUrl || options.relayId || options.relayBundleIds) throw new Error('--no-relay cannot go with --relay-url, --relay-id, or --relay-bundle-ids');
+        if (state.relay) log(`Taking ${state.relay.url} out of this deployment. If you have not yet, disconnect in the dashboard first (Workspaces, Push notifications), so that the relay erases what it holds.`);
+        delete state.relay;
+      }
       if (options.relayUrl || options.relayId || options.relayBundleIds) {
         if (!options.relayUrl || !options.relayId || !options.relayBundleIds) throw new Error('A relay needs --relay-url, --relay-id, and --relay-bundle-ids together');
         assertPublicUrl(options.relayUrl);

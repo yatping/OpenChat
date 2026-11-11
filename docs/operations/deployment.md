@@ -174,6 +174,7 @@ pnpm oc relay allow --env production --installation inst_01JC...
 | `relay set-apns` | Reads the `.p8` file, checks that it looks like an APNs key, and sends it to Wrangler as the secret `APNS_PRIVATE_KEY` on stdin. It is never printed, and never written anywhere else. Then asks Apple about the key and prints the answer |
 | `relay allow` | Adds an installation ID, from that installation's `/.well-known/openchat.json`, and redeploys. `--remove` takes one away, and also blocks it, because the list alone is checked only when an installation first registers |
 | `relay block` | Refuses every request an installation signs, within 30 seconds. `--unblock` undoes it. Its devices are kept |
+| `relay erase` | Erases everything the relay holds about an installation, for an erasure request that reached you directly: its key, workspaces, subscriptions, delivery records, and devices left with no subscription. Takes it off the admitted list first. See [erasure](../notification-relay/protocol.md#6-erasure) |
 | `relay stats` | Counts only: installations, devices, and the last day's notifications by outcome, with the busiest installations |
 | `relay check` | Asks Apple about the key again |
 
@@ -200,7 +201,7 @@ The second acceptance journey in spec §20 is then tested in CI as far as is pra
 | Rotate the relay key | Register a new key with the relay, switch, revoke the old key |
 | Reset an owner's password with no email configured | `oc admin reset-password`, which issues a one-time link. It must run with deploy credentials |
 | Inspect failed jobs | Dashboard operator page, or `oc jobs failed` |
-| Disable push | Remove relay configuration. Messaging is unaffected |
+| Disable push | In the dashboard, **Workspaces**, **Push notifications**, **Disconnect and erase**: push stops, and the relay erases what it holds about this installation. Then, to take the relay out of the deployment, `pnpm oc deploy --env <name> --no-relay`. Messaging is unaffected |
 | Backup | Time Travel covers 30 days. For longer, `oc backup` uses `wrangler d1 export` to R2 or local disk. An export may block other queries, so schedule it off-peak, and read the current documentation first |
 | Restore | See Upgrades. Practise this before relying on it |
 

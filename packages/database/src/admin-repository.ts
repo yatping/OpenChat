@@ -361,5 +361,49 @@ export function adminRepository(database: Database, ctx: AdminContext) {
       const row = await d1.prepare(`SELECT ${WEBSITE_COLUMNS} FROM websites WHERE workspace_id = ?1 AND id = ?2`).bind(workspaceId, websiteId).first<RawWebsite>();
       return row ? toWebsite(row) : null;
     },
+
+    /** What push looks like to an admin. Never the key, which stays a Worker secret. */
+    async relayState(): Promise<{ registeredId: string | null; disconnectedId: string | null; subscriptions: number }> {
+      const row = await d1
+        .prepare(`SELECT relay_registered_id AS registeredId, relay_disconnected_id AS disconnectedId, (SELECT count(*) FROM push_subscriptions) AS subscriptions FROM installation`)
+        .first<{ registeredId: string | null; disconnectedId: string | null; subscriptions: number }>();
+      return row ?? { registeredId: null, disconnectedId: null, subscriptions: 0 };
+    },
+
+    /**
+     * Turns push off for this relay before the relay is asked to erase anything, so that no phone can register the
+     * installation again in between. The handles are useless once the relay has erased them, so they go too.
+     * False if the caller is no longer an admin at commit.
+     */
+    async disconnectRelay(relayId: string): Promise<boolean> {
+      const audit = newId('audit');
+      const [allowed] = await d1.batch([
+        d1
+          .prepare(
+            `INSERT INTO audit_log (id, workspace_id, actor_type, actor_id, action, target_type, target_id, created_at)
+             SELECT ?1, NULL, 'user', ?2, 'relay.disconnected', 'relay', ?3, ${DB_NOW_MS} WHERE ${actorIsAdmin('?2')}`,
+          )
+          .bind(audit, actor, relayId),
+        d1.prepare(`UPDATE installation SET relay_disconnected_id = ?1, relay_registered_id = NULL, updated_at = ${DB_NOW_MS} WHERE EXISTS (SELECT 1 FROM audit_log WHERE id = ?2)`).bind(relayId, audit),
+        d1.prepare(`UPDATE workspaces SET relay_workspace_status = 'unregistered', relay_display_name = NULL WHERE EXISTS (SELECT 1 FROM audit_log WHERE id = ?1)`).bind(audit),
+        d1.prepare(`DELETE FROM push_subscriptions WHERE EXISTS (SELECT 1 FROM audit_log WHERE id = ?1)`).bind(audit),
+      ]);
+      return allowed?.meta.changes === 1;
+    },
+
+    /** Push comes back. Phones register the installation again the next time they ask for a grant. */
+    async reconnectRelay(): Promise<boolean> {
+      const audit = newId('audit');
+      const [allowed] = await d1.batch([
+        d1
+          .prepare(
+            `INSERT INTO audit_log (id, workspace_id, actor_type, actor_id, action, target_type, target_id, created_at)
+             SELECT ?1, NULL, 'user', ?2, 'relay.reconnected', 'relay', (SELECT relay_disconnected_id FROM installation), ${DB_NOW_MS} WHERE ${actorIsAdmin('?2')}`,
+          )
+          .bind(audit, actor),
+        d1.prepare(`UPDATE installation SET relay_disconnected_id = NULL, updated_at = ${DB_NOW_MS} WHERE EXISTS (SELECT 1 FROM audit_log WHERE id = ?1)`).bind(audit),
+      ]);
+      return allowed?.meta.changes === 1;
+    },
   };
 }

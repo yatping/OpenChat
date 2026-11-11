@@ -82,7 +82,7 @@ export function createApp() {
         name: installation.name,
         api: { versions: ['v1'], minor: API_MINOR_VERSION },
         realtime: { protocolVersions: [REALTIME_PROTOCOL_VERSION] },
-        relay: discoveryRelay(c.env),
+        relay: discoveryRelay(c.env, installation.relayDisconnectedId),
         // Accounts come only from an installation admin. See ADR-0016.
         auth: { signup: 'invite_only' as const },
       },

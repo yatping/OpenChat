@@ -63,3 +63,40 @@ export async function revokeWorkspace(db: D1Database, installationId: string, wo
 export async function isWorkspaceActive(db: D1Database, installationId: string, workspaceId: string): Promise<boolean> {
   return (await db.prepare(`SELECT 1 FROM workspaces WHERE installation_id = ? AND workspace_id = ? AND status = 'active'`).bind(installationId, workspaceId).first()) !== null;
 }
+
+/** Signing out leaves a device with no subscription. If it is not used again in this time, it is deleted. */
+export const ORPHAN_DEVICE_TTL_MS = 7 * 24 * 60 * 60_000;
+
+export interface Erasure {
+  installation: boolean;
+  workspaces: number;
+  subscriptions: number;
+  devices: number;
+  notifications: number;
+}
+
+/**
+ * Everything the relay holds for an installation, in one batch: its key, its workspaces, its subscriptions, its
+ * delivery records, and every device left with no subscription. It can register again afterwards, as a stranger
+ * would. Answers what was deleted. See docs/notification-relay/protocol.md#erasure.
+ */
+export async function eraseInstallation(db: D1Database, installationId: string): Promise<Erasure> {
+  const results = await db.batch([
+    db.prepare('DELETE FROM notifications WHERE installation_id = ?').bind(installationId),
+    db.prepare('DELETE FROM subscriptions WHERE installation_id = ?').bind(installationId),
+    // Every batch commits whole, so no device is caught between registering and subscribing. One left with nothing
+    // was this installation's, or signed out of everything, and the daily cleanup would delete it anyway.
+    db.prepare('DELETE FROM devices WHERE id NOT IN (SELECT device_id FROM subscriptions)'),
+    db.prepare('DELETE FROM workspaces WHERE installation_id = ?').bind(installationId),
+    db.prepare('DELETE FROM installation_keys WHERE installation_id = ?').bind(installationId),
+    db.prepare('DELETE FROM installations WHERE id = ?').bind(installationId),
+  ]);
+  const changes = (i: number) => results[i]?.meta.changes ?? 0;
+  return { notifications: changes(0), subscriptions: changes(1), devices: changes(2), workspaces: changes(3), installation: changes(5) > 0 };
+}
+
+/** Daily. Devices that signed out of everything and were not used again. */
+export async function deleteOrphanDevices(db: D1Database, now: number): Promise<number> {
+  const result = await db.prepare('DELETE FROM devices WHERE id NOT IN (SELECT device_id FROM subscriptions) AND updated_at < ?').bind(now - ORPHAN_DEVICE_TTL_MS).run();
+  return result.meta.changes;
+}

@@ -155,3 +155,16 @@ export async function sendNewAccountEmail(
     idempotencyKey: `new-account:${tokenHash}`,
   });
 }
+
+/** Push, as an installation admin sees it. The relay configuration itself comes from the deployment. */
+export async function relayState(db: Database, ctx: AdminContext) {
+  return adminRepository(db, ctx).relayState();
+}
+
+export async function disconnectRelay(db: Database, ctx: AdminContext, relayId: string): Promise<void> {
+  if (!(await adminRepository(db, ctx).disconnectRelay(relayId))) throw notFound();
+}
+
+export async function reconnectRelay(db: Database, ctx: AdminContext): Promise<void> {
+  if (!(await adminRepository(db, ctx).reconnectRelay())) throw notFound();
+}
