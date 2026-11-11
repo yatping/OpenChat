@@ -10,6 +10,7 @@ import { deleteOldNotifications, notificationBody } from '../src/delivery/routes
 import { encryptToken, newOpaqueId, tokenLookup } from '../src/devices/crypto';
 import type { Env } from '../src/env';
 import { createApp } from '../src/index';
+import { DEFAULT_LIMITS } from '../src/limits';
 import { clearKeyCache } from '../src/requests/verify';
 
 const testEnv = env as unknown as Env;
@@ -230,16 +231,55 @@ describe('quotas', () => {
     expect(await quotaGuard(i).takeNotificationQuota(Array.from({ length: 30 }, () => 'mem_a'))).toEqual({ ok: true });
   });
 
-  it('forgets old recipient quotas, and keeps the installation\'s', async () => {
+  it('forgets recipient quotas after 10 minutes, and other rows after a day idle, so the alarm can stop', async () => {
     const i = await newInstallation();
     const guard = quotaGuard(i);
     await guard.takeNotificationQuota(['mem_a']);
+    const names = (state: DurableObjectState) => state.storage.sql.exec<{ name: string }>('SELECT name FROM quotas ORDER BY name').toArray().map((r) => r.name);
     const left = await runInDurableObject(guard, async (instance, state) => {
+      state.storage.sql.exec('UPDATE quotas SET updated_at = ?', Date.now() - 60 * 60_000);
+      await (instance as unknown as { alarm(): Promise<void> }).alarm();
+      const afterAnHour = names(state);
       state.storage.sql.exec('UPDATE quotas SET updated_at = 1');
       await (instance as unknown as { alarm(): Promise<void> }).alarm();
-      return state.storage.sql.exec<{ name: string }>('SELECT name FROM quotas').toArray().map((r) => r.name);
+      return { afterAnHour, afterADay: names(state) };
     });
-    expect(left).toEqual(['installation']);
+    expect(left.afterAnHour).toEqual([expect.stringMatching(/^day:/), 'installation']);
+    expect(left.afterADay).toEqual([]);
+  });
+
+  const limits = { ...DEFAULT_LIMITS, notificationsPerDay: 3 };
+
+  it('counts a UTC day, and says to come back at midnight', async () => {
+    const guard = quotaGuard(await newInstallation());
+    expect(await guard.takeNotificationQuota(['mem_a', 'mem_b'], limits)).toEqual({ ok: true });
+    expect(await guard.takeNotificationQuota(['mem_a'], limits)).toEqual({ ok: true });
+    const refused = await guard.takeNotificationQuota(['mem_c'], limits);
+    const now = Date.now();
+    const toMidnight = Math.ceil((Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate() + 1) - now) / 1000);
+    expect(refused).toMatchObject({ ok: false });
+    expect((refused as { retryAfterSeconds: number }).retryAfterSeconds).toBeGreaterThanOrEqual(toMidnight - 2);
+    expect((refused as { retryAfterSeconds: number }).retryAfterSeconds).toBeLessThanOrEqual(toMidnight + 2);
+  });
+
+  it('turns a limit off with 0', async () => {
+    const guard = quotaGuard(await newInstallation());
+    const off = { ...DEFAULT_LIMITS, notificationsPerDay: 0, notificationBurst: 0, recipientBurst: 0 };
+    expect(await guard.takeNotificationQuota(Array.from({ length: 400 }, () => 'mem_a'), off)).toEqual({ ok: true });
+  });
+
+  it('applies the Worker variables, and raises them for one installation', async () => {
+    const limited = await newInstallation();
+    const raised = await newInstallation();
+    const { environment } = capturing();
+    const configured: Env = { ...environment, RELAY_NOTIFICATIONS_PER_DAY: '2', RELAY_LIMIT_OVERRIDES: JSON.stringify({ [raised.id]: { notificationsPerDay: 5 } }) };
+    const send = (i: Installation) => signedRequest(i, '/v1/notifications/send', item(i), configured);
+    for (let n = 0; n < 2; n++) expect((await send(limited)).status).toBe(202);
+    const refused = await send(limited);
+    expect(refused.status).toBe(429);
+    expect(Number(refused.headers.get('retry-after'))).toBeGreaterThan(0);
+    for (let n = 0; n < 5; n++) expect((await send(raised)).status).toBe(202);
+    expect((await send(raised)).status).toBe(429);
   });
 });
 

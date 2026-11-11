@@ -297,7 +297,7 @@ A self-check reveals a platform behaviour change. Once a day, or on `POST /v1/op
 Own D1 database. No conversation data, and **no messages, names, languages, or email addresses**. Ciphertext is never stored.
 
 ```text
-installations   id, base_url, status, quota_tier, created_at
+installations   id, base_url, status, created_at
 installation_keys  installation_id, key_id, public_key, status, created_at
 workspaces      installation_id, workspace_id, status
 devices         id, secret_hash, platform, bundle_id, environment, apns_token, token_lookup, created_at, updated_at
@@ -319,7 +319,8 @@ Every read filters by `installation_id`. `workspaceId` is never used alone, beca
 | Notification records, including dedupe | 30 days in full; dedupe window guaranteed for 72 hours |
 | Installations, keys, workspaces, subscriptions | Until the installation unregisters, or the operator erases it ([Erasure](#6-erasure)). A subscription also goes when its device or member is removed, or its workspace revoked |
 | Devices | Until APNs reports the token invalid, or 7 days after the device's last subscription went. A device left with none by an erasure goes at once |
-| Per-installation request and quota counters in `RelayGuard` | 10 minutes after last use. They hold request IDs, and recipient IDs in quota names |
+| Per-installation request and quota counters in `RelayGuard` | Request IDs and recipient quotas, 10 minutes after last use. Other counters, a day after last use. They hold request IDs, and recipient IDs in quota names |
+| Registration counters in `RelayGuard`, one per IP address | A day after last use. The object is named for a SHA-256 hash of the address, never the address |
 | Inactive installations | Kept until erased. Finding ones with no traffic is not built yet |
 
 The daily cron deletes notification records past 30 days and devices left with no subscription for 7 days.
@@ -328,16 +329,23 @@ APNs tokens are encrypted at rest with AES-256-GCM under a key derived from the 
 
 ## Rate limits
 
-Enforced in `RelayGuard`. Defaults for the managed relay, tuned from real usage:
+Every limit is a Worker variable, so an operator sets them without a code change. A missing or invalid value takes the default, and `0` turns that limit off. The defaults are the owner's choice for the managed relay, on 2026-11-11, in `services/notification-relay/src/limits.ts`.
 
-| Scope | Limit |
-|---|---|
-| Notifications per installation | 60 per minute, burst 300; raised on request. Takes one per item in a batch, or nothing |
-| Notifications per recipient | 30 per minute |
-| New installation registrations | Approximate per-IP limit through the binding |
-| Device registration | Per grant and per IP |
+| Limit | Variable | Default | Enforced |
+|---|---|---|---|
+| Notifications per installation, refilled evenly | `RELAY_NOTIFICATIONS_PER_MINUTE`, `RELAY_NOTIFICATION_BURST` | 60 per minute, burst 300 | `RelayGuard` |
+| Notifications per installation, per UTC day | `RELAY_NOTIFICATIONS_PER_DAY` | 10,000 | `RelayGuard` |
+| Notifications per recipient | `RELAY_RECIPIENT_NOTIFICATIONS_PER_MINUTE`, `RELAY_RECIPIENT_BURST` | 30 per minute, burst 30 | `RelayGuard` |
+| Devices per installation, across its workspaces | `RELAY_DEVICES_PER_INSTALLATION` | 500 | D1, in the insert |
+| New installations from one IP address, per hour. Open mode only | `RELAY_NEW_INSTALLATIONS_PER_IP_PER_HOUR` | 3 | `RelayGuard`, one per hashed address |
+| New installations across the relay, in any 24 hours. Open mode only | `RELAY_NEW_INSTALLATIONS_PER_DAY` | 200 | D1, in the insert |
+| First check on registrations and device registrations, per IP | `REGISTRATION_LIMIT`, `DEVICE_LIMIT` bindings | 20 and 60 per minute | Rate limit binding, approximate and per location |
 
-Checking the quota comes after the replay check, so a replay costs nothing. An exceeded quota returns 429 with `Retry-After`. The installation's queue consumer then retries with delay, and messaging is unaffected.
+`RELAY_LIMIT_OVERRIDES` raises or lowers limits for single installations. It is a JSON object keyed by installation ID, each holding limits by their names in `RelayLimits`, for example `{"inst_…": {"notificationsPerDay": 100000, "devicesPerInstallation": 5000}}`. Anything it does not name keeps the relay's value.
+
+- **Notifications.** A batch takes one per item, or nothing. The quota check comes after the replay check, so a replay costs nothing. An exceeded quota answers `429 rate_limited` with `Retry-After`; at the daily limit, that is the next UTC midnight. The installation's queue retries after that delay, and a push that has expired by then is dropped. Messaging is unaffected.
+- **Devices.** A device the installation already has is always let through, so phones that re-register are never cut off. A new one past the limit answers `403 device_limit_reached`.
+- **New installations.** The per-address count includes attempts whose domain check fails, so the check cannot be used to probe cheaply. Past the relay-wide limit, registration answers `429 registrations_paused`, retry after an hour. Both are skipped in private mode, where the allowlist decides.
 
 ## Modes
 

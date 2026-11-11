@@ -323,13 +323,13 @@ Before the official app or the managed relay is opened to others, someone other 
 
 ## M6: Hardening and release (M)
 
-Contact export and erasure, which must also delete `email_unsubscribe_links`. A page to see and replay failed jobs. Retention settings. Audit log UI. Accessibility pass on widget and dashboard. Widget translations. Monitoring guides and alert recommendations. Backup and restore rehearsal. External security review. App Store submission. Licence and CLA checks. Public documentation, `security.txt`.
+Configurable relay limits, so that the managed relay can open to everyone. Contact export and erasure, which must also delete `email_unsubscribe_links`. A page to see and replay failed jobs. Retention settings. Audit log UI. Accessibility pass on widget and dashboard. Widget translations. Monitoring guides and alert recommendations. Backup and restore rehearsal. External security review. App Store submission. Licence and CLA checks. Public documentation, `security.txt`.
 
 **Exit:** both acceptance journeys in spec §20 are demonstrated end to end on production infrastructure, with recordings or logs. Known issues published.
 
 ## M7+: Advanced features
 
-Spec Phase 6 list, plus search (FTS5), webhooks, inbound email, signed visitor identity, and a Notification Service Extension. Prioritise from user feedback.
+Spec Phase 6 list, plus search (FTS5), webhooks, inbound email, and signed visitor identity. A Notification Service Extension, once listed here, shipped early with [ADR-0017](../architecture/decisions/0017-encrypted-notifications.md). Prioritise from user feedback.
 
 ## Mapping to spec §20
 

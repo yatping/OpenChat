@@ -2,8 +2,9 @@ import { importPublicKey, parseGrant, RELAY_PROTOCOL_VERSION, verifyGrant } from
 import { type Context, Hono } from 'hono';
 import { z } from 'zod';
 import type { Env } from '../env';
+import { limitsFor } from '../limits';
 import { ID_PATTERN } from '../requests/schemas';
-import { findActiveKey } from '../requests/store';
+import { findActiveKey, isWorkspaceActive } from '../requests/store';
 import { admitToGuard, MAX_BODY_BYTES, type Rejection, readSignedHeaders, verifyKnownInstallation } from '../requests/verify';
 import { encryptToken, hashSecret, newDeviceSecret, newOpaqueId, secretMatches, tokenLookup } from './crypto';
 import { findDeviceSecret, registerAnonymousDevice, removeInstallationSubscription, removeOwnSubscription, subscribeKnownDevice, updateDeviceToken } from './store';
@@ -95,18 +96,28 @@ export function deviceRoutes() {
     const now = Date.now();
     const encryptedToken = await encryptToken(tokenKey, body.bundleId, body.apnsToken);
     const lookup = await tokenLookup(tokenKey, body.bundleId, body.apnsToken);
-    const sub = { subscriptionId: newOpaqueId('sub'), installationId: grant.claims.iss, workspaceId: grant.claims.wid, recipientId: grant.claims.sub, now };
+    const sub = {
+      subscriptionId: newOpaqueId('sub'),
+      installationId: grant.claims.iss,
+      workspaceId: grant.claims.wid,
+      recipientId: grant.claims.sub,
+      now,
+      maxDevices: limitsFor(c.env, grant.claims.iss).devicesPerInstallation,
+    };
+    // Nothing subscribed: the workspace is gone, or the installation has as many devices as it may.
+    const refused = async () =>
+      (await isWorkspaceActive(c.env.DB, sub.installationId, sub.workspaceId)) ? problem(c, 403, 'device_limit_reached') : problem(c, 403, 'workspace_not_registered');
     const fields = { bundleId: body.bundleId, environment: body.environment, encryptedToken, lookup, now };
 
     if (body.device) {
       const subscribed = await subscribeKnownDevice(c.env.DB, body.device.id, fields, sub);
-      if (!subscribed) return problem(c, 403, 'workspace_not_registered');
+      if (!subscribed) return refused();
       return c.json({ deviceId: body.device.id, subscriptionId: subscribed }, 201);
     }
 
     const secret = newDeviceSecret();
     const registered = await registerAnonymousDevice(c.env.DB, { ...fields, newDeviceId: newOpaqueId('dev'), secretHash: await hashSecret(secret) }, sub);
-    if (!registered.subscriptionId) return problem(c, 403, 'workspace_not_registered');
+    if (!registered.subscriptionId) return refused();
     return c.json({ deviceId: registered.deviceId, deviceSecret: secret, subscriptionId: registered.subscriptionId }, 201);
   });
 

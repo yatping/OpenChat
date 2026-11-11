@@ -3,6 +3,7 @@ import { type Context, Hono } from 'hono';
 import { z } from 'zod';
 import { newOpaqueId } from '../devices/crypto';
 import type { Env } from '../env';
+import { limitsFor, notificationLimits } from '../limits';
 import { ID_PATTERN } from '../requests/schemas';
 import { isWorkspaceActive } from '../requests/store';
 import { admitToGuard, type Rejection, readSignedHeaders, type SignedHeaders, verifyKnownInstallation } from '../requests/verify';
@@ -104,7 +105,7 @@ export function notificationRoutes() {
     const body = parse(notificationBody, bytes);
     if (!body || body.workspaceId !== signed.workspaceId) return problem(c, { status: 400, code: 'malformed_request' });
     if (!(await isWorkspaceActive(c.env.DB, signed.installationId, body.workspaceId))) return problem(c, { status: 403, code: 'workspace_not_registered' });
-    const quota = await c.env.RELAY_GUARD.getByName(signed.installationId).takeNotificationQuota([body.recipientId]);
+    const quota = await c.env.RELAY_GUARD.getByName(signed.installationId).takeNotificationQuota([body.recipientId], notificationLimits(limitsFor(c.env, signed.installationId)));
     if (!quota.ok) return problem(c, { status: 429, code: 'rate_limited', retryAfterSeconds: quota.retryAfterSeconds });
     return c.json(await accept(c.env, signed.installationId, body), 202);
   });
@@ -118,7 +119,10 @@ export function notificationRoutes() {
     const body = parse(batchBody, bytes);
     if (!body || body.notifications.some((item) => item.workspaceId !== signed.workspaceId)) return problem(c, { status: 400, code: 'malformed_request' });
     if (!(await isWorkspaceActive(c.env.DB, signed.installationId, signed.workspaceId!))) return problem(c, { status: 403, code: 'workspace_not_registered' });
-    const quota = await c.env.RELAY_GUARD.getByName(signed.installationId).takeNotificationQuota(body.notifications.map((item) => item.recipientId));
+    const quota = await c.env.RELAY_GUARD.getByName(signed.installationId).takeNotificationQuota(
+      body.notifications.map((item) => item.recipientId),
+      notificationLimits(limitsFor(c.env, signed.installationId)),
+    );
     if (!quota.ok) return problem(c, { status: 429, code: 'rate_limited', retryAfterSeconds: quota.retryAfterSeconds });
     const results: NotificationAccepted[] = [];
     for (const item of body.notifications) results.push(await accept(c.env, signed.installationId, item));

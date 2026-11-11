@@ -18,7 +18,10 @@ export interface NewSubscription {
   workspaceId: string;
   recipientId: string;
   now: number;
+  /** Devices this installation may have. 0 is no limit. A device it already has is always let through. */
+  maxDevices: number;
 }
+
 
 const deleteOtherHolderOfToken = (db: D1Database, device: Pick<NewDevice, 'bundleId' | 'lookup'>, keepId: string) => [
   db.prepare('DELETE FROM subscriptions WHERE device_id IN (SELECT id FROM devices WHERE bundle_id = ? AND token_lookup = ? AND id <> ?)').bind(device.bundleId, device.lookup, keepId),
@@ -37,12 +40,15 @@ const upsertSubscription = (db: D1Database, deviceId: string, sub: NewSubscripti
        WHERE EXISTS (SELECT 1 FROM devices WHERE id = ?2)
          AND EXISTS (SELECT 1 FROM workspaces w JOIN installations i ON i.id = w.installation_id
                      WHERE w.installation_id = ?3 AND w.workspace_id = ?4 AND w.status = 'active' AND i.status = 'active')
+         AND (?7 = 0
+              OR EXISTS (SELECT 1 FROM subscriptions WHERE installation_id = ?3 AND device_id = ?2)
+              OR (SELECT count(DISTINCT device_id) FROM subscriptions WHERE installation_id = ?3) < ?7)
        ON CONFLICT (device_id, installation_id, workspace_id) DO UPDATE SET
          id = CASE WHEN recipient_id = excluded.recipient_id THEN id ELSE excluded.id END,
          recipient_id = excluded.recipient_id,
          muted = CASE WHEN recipient_id = excluded.recipient_id THEN muted ELSE 0 END`,
     )
-    .bind(sub.subscriptionId, deviceId, sub.installationId, sub.workspaceId, sub.recipientId, sub.now);
+    .bind(sub.subscriptionId, deviceId, sub.installationId, sub.workspaceId, sub.recipientId, sub.now, sub.maxDevices);
 
 const readSubscription = (db: D1Database, deviceId: string, sub: NewSubscription) =>
   db.prepare('SELECT id FROM subscriptions WHERE device_id = ? AND installation_id = ? AND workspace_id = ?').bind(deviceId, sub.installationId, sub.workspaceId);
@@ -68,9 +74,10 @@ export async function registerAnonymousDevice(db: D1Database, device: NewDevice,
          SELECT ?1, d.id, ?2, ?3, ?4, ?5 FROM devices d
          WHERE d.bundle_id = ?6 AND d.token_lookup = ?7
            AND EXISTS (SELECT 1 FROM workspaces w JOIN installations i ON i.id = w.installation_id
-                       WHERE w.installation_id = ?2 AND w.workspace_id = ?3 AND w.status = 'active' AND i.status = 'active')`,
+                       WHERE w.installation_id = ?2 AND w.workspace_id = ?3 AND w.status = 'active' AND i.status = 'active')
+           AND (?8 = 0 OR (SELECT count(DISTINCT device_id) FROM subscriptions WHERE installation_id = ?2) < ?8)`,
       )
-      .bind(sub.subscriptionId, sub.installationId, sub.workspaceId, sub.recipientId, sub.now, device.bundleId, device.lookup),
+      .bind(sub.subscriptionId, sub.installationId, sub.workspaceId, sub.recipientId, sub.now, device.bundleId, device.lookup, sub.maxDevices),
     db.prepare('SELECT s.id FROM subscriptions s JOIN devices d ON d.id = s.device_id WHERE d.bundle_id = ? AND d.token_lookup = ? AND s.installation_id = ? AND s.workspace_id = ?').bind(device.bundleId, device.lookup, sub.installationId, sub.workspaceId),
   ]);
   const deviceId = (results[2]?.results[0] as { id: string }).id;
