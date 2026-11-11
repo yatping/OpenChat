@@ -27,7 +27,7 @@ function capturing(): { environment: Env; sent: { body: DeliveryMessage; options
 
 interface Installation { id: string; privateKey: CryptoKey; workspaceId: string }
 
-async function newInstallation(displayName: string | null = 'Acme'): Promise<Installation> {
+async function newInstallation(): Promise<Installation> {
   const pair = (await crypto.subtle.generateKey('Ed25519', true, ['sign', 'verify'])) as CryptoKeyPair;
   const raw = toBase64Url(new Uint8Array((await crypto.subtle.exportKey('raw', pair.publicKey)) as ArrayBuffer));
   const pkcs8 = toBase64Url(new Uint8Array((await crypto.subtle.exportKey('pkcs8', pair.privateKey)) as ArrayBuffer));
@@ -36,19 +36,19 @@ async function newInstallation(displayName: string | null = 'Acme'): Promise<Ins
   await testEnv.DB.batch([
     testEnv.DB.prepare('INSERT INTO installations (id, base_url, created_at) VALUES (?, ?, 0)').bind(id, `https://${id}.example.org`),
     testEnv.DB.prepare('INSERT INTO installation_keys (installation_id, key_id, public_key, created_at) VALUES (?, ?, ?, 0)').bind(id, 'k1', raw),
-    testEnv.DB.prepare('INSERT INTO workspaces (installation_id, workspace_id, display_name, updated_at) VALUES (?, ?, ?, 0)').bind(id, workspaceId, displayName),
+    testEnv.DB.prepare('INSERT INTO workspaces (installation_id, workspace_id, updated_at) VALUES (?, ?, 0)').bind(id, workspaceId),
   ]);
   return { id, privateKey: await importPrivateKey(pkcs8), workspaceId };
 }
 
-async function addDevice(i: Installation, recipientId: string, more: { muted?: number; token?: string; locale?: string; bundleId?: string } = {}) {
+async function addDevice(i: Installation, recipientId: string, more: { muted?: number; token?: string; bundleId?: string } = {}) {
   const deviceId = newOpaqueId('dev');
   const token = more.token ?? randomToken();
   const bundleId = more.bundleId ?? 'com.example.app';
   const key = testEnv.RELAY_TOKEN_KEY!;
   await testEnv.DB.batch([
-    testEnv.DB.prepare(`INSERT INTO devices (id, secret_hash, platform, bundle_id, environment, apns_token, token_lookup, locale, created_at, updated_at) VALUES (?, 'x', 'ios', ?, 'production', ?, ?, ?, 0, 0)`)
-      .bind(deviceId, bundleId, await encryptToken(key, bundleId, token), await tokenLookup(key, bundleId, token), more.locale ?? 'en-GB'),
+    testEnv.DB.prepare(`INSERT INTO devices (id, secret_hash, platform, bundle_id, environment, apns_token, token_lookup, created_at, updated_at) VALUES (?, 'x', 'ios', ?, 'production', ?, ?, 0, 0)`)
+      .bind(deviceId, bundleId, await encryptToken(key, bundleId, token), await tokenLookup(key, bundleId, token)),
     testEnv.DB.prepare('INSERT INTO subscriptions (id, device_id, installation_id, workspace_id, recipient_id, muted, created_at) VALUES (?, ?, ?, ?, ?, ?, 0)').bind(newOpaqueId('sub'), deviceId, i.id, i.workspaceId, recipientId, more.muted ?? 0),
   ]);
   return { deviceId, token };

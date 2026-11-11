@@ -39,7 +39,6 @@ export async function insertInstallation(db: D1Database, input: { installationId
   ]);
 }
 
-/** `display_name` is no longer written, and goes in a later migration. */
 export async function upsertWorkspace(db: D1Database, input: { installationId: string; workspaceId: string; now: number }): Promise<'created' | 'updated'> {
   const { installationId, workspaceId, now } = input;
   const existing = await db.prepare('SELECT 1 FROM workspaces WHERE installation_id = ? AND workspace_id = ?').bind(installationId, workspaceId).first();

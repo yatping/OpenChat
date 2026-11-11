@@ -385,7 +385,7 @@ export function adminRepository(database: Database, ctx: AdminContext) {
           )
           .bind(audit, actor, relayId),
         d1.prepare(`UPDATE installation SET relay_disconnected_id = ?1, relay_registered_id = NULL, updated_at = ${DB_NOW_MS} WHERE EXISTS (SELECT 1 FROM audit_log WHERE id = ?2)`).bind(relayId, audit),
-        d1.prepare(`UPDATE workspaces SET relay_workspace_status = 'unregistered', relay_display_name = NULL WHERE EXISTS (SELECT 1 FROM audit_log WHERE id = ?1)`).bind(audit),
+        d1.prepare(`UPDATE workspaces SET relay_workspace_status = 'unregistered' WHERE EXISTS (SELECT 1 FROM audit_log WHERE id = ?1)`).bind(audit),
         d1.prepare(`DELETE FROM push_subscriptions WHERE EXISTS (SELECT 1 FROM audit_log WHERE id = ?1)`).bind(audit),
       ]);
       return allowed?.meta.changes === 1;
