@@ -306,6 +306,9 @@ importers:
         specifier: ~4.30.1
         version: 4.30.1(react-native@0.88.1(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.88.1(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.3.0)(react@19.3.0)(supports-color@10.2.2))(react@19.3.0)
     devDependencies:
+      '@openchat/notification-protocol':
+        specifier: workspace:*
+        version: link:../../packages/notification-protocol
       '@openchat/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig

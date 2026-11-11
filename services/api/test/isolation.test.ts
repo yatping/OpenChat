@@ -78,7 +78,7 @@ const CASES: Record<string, Case> = {
   createAgentTicket: { kind: 'workspace', ownerStatus: 201 },
   createPushGrant: { kind: 'workspace', ownerStatus: 409 },
   listMyPushSubscriptions: { kind: 'workspace', ownerStatus: 200 },
-  recordPushSubscription: { kind: 'workspace', body: { relaySubscriptionId: 'sub_taken' }, ownerStatus: 409 },
+  recordPushSubscription: { kind: 'workspace', body: { relaySubscriptionId: 'sub_taken', previewKey: 'A'.repeat(43) }, ownerStatus: 409 },
   removePushSubscription: { kind: 'workspace', ownerStatus: 204 },
   getNotificationPreferences: { kind: 'workspace', ownerStatus: 200 },
   showUnsubscribe: { kind: 'public', reason: 'Acts only on the address of the presented token' },

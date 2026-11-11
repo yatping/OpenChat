@@ -6,7 +6,6 @@ import type { Env } from '../src/env';
 import { createApp } from '../src/index';
 import { documentProvesControl, normalizeBaseUrl } from '../src/requests/domain-proof';
 import { REQUEST_BURST } from '../src/requests/guard';
-import { sanitizeDisplayName } from '../src/requests/schemas';
 import { clearKeyCache, MAX_BODY_BYTES } from '../src/requests/verify';
 
 const testEnv = env as unknown as Env;
@@ -64,7 +63,7 @@ function clientFor(actors: Actor[], environment: Env = openEnv) {
 }
 
 const registration = (actor: Actor) => ({ path: '/v1/installations/register', body: { baseUrl: actor.baseUrl, publicKey: { id: actor.keyId, alg: 'Ed25519', key: actor.publicKey } } });
-const workspaceBody = (workspaceId: string, displayName?: string) => ({ path: '/v1/workspaces/register', workspaceId, body: { workspaceId, ...(displayName ? { displayName } : {}) } });
+const workspaceBody = (workspaceId: string) => ({ path: '/v1/workspaces/register', workspaceId, body: { workspaceId } });
 
 async function registered(actor?: Actor) {
   const me = actor ?? (await newActor());
@@ -238,7 +237,7 @@ describe('every signed field', () => {
   it('rejects a tampered body', async () => {
     const { me, app, options } = await setup();
     const { headers } = await signedRequest(me, options);
-    const response = await app.request(path, { method: 'POST', headers, body: JSON.stringify({ workspaceId: options.workspaceId, displayName: 'Bank' }) }, openEnv);
+    const response = await app.request(path, { method: 'POST', headers, body: JSON.stringify({ workspaceId: options.workspaceId, extra: 'Bank' }) }, openEnv);
     expect(response.status).toBe(401);
   });
 
@@ -305,32 +304,26 @@ describe('workspaces', () => {
     expect((await send(me, { path: '/v1/workspaces/register', workspaceId, body: { workspaceId, message: 'hello' } })).status).toBe(400);
   });
 
-  it('refuses a display name over 40 characters', async () => {
+  it('refuses a workspace name, which now travels only inside each phone\'s ciphertext', async () => {
     const { me, send } = await registered();
     const workspaceId = unique('work');
-    expect((await send(me, { path: '/v1/workspaces/register', workspaceId, body: { workspaceId, displayName: 'x'.repeat(41) } })).status).toBe(400);
+    expect((await send(me, { path: '/v1/workspaces/register', workspaceId, body: { workspaceId, displayName: 'Acme' } })).status).toBe(400);
   });
 
-  it('stores a cleaned display name, and updates it', async () => {
+  it('registers, then registers again as an update, and stores no name', async () => {
     const { me, send } = await registered();
     const workspaceId = unique('work');
-    expect((await send(me, workspaceBody(workspaceId, 'Acme‮ Bank\n'))).status).toBe(201);
-    expect((await send(me, workspaceBody(workspaceId, 'Acme'))).status).toBe(200);
-    expect(await testEnv.DB.prepare('SELECT display_name AS n FROM workspaces WHERE installation_id = ? AND workspace_id = ?').bind(me.installationId, workspaceId).first()).toEqual({ n: 'Acme' });
-  });
-
-  it('cleans control, direction, and line characters', () => {
-    expect(sanitizeDisplayName('A‮b​c d\ne')).toBe('Abcde');
-    expect(sanitizeDisplayName('‮  ')).toBeNull();
-    expect(sanitizeDisplayName(undefined)).toBeNull();
+    expect((await send(me, workspaceBody(workspaceId))).status).toBe(201);
+    expect((await send(me, workspaceBody(workspaceId))).status).toBe(200);
+    expect(await testEnv.DB.prepare('SELECT display_name AS n FROM workspaces WHERE installation_id = ? AND workspace_id = ?').bind(me.installationId, workspaceId).first()).toEqual({ n: null });
   });
 
   it('keeps the same workspace ID separate between installations', async () => {
     const a = await registered();
     const b = await registered();
     const workspaceId = unique('work');
-    expect((await a.send(a.me, workspaceBody(workspaceId, 'A'))).status).toBe(201);
-    expect((await b.send(b.me, workspaceBody(workspaceId, 'B'))).status).toBe(201);
+    expect((await a.send(a.me, workspaceBody(workspaceId))).status).toBe(201);
+    expect((await b.send(b.me, workspaceBody(workspaceId))).status).toBe(201);
     expect((await b.send(b.me, { path: '/v1/workspaces/revoke', workspaceId, body: { workspaceId } })).status).toBe(204);
     const rows = await testEnv.DB.prepare('SELECT installation_id AS i, status AS s FROM workspaces WHERE workspace_id = ?').bind(workspaceId).all<{ i: string; s: string }>();
     expect(rows.results.find((r) => r.i === a.me.installationId)?.s).toBe('active');

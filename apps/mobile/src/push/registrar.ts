@@ -15,7 +15,13 @@ export interface PushConfig {
 export interface PushNative {
   requestPermission(): Promise<boolean>;
   deviceToken(): Promise<string>;
-  locale(): string;
+  /**
+   * Makes the key pair notifications for this subscription are encrypted to, keeps the private key in the keychain
+   * the notification extension shares, and returns the public key. See ADR-0017.
+   */
+  createPreviewKey(subscriptionId: string): Promise<string>;
+  hasPreviewKey(subscriptionId: string): Promise<boolean>;
+  deletePreviewKey(subscriptionId: string): Promise<void>;
 }
 
 export interface SecureValues {
@@ -134,7 +140,6 @@ export function createPushRegistrar(deps: { config: PushConfig; native: PushNati
         apnsToken: token,
         bundleId: config.bundleId,
         environment: config.environment,
-        locale: native.locale(),
         ...(known ? { device: { id: known.id, secret: known.secret } } : {}),
       }) as Promise<{ deviceId: string; deviceSecret?: string; subscriptionId: string }>;
     let answer: Awaited<ReturnType<typeof send>>;
@@ -151,7 +156,8 @@ export function createPushRegistrar(deps: { config: PushConfig; native: PushNati
     const registered = answer.deviceSecret ? { relayUrl, id: answer.deviceId, secret: answer.deviceSecret, token } : device;
     if (!registered) throw new Error('The relay gave no device secret');
     if (answer.deviceSecret) await secure.set(DEVICE_KEY, JSON.stringify(registered));
-    const recorded = await api.recordPushSubscription(workspaceId, { relaySubscriptionId: answer.subscriptionId, deviceLabel: 'iOS app' });
+    const previewKey = await native.createPreviewKey(answer.subscriptionId);
+    const recorded = await api.recordPushSubscription(workspaceId, { relaySubscriptionId: answer.subscriptionId, previewKey, deviceLabel: 'iOS app' });
     return { device: registered, subscription: { id: recorded.id, relaySubscriptionId: answer.subscriptionId, relayUrl } };
   };
 
@@ -169,11 +175,13 @@ export function createPushRegistrar(deps: { config: PushConfig; native: PushNati
       for (const workspaceId of input.workspaceIds) {
         const known = stored[workspaceId];
         // The installation decides what is still registered: it removes rows when sessions are revoked.
-        const held = known?.relayUrl === relay.url && device ? (await input.api.listPushSubscriptions(workspaceId)).data.some((row) => row.id === known.id) : false;
+        // A subscription whose key is gone could only ever show the fallback text, so it registers again.
+        const held = known?.relayUrl === relay.url && device && (await native.hasPreviewKey(known.relaySubscriptionId)) ? (await input.api.listPushSubscriptions(workspaceId)).data.some((row) => row.id === known.id) : false;
         if (held && known) {
           next[workspaceId] = known;
           continue;
         }
+        if (known) await native.deletePreviewKey(known.relaySubscriptionId).catch(() => undefined);
         const result = await registerWorkspace(input.api, relay.url, workspaceId, token, device);
         device = result.device;
         next[workspaceId] = result.subscription;
@@ -225,6 +233,7 @@ export function createPushRegistrar(deps: { config: PushConfig; native: PushNati
             await within(SIGN_OUT_TIMEOUT_MS, unregisterAtRelay(item)).catch(() => missed.push(item));
           }
           if (api) await within(SIGN_OUT_TIMEOUT_MS, api.removePushSubscription(workspaceId, subscription.id)).catch(() => undefined);
+          await native.deletePreviewKey(subscription.relaySubscriptionId).catch(() => undefined);
         }),
       );
       if (missed.length > 0) await secure.set(PENDING_KEY, JSON.stringify([...(await readJson<Pending[]>(PENDING_KEY, [])), ...missed]));

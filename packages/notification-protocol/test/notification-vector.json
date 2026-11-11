@@ -1,0 +1,18 @@
+{
+  "description": "A notification sealed by notification-crypto.ts, for other implementations (the iOS extension) to open. This key is for testing only and is public.",
+  "publicKey": "E75P6uryBMf9M1j8nAByGIHRdCeBKCJ-xnTzf3_pe20",
+  "privateKeyRaw": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+  "binding": {
+    "installationId": "inst_vector",
+    "workspaceId": "work_vector",
+    "notificationId": "ntf_vector",
+    "subscriptionId": "sub_vector"
+  },
+  "sealed": "18iqHsbFa1v8Ko4r5B-xkIUzYFy9fX5lK6icWUNbHwGDWiqoOccVWR_Z9t6nANR0kmV_PJG164xegzMunRcDldAdRMFLoCYthrXfVytXEF5oXVLc-2kr1OGaqOBhhguaQ6wbSG4ZrMUipCFFNqEg6i59bPsncvo2LqkGakc5k8iU9ozWZnFUWPSMy86EBtf8_LaOLiW7AEaGhj9A3lb9LYOcd9wYz4uvOhVoiVx1amXwEPIEbE2NIH5lh5ujC0OgHUtterO2Td5DMHVDqDawYeKXcHDJNiM1mfIofdbkJfHoPx6IpqPXld3pvxfircKznxpebttzBbiAdHSWgCjsESf4kq24ek3ByG8RkVesLrHvbKaXtWG4wKQNCWN5gR0v2SnsuoypWvGg8QBnO6k2hg",
+  "content": {
+    "v": 1,
+    "title": "Acme support",
+    "sender": "Zoë",
+    "text": "Hello 👋 — is my order on its way?"
+  }
+}

@@ -3187,7 +3187,7 @@
           "push"
         ],
         "operationId": "recordPushSubscription",
-        "summary": "Store the opaque handle returned by the relay. No device token is sent here.",
+        "summary": "Store the opaque handle returned by the relay, and the public key this phone made for it. No device token is sent here.",
         "security": [
           {
             "bearerAuth": []
@@ -3214,13 +3214,18 @@
                     "type": "string",
                     "pattern": "^sub_[A-Za-z0-9_-]{1,64}$"
                   },
+                  "previewKey": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{43}$"
+                  },
                   "deviceLabel": {
                     "type": "string",
                     "maxLength": 100
                   }
                 },
                 "required": [
-                  "relaySubscriptionId"
+                  "relaySubscriptionId",
+                  "previewKey"
                 ]
               }
             }

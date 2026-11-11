@@ -2,16 +2,12 @@
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import * as SecureStore from 'expo-secure-store';
+import NotificationKeys from '../../modules/notification-keys/src';
 import { destination, parseDestination, shouldShowInForeground } from './destination';
 import { createPushRegistrar, type PushConfig } from './registrar';
 
 const KEYCHAIN = { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY };
 const extra = (Constants.expoConfig?.extra ?? {}) as { push?: Omit<PushConfig, 'bundleId'> };
-
-function locale(): string {
-  const tag = Intl.DateTimeFormat().resolvedOptions().locale;
-  return /^[A-Za-z0-9-]{2,35}$/.test(tag) ? tag : 'en';
-}
 
 export const pushRegistrar = createPushRegistrar({
   config: {
@@ -26,7 +22,9 @@ export const pushRegistrar = createPushRegistrar({
       return current.granted || (current.canAskAgain && (await Notifications.requestPermissionsAsync()).granted);
     },
     deviceToken: async () => (await Notifications.getDevicePushTokenAsync()).data as string,
-    locale,
+    createPreviewKey: (subscriptionId) => NotificationKeys.createPreviewKey(subscriptionId),
+    hasPreviewKey: (subscriptionId) => NotificationKeys.hasPreviewKey(subscriptionId),
+    deletePreviewKey: (subscriptionId) => NotificationKeys.deletePreviewKey(subscriptionId),
   },
   secure: {
     get: (key) => SecureStore.getItemAsync(key, KEYCHAIN),

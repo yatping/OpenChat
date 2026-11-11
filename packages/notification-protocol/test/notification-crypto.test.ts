@@ -13,6 +13,7 @@ import {
   sealNotification,
   toBase64Url,
 } from '../src/index';
+import vector from './notification-vector.json';
 
 const hex = (value: string) => Uint8Array.from(value.match(/../g)!.map((byte) => parseInt(byte, 16)));
 const toHex = (bytes: Uint8Array) => [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
@@ -100,6 +101,14 @@ describe('sealed notifications', () => {
     await expect(sealNotification('short', content, binding)).rejects.toThrow();
     const phone = await generateX25519KeyPair();
     await expect(sealNotification(toBase64Url(phone.publicKey), content, { ...binding, notificationId: 'a\nb' })).rejects.toThrow();
+  });
+});
+
+describe('the shared vector', () => {
+  // The iOS extension opens the same file, in apps/mobile/scripts/check-notification-crypto.sh.
+  it('opens to its content', async () => {
+    const phone = { privateKey: fromBase64Url(vector.privateKeyRaw), publicKey: fromBase64Url(vector.publicKey) };
+    expect(await openNotification(phone, vector.sealed, vector.binding)).toEqual(vector.content);
   });
 });
 

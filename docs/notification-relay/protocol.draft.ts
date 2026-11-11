@@ -22,13 +22,18 @@ export type NotificationEvent =
 export type PushEnvironment = 'sandbox' | 'production';
 export type Platform = 'ios';
 
-/** Closed by design. Adding free text here would break the promise that the relay receives no content. */
+/**
+ * Closed by design. The only content is per-phone ciphertext the relay cannot decrypt (ADR-0017). Adding readable
+ * text here would break the promise that the relay receives no readable content.
+ */
 export interface NotificationRequest {
   workspaceId: string;
   event: NotificationEvent;
   recipientId: string;
   conversationId: string;
   notificationId: string;
+  /** One sealed notification per subscription of the recipient, 1 to 20. */
+  payloads: { subscriptionId: string; ciphertext: string }[];
   expiresAt?: string;
   metadata?: { websiteId?: string };
 }
@@ -73,7 +78,6 @@ export interface DeviceRegisterRequest {
   apnsToken: string;
   bundleId: string;
   environment: PushEnvironment;
-  locale: string;
   /** Present on subsequent registrations, so one device is reused across workspaces. */
   device?: { id: string; secret: string };
 }

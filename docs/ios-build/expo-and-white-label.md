@@ -160,9 +160,21 @@ Tap -> read oc.installationId, oc.workspaceId, oc.conversationId from the payloa
 
 Use `getLastNotificationResponse()` at launch and `addNotificationResponseReceivedListener` afterwards, then clear the response so that it does not navigate twice. From SDK 58, notifications show in the foreground by default, so a handler suppresses those for the conversation on screen.
 
-## Notification Service Extension (not in the MVP)
+## Notification Service Extension
 
-An extension could replace "New message" with real text by fetching on the device. Expo has no built-in support: it needs a config plugin, native code, an app group, shared keychain access to tokens, and declaring the target under `extra.eas.build.experimental.ios.appExtensions`. It also complicates white-label signing. Defer it ([Q7](../architecture/open-questions.md)). The payload already sets `mutable-content`, so it can be added without any protocol change.
+Every notification is encrypted for one phone, and an extension on that phone decrypts it ([ADR-0017](../architecture/decisions/0017-encrypted-notifications.md)). With push on, a config plugin adds it at prebuild, so `ios/` is still never edited by hand.
+
+| Part | Where |
+|---|---|
+| The key for each subscription: made with CryptoKit, private half in the keychain, public half returned to JavaScript | Local Expo module, [`modules/notification-keys`](../../apps/mobile/modules/notification-keys) |
+| The extension: decrypts `oc.c` and sets the title and body | [`plugins/notification-service/ios`](../../apps/mobile/plugins/notification-service/ios) |
+| The target, its Info.plist and entitlements, the shared keychain group, and the fallback phrases | [`plugins/notification-service/index.ts`](../../apps/mobile/plugins/notification-service/index.ts), applied in `app.config.ts` |
+
+- **Bundle ID.** The extension is `<bundleIdentifier>.NotificationService`, with its own profile for each export method. `fastlane ios refresh_profile` registers it and makes both profiles; `build_ipa` signs it with its own.
+- **Keychain.** The app and the extension share `$(AppIdentifierPrefix)<bundleIdentifier>.notifications`. The app lists its own group first, so its session tokens stay in the app's private group and out of the extension's reach. No App Group or portal capability is needed.
+- **Fallback.** If the extension fails or runs out of time, iOS shows the phrase for the relay's `loc-key`, from `Localizable.strings` in the app. Only English so far.
+- **Checks.** `scripts/check-notification-crypto.sh` compiles the extension's decryption and checks it against RFC 9180 and against a notification sealed by `packages/notification-protocol`. It needs a Mac, because CryptoKit is Apple's, so CI does not run it; run it after changing either side.
+- **White label.** A variant with push gets the extension under its own bundle ID. It needs the extension's profiles as well as the app's.
 
 ## App Store
 

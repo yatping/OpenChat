@@ -39,15 +39,16 @@ export async function insertInstallation(db: D1Database, input: { installationId
   ]);
 }
 
-export async function upsertWorkspace(db: D1Database, input: { installationId: string; workspaceId: string; displayName: string | null; now: number }): Promise<'created' | 'updated'> {
-  const { installationId, workspaceId, displayName, now } = input;
+/** `display_name` is no longer written, and goes in a later migration. */
+export async function upsertWorkspace(db: D1Database, input: { installationId: string; workspaceId: string; now: number }): Promise<'created' | 'updated'> {
+  const { installationId, workspaceId, now } = input;
   const existing = await db.prepare('SELECT 1 FROM workspaces WHERE installation_id = ? AND workspace_id = ?').bind(installationId, workspaceId).first();
   await db
     .prepare(
-      `INSERT INTO workspaces (installation_id, workspace_id, display_name, updated_at) VALUES (?, ?, ?, ?)
-       ON CONFLICT (installation_id, workspace_id) DO UPDATE SET display_name = excluded.display_name, status = 'active', updated_at = excluded.updated_at`,
+      `INSERT INTO workspaces (installation_id, workspace_id, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT (installation_id, workspace_id) DO UPDATE SET status = 'active', updated_at = excluded.updated_at`,
     )
-    .bind(installationId, workspaceId, displayName, now)
+    .bind(installationId, workspaceId, now)
     .run();
   return existing ? 'updated' : 'created';
 }

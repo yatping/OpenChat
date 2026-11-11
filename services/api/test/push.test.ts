@@ -1,7 +1,7 @@
 import { createExecutionContext, waitOnExecutionContext } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
 import { generateSerializedKey, hashPassword } from '@openchat/auth';
-import { fromBase64Url, importPublicKey, parseGrant, verifyGrant, verifyRequest } from '@openchat/notification-protocol';
+import { fromBase64Url, generateX25519KeyPair, importPublicKey, openNotification, parseGrant, toBase64Url, verifyGrant, verifyRequest, type X25519KeyPair } from '@openchat/notification-protocol';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleQueue } from '../src/background';
 import { sweepOutbox } from '../src/dispatch';
@@ -123,8 +123,15 @@ afterEach(() => {
   expect(badSignatures).toBe(0);
 });
 
+/** Each phone's key pair, by relay subscription ID, so that a test can open what the phone would receive. */
+const phones = new Map<string, X25519KeyPair>();
+const newPreviewKey = async (id: string) => {
+  const pair = await generateX25519KeyPair();
+  phones.set(id, pair);
+  return toBase64Url(pair.publicKey);
+};
 const subscribe = async (name: string, id = `sub_${name}`) => {
-  const response = await call('POST', `/api/v1/workspaces/${W}/push/subscriptions`, { token: tokens[name]!, body: { relaySubscriptionId: id } });
+  const response = await call('POST', `/api/v1/workspaces/${W}/push/subscriptions`, { token: tokens[name]!, body: { relaySubscriptionId: id, previewKey: await newPreviewKey(id) } });
   expect(response.status).toBe(201);
   return ((await response.json()) as { id: string }).id;
 };
@@ -176,7 +183,7 @@ describe('grants', () => {
     expect(sent.map((s) => s.path)).toEqual(['/v1/installations/register', '/v1/workspaces/register']);
     expect(sent[0]!.body).toEqual({ baseUrl: ORIGIN, publicKey: { id: 'k1', alg: 'Ed25519', key: key.publicKey } });
     expect(sent[0]!.headers.get('x-workspace-id')).toBeNull();
-    expect(sent[1]!.body).toEqual({ workspaceId: W, displayName: 'Acme' });
+    expect(sent[1]!.body).toEqual({ workspaceId: W });
 
     await grantFor('two');
     expect(sent).toHaveLength(2);
@@ -195,10 +202,12 @@ describe('grants', () => {
     expect(sent.map((s) => s.path)).toEqual(['/v1/installations/register', '/v1/workspaces/register']);
   });
 
-  it('cuts a long name without breaking a character', async () => {
-    await env.DB.prepare(`UPDATE workspaces SET name = ?1 WHERE id = ?2`).bind(`${'a'.repeat(39)}😀 more`, W).run();
+  it('never tells the relay the workspace name, even after a rename', async () => {
     await grantFor('one');
-    expect(sent[1]!.body.displayName).toBe('a'.repeat(39));
+    await env.DB.prepare(`UPDATE workspaces SET name = 'Renamed' WHERE id = ?1`).bind(W).run();
+    await grantFor('one');
+    expect(sent.map((s) => s.path)).toEqual(['/v1/installations/register', '/v1/workspaces/register']);
+    expect(JSON.stringify(sent.map((s) => s.body))).not.toMatch(/Acme|Renamed/);
   });
 
   it('answers 503 while the relay is down, and messaging carries on', async () => {
@@ -212,9 +221,11 @@ describe('grants', () => {
 
   it('registers again on the next grant after the relay erased this installation', async () => {
     await grantFor('one');
-    await env.DB.prepare(`UPDATE workspaces SET name = 'Renamed' WHERE id = ?1`).bind(W).run();
+    await subscribe('one');
+    // The relay is not asked again for a grant, so a refused notification is how the installation learns of it.
     relayAnswer = () => new Response('{"code":"unauthorized"}', { status: 401 });
-    expect((await grantFor('one')).status).toBe(503);
+    await visitorStarts();
+    await runQueue();
     relayAnswer = () => new Response('{}', { status: 201 });
     sent = [];
     expect((await grantFor('one')).status).toBe(201);
@@ -242,16 +253,35 @@ describe('subscriptions', () => {
   });
 
   it('refuses something that is not a handle, such as a device token', async () => {
-    const response = await call('POST', `/api/v1/workspaces/${W}/push/subscriptions`, { token: tokens.one!, body: { relaySubscriptionId: 'a'.repeat(64) } });
+    const response = await call('POST', `/api/v1/workspaces/${W}/push/subscriptions`, { token: tokens.one!, body: { relaySubscriptionId: 'a'.repeat(64), previewKey: await newPreviewKey('x') } });
     expect(response.status).toBe(400);
     expect((await env.DB.prepare(`SELECT COUNT(*) AS n FROM push_subscriptions`).first<{ n: number }>())!.n).toBe(0);
   });
 
-  it("will not take over someone else's handle", async () => {
+  it('refuses a subscription without a key, or with something that is not one', async () => {
+    for (const previewKey of [undefined, 'short', 'a'.repeat(44)]) {
+      const response = await call('POST', `/api/v1/workspaces/${W}/push/subscriptions`, { token: tokens.one!, body: { relaySubscriptionId: 'sub_one', ...(previewKey ? { previewKey } : {}) } });
+      expect(response.status).toBe(400);
+    }
+    expect((await env.DB.prepare(`SELECT COUNT(*) AS n FROM push_subscriptions`).first<{ n: number }>())!.n).toBe(0);
+  });
+
+  it('takes a new key for the same handle, from the same person', async () => {
+    await subscribe('one');
+    const before = await env.DB.prepare(`SELECT preview_key AS k FROM push_subscriptions`).first<{ k: string }>();
+    await subscribe('one');
+    const after = await env.DB.prepare(`SELECT preview_key AS k, COUNT(*) AS n FROM push_subscriptions`).first<{ k: string; n: number }>();
+    expect(after).toMatchObject({ n: 1 });
+    expect(after!.k).not.toBe(before!.k);
+    expect(after!.k).toBe(toBase64Url(phones.get('sub_one')!.publicKey));
+  });
+
+  it("will not take over someone else's handle, or replace their key", async () => {
     await subscribe('one', 'sub_shared');
-    const response = await call('POST', `/api/v1/workspaces/${W}/push/subscriptions`, { token: tokens.two!, body: { relaySubscriptionId: 'sub_shared' } });
+    const key = toBase64Url(phones.get('sub_shared')!.publicKey);
+    const response = await call('POST', `/api/v1/workspaces/${W}/push/subscriptions`, { token: tokens.two!, body: { relaySubscriptionId: 'sub_shared', previewKey: await newPreviewKey('attacker') } });
     expect(response.status).toBe(409);
-    expect((await env.DB.prepare(`SELECT member_id AS m FROM push_subscriptions`).first<{ m: string }>())!.m).toBe('mem_one');
+    expect(await env.DB.prepare(`SELECT member_id AS m, preview_key AS k FROM push_subscriptions`).first<{ m: string; k: string }>()).toEqual({ m: 'mem_one', k: key });
   });
 
   it('keeps the newest 20 for one person', async () => {
@@ -313,13 +343,50 @@ describe('who gets a push', () => {
   });
   const recipients = () => notifications().map((n) => n.recipientId).sort();
 
-  it('a new conversation goes to everyone with a device, carrying only IDs', async () => {
+  it('a new conversation goes to everyone with a device, carrying only IDs and ciphertext', async () => {
     const { conversationId } = await visitorStarts();
     await runQueue();
     expect(recipients()).toEqual(['mem_one', 'mem_two']);
     expect(notifications()[0]).toMatchObject({ event: 'new_conversation', workspaceId: W, conversationId });
-    expect(Object.keys(notifications()[0]!).sort()).toEqual(['conversationId', 'event', 'expiresAt', 'notificationId', 'recipientId', 'workspaceId']);
-    expect(JSON.stringify(sent.map((s) => s.body))).not.toContain('secret words');
+    expect(Object.keys(notifications()[0]!).sort()).toEqual(['conversationId', 'event', 'expiresAt', 'notificationId', 'payloads', 'recipientId', 'workspaceId']);
+    expect(JSON.stringify(sent.map((s) => s.body))).not.toMatch(/secret words|Acme|Visitor/);
+  });
+
+  it('encrypts for each phone, and only that phone opens it, to the workspace, sender and text', async () => {
+    await subscribe('one', 'sub_one_ipad');
+    await visitorStarts();
+    await runQueue();
+    const mine = notifications().find((n) => n.recipientId === 'mem_one') as unknown as { notificationId: string; payloads: { subscriptionId: string; ciphertext: string }[] };
+    expect(mine.payloads.map((p) => p.subscriptionId).sort()).toEqual(['sub_one', 'sub_one_ipad']);
+    const binding = (subscriptionId: string) => ({ installationId: 'inst_test', workspaceId: W, notificationId: mine.notificationId, subscriptionId });
+    for (const payload of mine.payloads) {
+      expect(await openNotification(phones.get(payload.subscriptionId)!, payload.ciphertext, binding(payload.subscriptionId))).toEqual({ v: 1, title: 'Acme', sender: 'Visitor', text: 'secret words from a visitor' });
+    }
+    await expect(openNotification(phones.get('sub_two')!, mine.payloads[0]!.ciphertext, binding('sub_two'))).rejects.toThrow();
+    await expect(openNotification(phones.get('sub_one_ipad')!, mine.payloads.find((p) => p.subscriptionId === 'sub_one')!.ciphertext, binding('sub_one'))).rejects.toThrow();
+  });
+
+  it("names a colleague, marks a note, and says what an assignment is", async () => {
+    const open = async (n: Record<string, unknown>) => {
+      const { notificationId, payloads } = n as unknown as { notificationId: string; payloads: { subscriptionId: string; ciphertext: string }[] };
+      return openNotification(phones.get(payloads[0]!.subscriptionId)!, payloads[0]!.ciphertext, { installationId: 'inst_test', workspaceId: W, notificationId, subscriptionId: payloads[0]!.subscriptionId });
+    };
+    await assign('mem_one', 'two');
+    await runQueue();
+    expect(await open(notifications()[0]!)).toEqual({ v: 1, title: 'Acme', sender: '', text: 'Conversation assigned to you' });
+    sent = [];
+    await memberSays('two');
+    await memberSays('two', 'internal_note');
+    await runQueue();
+    const texts = await Promise.all(notifications().map(open));
+    expect(texts.map((c) => `${c.sender}: ${c.text}`).sort()).toEqual(['two: Note: secret words from a member', 'two: secret words from a member']);
+  });
+
+  it('sends nothing for a phone recorded before keys existed', async () => {
+    await env.DB.prepare(`UPDATE push_subscriptions SET preview_key = ''`).run();
+    await visitorStarts();
+    await runQueue();
+    expect(sent.filter((s) => s.path === '/v1/notifications/batch')).toEqual([]);
   });
 
   it("a visitor's later message goes to whoever has the conversation", async () => {
@@ -406,10 +473,11 @@ describe('who gets a push', () => {
 
   it('splits a large workspace into chunks the relay accepts', async () => {
     const statements = [];
+    const previewKey = await newPreviewKey('shared');
     for (let i = 0; i < 60; i++) {
       statements.push(env.DB.prepare(`INSERT INTO users (id, email, name, password_hash, created_at, updated_at) VALUES (?1, ?2, 'x', 'x', 1, 1)`).bind(`user_${i}`, `u${i}@example.com`));
       statements.push(env.DB.prepare(`INSERT INTO workspace_members (id, workspace_id, user_id, role, status, created_at, updated_at) VALUES (?1, ?2, ?3, 'agent', 'active', 1, 1)`).bind(`mem_${i}`, W, `user_${i}`));
-      statements.push(env.DB.prepare(`INSERT INTO push_subscriptions (id, workspace_id, member_id, relay_id, relay_subscription_id, platform, created_at, updated_at) VALUES (?1, ?2, ?3, 'managed', ?1, 'ios', 1, 1)`).bind(`sub_${i}`, W, `mem_${i}`));
+      statements.push(env.DB.prepare(`INSERT INTO push_subscriptions (id, workspace_id, member_id, relay_id, relay_subscription_id, preview_key, platform, created_at, updated_at) VALUES (?1, ?2, ?3, 'managed', ?1, ?4, 'ios', 1, 1)`).bind(`sub_${i}`, W, `mem_${i}`, previewKey));
     }
     await env.DB.batch(statements);
     await visitorStarts();
@@ -585,7 +653,7 @@ describe('an admin disconnecting from the relay', () => {
     const grant = await grantFor('one');
     expect(grant.status).toBe(409);
     expect(((await grant.json()) as { code: string }).code).toBe('push_not_configured');
-    expect((await call('POST', `/api/v1/workspaces/${W}/push/subscriptions`, { token: tokens.one!, body: { relaySubscriptionId: 'sub_again' } })).status).toBe(409);
+    expect((await call('POST', `/api/v1/workspaces/${W}/push/subscriptions`, { token: tokens.one!, body: { relaySubscriptionId: 'sub_again', previewKey: await newPreviewKey('sub_again') } })).status).toBe(409);
     expect(((await (await call('GET', '/.well-known/openchat.json')).json()) as { relay: unknown }).relay).toBeNull();
     // A dispatch job queued before the disconnect.
     queued.push({ type: 'notification.dispatch', idempotencyKey: 'old', workspaceId: W, payload: { notifications: [{ workspaceId: W, event: 'new_message', recipientId: 'mem_one', conversationId: CONV, notificationId: 'ntf_old' }] } });

@@ -13,10 +13,10 @@ import {
   relayRegistration,
   type OutboxRow,
 } from '@openchat/database';
-import { toBase64Url, type NotificationEvent, type NotificationRequest } from '@openchat/notification-protocol';
+import { toBase64Url, type NotificationEvent } from '@openchat/notification-protocol';
 import { newId, type JobEnvelope } from '@openchat/shared';
 import type { Env } from '../env';
-import { relayConfig, relayRequest, sendNotifications, type RelayConfig } from './relay-client';
+import { relayConfig, relayRequest, sendNotifications, type NotificationText, type RelayConfig, type UnsealedNotification } from './relay-client';
 
 export const FANOUT_JOB = 'notification.fanout';
 export const DISPATCH_JOB = 'notification.dispatch';
@@ -28,7 +28,8 @@ const PUSH_LIFETIME_MS = 60 * 60_000;
 const DISPATCH_CHUNK = 50;
 
 type FanoutPayload = { kind: 'message'; messageId: string } | { kind: 'assigned'; conversationId: string; memberId: string; actorId: string | null; eventId: string };
-type DispatchPayload = { notifications: NotificationRequest[] };
+/** `text` is message content, held only in this installation's own queue. The relay receives it encrypted. */
+type DispatchPayload = { notifications: UnsealedNotification[]; text?: NotificationText };
 type UnregisterPayload = { relaySubscriptionId: string } | { memberId: string };
 
 function envelope<T>(type: string, idempotencyKey: string, workspaceId: string, payload: T, notAfter?: string): JobEnvelope<T> {
@@ -64,22 +65,36 @@ async function notificationIdFor(eventId: string, event: string, memberId: strin
   return `ntf_${toBase64Url(new Uint8Array(digest).slice(0, 18))}`;
 }
 
+/** Shown under the workspace's name, after the phone decrypts it. Cut to size when it is encrypted. */
+function messageText(message: { senderType: string; senderName: string | null; type: string; content: string }): NotificationText {
+  const sender = message.senderName ?? (message.senderType === 'visitor' ? 'Visitor' : 'Team member');
+  const content = message.content.trim();
+  const text = content || (message.type === 'image' ? 'Photo' : message.type === 'file' ? 'File' : '');
+  return { sender, text: message.type === 'internal_note' ? `Note: ${text}` : text };
+}
+
+const ASSIGNED_TEXT: NotificationText = { sender: '', text: 'Conversation assigned to you' };
+
 /**
  * Decided from what is true now. A visitor's message goes to whoever has the conversation, or to everyone if nobody
  * does. A colleague's reply or note goes only to the person who has it. A system message goes to nobody.
  */
-async function decide(env: Env, workspaceId: string, payload: FanoutPayload): Promise<{ event: NotificationEvent; eventId: string; conversationId: string; onlyMemberId: string | null; exceptMemberId: string | null } | null> {
+async function decide(
+  env: Env,
+  workspaceId: string,
+  payload: FanoutPayload,
+): Promise<{ event: NotificationEvent; eventId: string; conversationId: string; onlyMemberId: string | null; exceptMemberId: string | null; text: NotificationText } | null> {
   const db = openDatabase(env.DB);
   if (payload.kind === 'assigned') {
     const current = await conversationAssignee(db, workspaceId, payload.conversationId);
     if (current?.assignedMemberId !== payload.memberId || payload.actorId === payload.memberId) return null;
-    return { event: 'conversation_assigned', eventId: payload.eventId, conversationId: payload.conversationId, onlyMemberId: payload.memberId, exceptMemberId: null };
+    return { event: 'conversation_assigned', eventId: payload.eventId, conversationId: payload.conversationId, onlyMemberId: payload.memberId, exceptMemberId: null, text: ASSIGNED_TEXT };
   }
   const message = await messageForDispatch(db, workspaceId, payload.messageId);
   if (!message) return null;
   const conversation = await conversationAssignee(db, workspaceId, message.conversationId);
   if (!conversation) return null;
-  const base = { eventId: message.id, conversationId: message.conversationId, onlyMemberId: conversation.assignedMemberId };
+  const base = { eventId: message.id, conversationId: message.conversationId, onlyMemberId: conversation.assignedMemberId, text: messageText(message) };
   if (message.senderType === 'visitor') return { ...base, event: message.seq === 1 ? 'new_conversation' : 'new_message', exceptMemberId: null };
   if (message.senderType !== 'member' || !conversation.assignedMemberId) return null;
   return { ...base, event: 'new_message', exceptMemberId: message.senderId };
@@ -90,7 +105,7 @@ async function handleFanout(job: JobEnvelope, env: Env): Promise<void> {
   const decision = await decide(env, workspaceId, job.payload as FanoutPayload);
   if (!decision) return;
   const recipients = await pushRecipients(openDatabase(env.DB), { workspaceId, eventType: decision.event, onlyMemberId: decision.onlyMemberId, exceptMemberId: decision.exceptMemberId });
-  const notifications: NotificationRequest[] = await Promise.all(
+  const notifications: UnsealedNotification[] = await Promise.all(
     recipients.map(async (recipientId) => ({
       workspaceId,
       event: decision.event,
@@ -102,14 +117,17 @@ async function handleFanout(job: JobEnvelope, env: Env): Promise<void> {
   );
   const jobs: { body: JobEnvelope<DispatchPayload> }[] = [];
   for (let i = 0; i < notifications.length; i += DISPATCH_CHUNK) {
-    jobs.push({ body: envelope(DISPATCH_JOB, `${job.idempotencyKey}:${i}`, workspaceId, { notifications: notifications.slice(i, i + DISPATCH_CHUNK) }, job.notAfter) });
+    jobs.push({ body: envelope(DISPATCH_JOB, `${job.idempotencyKey}:${i}`, workspaceId, { notifications: notifications.slice(i, i + DISPATCH_CHUNK), text: decision.text }, job.notAfter) });
   }
   // Queues takes at most 100 messages in a batch, and that is 5,000 people in one workspace.
   for (let i = 0; i < jobs.length; i += 100) await env.NOTIFICATIONS_QUEUE.sendBatch(jobs.slice(i, i + 100));
 }
 
 async function handleDispatch(job: JobEnvelope, env: Env, relay: RelayConfig): Promise<void> {
-  await sendNotifications(openDatabase(env.DB), relay, job.workspaceId!, (job.payload as DispatchPayload).notifications);
+  const payload = job.payload as DispatchPayload;
+  // Queued by an earlier version, with nothing to encrypt. Messaging does not depend on it.
+  if (!payload.text) return;
+  await sendNotifications(openDatabase(env.DB), relay, job.workspaceId!, payload.notifications, payload.text);
 }
 
 /** The local rows go first. If the relay is down, nothing more goes out from here, and the retry finishes the job. */

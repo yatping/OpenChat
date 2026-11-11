@@ -14,8 +14,8 @@ const toSubscription = (row: PushSubscriptionRow) => ({
 
 export const listPushSubscriptions = async (db: Database, ctx: WorkspaceContext) => ({ data: (await pushRepository(db, ctx).listSubscriptions()).map(toSubscription) });
 
-export async function recordPushSubscription(db: Database, ctx: WorkspaceContext, input: { relayId: string; relaySubscriptionId: string; deviceLabel?: string | undefined }) {
-  const row = await pushRepository(db, ctx).recordSubscription({ relayId: input.relayId, relaySubscriptionId: input.relaySubscriptionId, deviceLabel: input.deviceLabel ?? null });
+export async function recordPushSubscription(db: Database, ctx: WorkspaceContext, input: { relayId: string; relaySubscriptionId: string; previewKey: string; deviceLabel?: string | undefined }) {
+  const row = await pushRepository(db, ctx).recordSubscription({ relayId: input.relayId, relaySubscriptionId: input.relaySubscriptionId, previewKey: input.previewKey, deviceLabel: input.deviceLabel ?? null });
   if (!row) throw new AppError(409, 'subscription_taken', 'This device is registered to someone else');
   return toSubscription(row);
 }

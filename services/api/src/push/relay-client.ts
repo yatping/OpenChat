@@ -1,15 +1,15 @@
 /**
- * The installation's side of the relay protocol: signed requests and grants, and nothing else leaves here but IDs.
+ * The installation's side of the relay protocol: signed requests and grants. Nothing leaves here but IDs and
+ * notifications encrypted for each phone, which the relay cannot read (ADR-0017).
  * See docs/notification-relay/protocol.md. With no relay configured, push is off and everything else carries on.
  */
 import type { SerializedKey } from '@openchat/auth';
-import { importPrivateKey, signGrant, signRequest, GRANT_MAX_TTL_SECONDS, type NotificationRequest } from '@openchat/notification-protocol';
-import { forgetRelayRegistration, getInstallation, markInstallationRegistered, markWorkspaceRegistered, relayRegistration, type Database } from '@openchat/database';
+import { importPrivateKey, MAX_NOTIFICATION_PAYLOADS, sealNotification, signGrant, signRequest, GRANT_MAX_TTL_SECONDS, type NotificationPayload, type NotificationRequest } from '@openchat/notification-protocol';
+import { forgetRelayRegistration, getInstallation, markInstallationRegistered, markWorkspaceRegistered, pushTargets, relayRegistration, type Database, type PushTarget } from '@openchat/database';
 import { newId } from '@openchat/shared';
 import type { Env } from '../env';
 
 const TIMEOUT_MS = 10_000;
-const MAX_DISPLAY_NAME = 40;
 
 export interface RelayConfig {
   id: string;
@@ -109,21 +109,11 @@ export async function relayRequest(relay: RelayConfig, installationId: string, p
   throw new RelayError(response.status, typeof problem?.code === 'string' ? problem.code : 'unknown', Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null);
 }
 
-/** The relay's limit counts UTF-16 units, and cutting a surrogate pair in half would leave broken text. */
-function displayNameOf(name: string): string {
-  let out = '';
-  for (const character of name) {
-    if (out.length + character.length > MAX_DISPLAY_NAME) break;
-    out += character;
-  }
-  return out;
-}
-
 /**
  * Registers only what the relay does not have yet, so that this usually costs one read. Repeating is safe, since
- * the relay answers the same installation and key with success. A rename goes out here, before the next push.
+ * the relay answers the same installation and key with success. The relay is never told the workspace's name.
  */
-export async function ensureRegistered(db: Database, relay: RelayConfig, workspaceId: string): Promise<string> {
+export async function ensureRegistered(db: Database, relay: RelayConfig, workspaceId: string): Promise<{ installationId: string; workspaceName: string }> {
   const known = await relayRegistration(db, workspaceId);
   if (!known) throw new Error('Workspace or installation is missing');
   // Read in the same query as the rest, so that a job queued before the disconnect cannot register again.
@@ -139,18 +129,17 @@ export async function ensureRegistered(db: Database, relay: RelayConfig, workspa
     await markInstallationRegistered(db, relay.id);
     workspaceCurrent = false;
   }
-  const displayName = displayNameOf(known.workspaceName);
-  if (!workspaceCurrent || known.workspaceDisplayName !== displayName) {
-    await relayRequest(relay, installationId, '/v1/workspaces/register', { workspaceId, displayName }, workspaceId);
-    await markWorkspaceRegistered(db, workspaceId, displayName);
+  if (!workspaceCurrent) {
+    await relayRequest(relay, installationId, '/v1/workspaces/register', { workspaceId }, workspaceId);
+    await markWorkspaceRegistered(db, workspaceId);
   }
-  return installationId;
+  return { installationId, workspaceName: known.workspaceName };
 }
 
 export async function issueGrant(db: Database, relay: RelayConfig, workspaceId: string, memberId: string) {
   let installationId: string;
   try {
-    installationId = await ensureRegistered(db, relay, workspaceId);
+    ({ installationId } = await ensureRegistered(db, relay, workspaceId));
   } catch (error) {
     // The relay erased this installation, so the next attempt registers it again.
     if (error instanceof RelayError && error.unrecognised) await forgetRelayRegistration(db);
@@ -162,10 +151,54 @@ export async function issueGrant(db: Database, relay: RelayConfig, workspaceId: 
   return { grant, relayUrl: relay.url, expiresAt: new Date(exp * 1000).toISOString() };
 }
 
-export async function sendNotifications(db: Database, relay: RelayConfig, workspaceId: string, notifications: NotificationRequest[]): Promise<void> {
+/** A notification before it is encrypted for each of the recipient's phones. */
+export type UnsealedNotification = Omit<NotificationRequest, 'payloads'>;
+/** What the phone shows under the workspace's name. The same for every recipient of one event. */
+export interface NotificationText {
+  sender: string;
+  text: string;
+}
+
+/**
+ * Encrypts each notification once for each of its recipient's phones, newest first. A notification for someone with
+ * no phone left on this relay is dropped here, since the relay could deliver nothing.
+ */
+export async function sealForPhones(
+  targets: PushTarget[],
+  ids: { installationId: string; workspaceId: string; workspaceName: string },
+  notifications: UnsealedNotification[],
+  text: NotificationText,
+): Promise<NotificationRequest[]> {
+  const byMember = new Map<string, PushTarget[]>();
+  for (const target of targets) byMember.set(target.memberId, [...(byMember.get(target.memberId) ?? []), target]);
+  const content = { title: ids.workspaceName, ...text };
+  const sealed: NotificationRequest[] = [];
+  for (const notification of notifications) {
+    const phones = (byMember.get(notification.recipientId) ?? []).slice(0, MAX_NOTIFICATION_PAYLOADS);
+    const payloads = await Promise.all(
+      phones.map(async (phone): Promise<NotificationPayload | null> => {
+        const binding = { installationId: ids.installationId, workspaceId: ids.workspaceId, notificationId: notification.notificationId, subscriptionId: phone.relaySubscriptionId };
+        try {
+          return { subscriptionId: phone.relaySubscriptionId, ciphertext: await sealNotification(phone.previewKey, content, binding) };
+        } catch {
+          // A key that cannot be used costs that phone its notification, and nobody else theirs.
+          return null;
+        }
+      }),
+    );
+    const usable = payloads.filter((payload) => payload !== null);
+    if (usable.length > 0) sealed.push({ ...notification, payloads: usable });
+  }
+  return sealed;
+}
+
+export async function sendNotifications(db: Database, relay: RelayConfig, workspaceId: string, notifications: UnsealedNotification[], text: NotificationText): Promise<void> {
   try {
-    const installationId = await ensureRegistered(db, relay, workspaceId);
-    await relayRequest(relay, installationId, '/v1/notifications/batch', { notifications }, workspaceId);
+    const { installationId, workspaceName } = await ensureRegistered(db, relay, workspaceId);
+    const targets = await pushTargets(db, workspaceId, relay.id, [...new Set(notifications.map((notification) => notification.recipientId))]);
+    const sealed = await sealForPhones(targets, { installationId, workspaceId, workspaceName }, notifications, text);
+    if (sealed.length === 0) return;
+    await relayRequest(relay, installationId, '/v1/notifications/batch', { notifications: sealed }, workspaceId);
   } catch (error) {
     // Pushes queued before an admin disconnected are dropped. Messaging does not depend on them.
     if (error instanceof RelayDisconnectedError) return;

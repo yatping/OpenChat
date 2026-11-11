@@ -3,7 +3,7 @@ import { type Context, Hono } from 'hono';
 import type { z } from 'zod';
 import type { Env } from '../env';
 import { documentProvesControl, normalizeBaseUrl } from './domain-proof';
-import { registerInstallationBody, registerWorkspaceBody, revokeWorkspaceBody, sanitizeDisplayName, unregisterInstallationBody } from './schemas';
+import { registerInstallationBody, registerWorkspaceBody, revokeWorkspaceBody, unregisterInstallationBody } from './schemas';
 import { eraseInstallation, findActiveKey, hasInstallation, insertInstallation, revokeWorkspace, upsertWorkspace } from './store';
 import { admitToGuard, checkSignature, clearKeyCache, MAX_BODY_BYTES, type Rejection, readSignedHeaders, type SignedHeaders, verifyKnownInstallation } from './verify';
 
@@ -96,7 +96,6 @@ export function relayRoutes(fetcher: typeof fetch) {
     const outcome = await upsertWorkspace(c.env.DB, {
       installationId: result.signed.installationId,
       workspaceId: result.parsed.workspaceId,
-      displayName: sanitizeDisplayName(result.parsed.displayName),
       now: Date.now(),
     });
     return c.json({ status: 'registered' }, outcome === 'created' ? 201 : 200);

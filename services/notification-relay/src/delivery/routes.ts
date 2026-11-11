@@ -1,11 +1,11 @@
-import { type NotificationAccepted, NOTIFICATION_EVENTS, type NotificationStatus, RELAY_PROTOCOL_VERSION } from '@openchat/notification-protocol';
+import { MAX_NOTIFICATION_PAYLOADS, NOTIFICATION_EVENTS, NOTIFICATION_SEALED_PATTERN, type NotificationAccepted, type NotificationStatus, RELAY_PROTOCOL_VERSION } from '@openchat/notification-protocol';
 import { type Context, Hono } from 'hono';
 import { z } from 'zod';
 import { newOpaqueId } from '../devices/crypto';
 import type { Env } from '../env';
 import { ID_PATTERN } from '../requests/schemas';
 import { isWorkspaceActive } from '../requests/store';
-import { admitToGuard, MAX_BODY_BYTES, type Rejection, readSignedHeaders, type SignedHeaders, verifyKnownInstallation } from '../requests/verify';
+import { admitToGuard, type Rejection, readSignedHeaders, type SignedHeaders, verifyKnownInstallation } from '../requests/verify';
 import type { DeliveryMessage } from './consumer';
 
 type Ctx = Context<{ Bindings: Env }>;
@@ -13,15 +13,25 @@ type Ctx = Context<{ Bindings: Env }>;
 const DEFAULT_LIFETIME_MS = 60 * 60_000;
 const MAX_LIFETIME_MS = 24 * 60 * 60_000;
 const BATCH_MAX = 100;
+/** A full batch: 100 notifications, each with 20 sealed payloads of about 450 bytes. */
+export const NOTIFICATION_MAX_BODY_BYTES = 1024 * 1024;
 const id = z.string().regex(ID_PATTERN);
 
-/** Closed on purpose. A free-text field added here would break the promise that the relay receives no content. */
+/**
+ * Closed on purpose. The only content is fixed-size ciphertext for each phone, which the relay cannot decrypt
+ * (ADR-0017). A readable field added here would break the promise that the relay receives no readable content.
+ */
 export const notificationBody = z.strictObject({
   workspaceId: id,
   event: z.enum(NOTIFICATION_EVENTS),
   recipientId: id,
   conversationId: id,
   notificationId: id,
+  payloads: z
+    .array(z.strictObject({ subscriptionId: id, ciphertext: z.string().regex(NOTIFICATION_SEALED_PATTERN) }))
+    .min(1)
+    .max(MAX_NOTIFICATION_PAYLOADS)
+    .refine((items) => new Set(items.map((item) => item.subscriptionId)).size === items.length),
   expiresAt: z.iso.datetime().optional(),
   metadata: z.strictObject({ websiteId: id.optional() }).optional(),
 });
@@ -36,9 +46,9 @@ function problem(c: Ctx, r: Rejection | { status: 400 | 404 | 413; code: string 
 async function authenticate(c: Ctx): Promise<{ ok: true; signed: SignedHeaders; bytes: Uint8Array } | { ok: false; response: Response }> {
   const signed = readSignedHeaders(c.req.raw.headers);
   if (!signed) return { ok: false, response: problem(c, { status: 400, code: 'malformed_request' }) };
-  if (Number(c.req.header('content-length') ?? 0) > MAX_BODY_BYTES) return { ok: false, response: problem(c, { status: 413, code: 'body_too_large' }) };
+  if (Number(c.req.header('content-length') ?? 0) > NOTIFICATION_MAX_BODY_BYTES) return { ok: false, response: problem(c, { status: 413, code: 'body_too_large' }) };
   const bytes = new Uint8Array(await c.req.arrayBuffer());
-  if (bytes.byteLength > MAX_BODY_BYTES) return { ok: false, response: problem(c, { status: 413, code: 'body_too_large' }) };
+  if (bytes.byteLength > NOTIFICATION_MAX_BODY_BYTES) return { ok: false, response: problem(c, { status: 413, code: 'body_too_large' }) };
   const rejected = await verifyKnownInstallation(c.env, { method: c.req.method, path: new URL(c.req.url).pathname, body: bytes }, signed);
   if (rejected) return { ok: false, response: problem(c, rejected) };
   return { ok: true, signed, bytes };
@@ -56,6 +66,7 @@ function parse<T extends z.ZodType>(schema: T, bytes: Uint8Array): z.infer<T> | 
 /**
  * Commits before queueing, and a duplicate of something still `queued` is queued again: a crash between the two
  * would otherwise lose it, because the installation's retry looks like a duplicate. Delivery tolerates the repeat.
+ * The ciphertext travels only in the queue message. It is never written to D1.
  */
 async function accept(env: Env, installationId: string, item: NotificationBody): Promise<NotificationAccepted> {
   const now = Date.now();
@@ -68,15 +79,16 @@ async function accept(env: Env, installationId: string, item: NotificationBody):
   )
     .bind(recordId, installationId, item.workspaceId, item.notificationId, item.event, item.recipientId, item.conversationId, expiresAt, now, now)
     .run();
+  const payloads = Object.fromEntries(item.payloads.map((payload) => [payload.subscriptionId, payload.ciphertext]));
   if (inserted.meta.changes === 1) {
-    await env.DELIVERY_QUEUE.send({ id: recordId, installationId, attempt: 1 } satisfies DeliveryMessage, { contentType: 'json' });
+    await env.DELIVERY_QUEUE.send({ id: recordId, installationId, attempt: 1, payloads } satisfies DeliveryMessage, { contentType: 'json' });
     return { id: recordId, notificationId: item.notificationId, status: 'queued' };
   }
   const existing = await env.DB.prepare('SELECT id, status FROM notifications WHERE installation_id = ? AND workspace_id = ? AND notification_id = ?')
     .bind(installationId, item.workspaceId, item.notificationId)
     .first<{ id: string; status: string }>();
   if (!existing) throw new Error('A notification record vanished');
-  if (existing.status === 'queued') await env.DELIVERY_QUEUE.send({ id: existing.id, installationId, attempt: 1 } satisfies DeliveryMessage, { contentType: 'json' });
+  if (existing.status === 'queued') await env.DELIVERY_QUEUE.send({ id: existing.id, installationId, attempt: 1, payloads } satisfies DeliveryMessage, { contentType: 'json' });
   return { id: existing.id, notificationId: item.notificationId, status: 'duplicate' };
 }
 

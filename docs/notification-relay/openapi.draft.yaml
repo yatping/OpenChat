@@ -105,7 +105,6 @@ paths:
               required: [workspaceId]
               properties:
                 workspaceId: { type: string, maxLength: 64 }
-                displayName: { type: string, maxLength: 40, description: Shown as the notification title. }
       responses:
         '201': { description: Registered }
         '200': { description: Updated }
@@ -176,14 +175,13 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [grant, platform, apnsToken, bundleId, environment, locale]
+              required: [grant, platform, apnsToken, bundleId, environment]
               properties:
                 grant: { type: string, description: Compact JWS signed by the installation. }
                 platform: { type: string, enum: [ios] }
                 apnsToken: { type: string, pattern: '^[0-9a-fA-F]{32,200}$' }
                 bundleId: { type: string, maxLength: 155 }
                 environment: { type: string, enum: [sandbox, production] }
-                locale: { type: string, maxLength: 35 }
                 device:
                   type: object
                   additionalProperties: false
@@ -448,13 +446,25 @@ components:
     NotificationRequest:
       type: object
       additionalProperties: false
-      required: [workspaceId, event, recipientId, conversationId, notificationId]
+      required: [workspaceId, event, recipientId, conversationId, notificationId, payloads]
       properties:
         workspaceId: { type: string, maxLength: 64 }
         event: { $ref: '#/components/schemas/NotificationEvent' }
         recipientId: { type: string, maxLength: 64 }
         conversationId: { type: string, maxLength: 64 }
         notificationId: { type: string, maxLength: 64 }
+        payloads:
+          type: array
+          minItems: 1
+          maxItems: 20
+          description: The notification sealed for each of the recipient's phones (ADR-0017). The relay cannot decrypt it.
+          items:
+            type: object
+            additionalProperties: false
+            required: [subscriptionId, ciphertext]
+            properties:
+              subscriptionId: { type: string, maxLength: 64 }
+              ciphertext: { type: string, pattern: '^[A-Za-z0-9_-]{406}$' }
         expiresAt: { type: string, format: date-time }
         metadata:
           type: object

@@ -36,7 +36,7 @@ const grantFor = (i: Installation, overrides: { sub?: string; aud?: string; wid?
 
 const post = (path: string, body: unknown, headers: Record<string, string> = {}, environment: Env = testEnv) => app.request(path, { method: 'POST', headers: { 'cf-connecting-ip': unique('ip'), ...headers }, body: JSON.stringify(body) }, environment);
 
-const registerBody = (grant: string, more: object = {}) => ({ grant, platform: 'ios', apnsToken: randomToken(), bundleId: 'com.example.app', environment: 'production', locale: 'en-GB', ...more });
+const registerBody = (grant: string, more: object = {}) => ({ grant, platform: 'ios', apnsToken: randomToken(), bundleId: 'com.example.app', environment: 'production', ...more });
 
 interface Registered { deviceId: string; deviceSecret?: string; subscriptionId: string }
 async function register(grant: string, more: object = {}): Promise<Registered> {
@@ -173,6 +173,7 @@ describe('what a device may submit', () => {
     ['a bundle this relay has no key for', { bundleId: 'com.other.app' }, 422],
     ['the other environment', { environment: 'sandbox' }, 422],
     ['an unknown field', { message: 'hello' }, 400],
+    ['a language, which the relay no longer keeps', { locale: 'en-GB' }, 400],
     ['a short token', { apnsToken: 'abcd' }, 400],
     ['a token that is not hex', { apnsToken: 'z'.repeat(64) }, 400],
     ['another platform', { platform: 'android' }, 400],
