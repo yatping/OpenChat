@@ -870,6 +870,69 @@ export const updateContactRoute = createRoute({
   responses: { 200: { description: 'Updated', ...json(ContactSchema) }, default: problemResponse },
 });
 
+export const ContactExportSchema = z
+  .object({
+    exportedAt: z.string(),
+    includesInternalNotes: z.boolean(),
+    contact: ContactSchema.extend({
+      attributes: z.record(z.string(), z.unknown()).nullable(),
+      followUpConsentAt: z.string().nullable(),
+      followUpConsentSource: z.string().nullable(),
+      createdAt: z.string(),
+    }),
+    tags: z.array(z.string()),
+    browsers: z.array(z.object({ id: z.string(), websiteId: z.string(), firstSeenAt: z.string(), lastSeenAt: z.string() })),
+    conversations: z.array(
+      z.object({
+        id: z.string(),
+        websiteId: z.string(),
+        status: z.string(),
+        subject: z.string().nullable(),
+        createdAt: z.string(),
+        messages: z.array(
+          z.object({
+            id: z.string(),
+            from: z.enum(['visitor', 'member', 'system']).openapi({ description: 'Who wrote it, without naming colleagues.' }),
+            type: z.string(),
+            internal: z.boolean(),
+            content: z.string(),
+            createdAt: z.string(),
+            attachments: z.array(z.object({ filename: z.string(), contentType: z.string(), size: z.number().int() })),
+          }),
+        ),
+      }),
+    ),
+    emailSuppressions: z.array(z.object({ email: z.string(), reason: z.string(), createdAt: z.string() })),
+  })
+  .openapi('ContactExport', { description: 'Everything this workspace holds about one contact, for a request from that person. Files are listed, not included.' });
+
+const contactAdminDescription =
+  'For an installation admin who is a member of this workspace. Another member gets 403, and anyone else 404. Recorded in the audit log.';
+
+export const exportContactRoute = createRoute({
+  method: 'get',
+  path: '/api/v1/workspaces/{workspaceId}/contacts/{contactId}/export',
+  tags: ['conversations'],
+  operationId: 'exportContact',
+  summary: 'Export what this workspace holds about a contact',
+  description: `${contactAdminDescription} Internal notes are left out unless \`include=notes\`, because the export is usually given to the person it is about.`,
+  security: bearer,
+  request: { params: contactParams, query: z.object({ include: z.enum(['notes']).optional() }) },
+  responses: { 200: { description: 'Export', ...json(ContactExportSchema) }, default: problemResponse },
+});
+
+export const eraseContactRoute = createRoute({
+  method: 'delete',
+  path: '/api/v1/workspaces/{workspaceId}/contacts/{contactId}',
+  tags: ['conversations'],
+  operationId: 'eraseContact',
+  summary: 'Erase a contact, with their conversations, messages, and files',
+  description: `${contactAdminDescription} Cannot be undone. Email suppressions for their address stay, so that an address that opted out stays out.`,
+  security: bearer,
+  request: { params: contactParams },
+  responses: { 204: { description: 'Erased' }, default: problemResponse },
+});
+
 export const listTagsRoute = createRoute({
   method: 'get',
   path: '/api/v1/workspaces/{workspaceId}/tags',

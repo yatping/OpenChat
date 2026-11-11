@@ -228,3 +228,78 @@ export async function setConversationTags(db: Database, ctx: WorkspaceContext, c
   if (outcome === 'not_found') throw notFound();
   if (outcome === 'unknown_tag') throw new AppError(400, 'unknown_tag', 'One of these tags does not exist in this workspace');
 }
+
+/** How the delivery log names an address without storing it. Erasure finds the log's rows by the same value. */
+export async function emailRecipientHash(email: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(email.toLowerCase()));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
+  const groups = new Map<string, T[]>();
+  for (const item of items) {
+    const group = groups.get(key(item));
+    if (group) group.push(item);
+    else groups.set(key(item), [item]);
+  }
+  return groups;
+}
+
+/** 404 when the contact is not here, and 403 for a member who is not an installation admin (ADR-0016). */
+async function requireContactAdmin(contacts: ReturnType<typeof repositories>['contacts'], contactId: string): Promise<ContactRow> {
+  const row = await contacts.get(contactId);
+  if (!row) throw notFound();
+  if (!(await contacts.callerIsAdmin())) throw new AppError(403, 'forbidden', 'Only an installation admin who is a member of this workspace can do this');
+  return row;
+}
+
+export async function exportContact(db: Database, ctx: WorkspaceContext, contactId: string, includeNotes: boolean) {
+  const contacts = repositories(db, ctx).contacts;
+  await requireContactAdmin(contacts, contactId);
+  const rows = await contacts.exportData(contactId, includeNotes);
+  if (!rows) throw notFound();
+  const files = groupBy(rows.files, (file) => file.messageId);
+  const messages = groupBy(rows.messages, (message) => message.conversationId);
+  return {
+    exportedAt: new Date().toISOString(),
+    includesInternalNotes: includeNotes,
+    contact: {
+      ...toContact(rows.contact),
+      attributes: rows.contact.attributesJson === null ? null : (JSON.parse(rows.contact.attributesJson) as Record<string, unknown>),
+      followUpConsentAt: rows.contact.followUpConsentAt === null ? null : toIso(rows.contact.followUpConsentAt),
+      followUpConsentSource: rows.contact.followUpConsentSource,
+      createdAt: toIso(rows.contact.createdAt),
+    },
+    tags: rows.tags,
+    browsers: rows.browsers.map((b) => ({ id: b.id, websiteId: b.websiteId, firstSeenAt: toIso(b.firstSeenAt), lastSeenAt: toIso(b.lastSeenAt) })),
+    conversations: rows.conversations.map((c) => ({
+      id: c.id,
+      websiteId: c.websiteId,
+      status: c.status,
+      subject: c.subject,
+      createdAt: toIso(c.createdAt),
+      messages: (messages.get(c.id) ?? []).map((m) => ({
+        id: m.id,
+        from: m.senderType,
+        type: m.type,
+        internal: m.visibility === 'internal',
+        content: m.content,
+        createdAt: toIso(m.createdAt),
+        attachments: (files.get(m.id) ?? []).map(({ filename, contentType, size }) => ({ filename, contentType, size })),
+      })),
+    })),
+    emailSuppressions: rows.suppressions.map((s) => ({ email: s.email, reason: s.reason, createdAt: toIso(s.createdAt) })),
+  };
+}
+
+/** Everything the workspace holds about the contact, except suppressions. Files go from storage after this returns. */
+export async function eraseContact(db: Database, ctx: WorkspaceContext, contactId: string): Promise<void> {
+  const contacts = repositories(db, ctx).contacts;
+  const row = await requireContactAdmin(contacts, contactId);
+  const emailHash = row.email === null ? null : await emailRecipientHash(row.email);
+  if (!(await contacts.erase(contactId, { email: row.email, emailHash }))) {
+    // Gone in between, or the caller stopped being an admin.
+    await requireContactAdmin(contacts, contactId);
+    throw notFound();
+  }
+}

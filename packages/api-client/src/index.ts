@@ -8,6 +8,7 @@ import type {
   createTagRoute,
   getContactRoute,
   updateContactRoute,
+  exportContactRoute,
   createWebsiteRoute,
   createWorkspaceRoute,
   getDiscoveryRoute,
@@ -77,6 +78,7 @@ export type RealtimeTicket = Json201<typeof createAgentTicketRoute>;
 export type Tag = Json201<typeof createTagRoute>;
 export type Contact = Json200<typeof getContactRoute>;
 export type ContactUpdate = BodyOf<typeof updateContactRoute>;
+export type ContactExport = Json200<typeof exportContactRoute>;
 
 export class ApiError extends Error {
   readonly status: number;
@@ -195,6 +197,8 @@ export function createClient(options: ClientOptions) {
     markConversationRead: (workspaceId: string, id: string, seq: number) => request<void>('POST', `${conversation(workspaceId, id)}/read`, { deliveredSeq: seq, readSeq: seq }),
     getContact: (workspaceId: string, id: string) => get<Contact>(`${workspace(workspaceId)}/contacts/${encodeURIComponent(id)}`),
     updateContact: (workspaceId: string, id: string, input: ContactUpdate) => request<Contact>('PATCH', `${workspace(workspaceId)}/contacts/${encodeURIComponent(id)}`, input),
+    exportContact: (workspaceId: string, id: string, includeNotes = false) => get<ContactExport>(`${workspace(workspaceId)}/contacts/${encodeURIComponent(id)}/export${includeNotes ? '?include=notes' : ''}`),
+    eraseContact: (workspaceId: string, id: string) => request<void>('DELETE', `${workspace(workspaceId)}/contacts/${encodeURIComponent(id)}`),
     listTags: (workspaceId: string) => get<{ data: Tag[] }>(`${workspace(workspaceId)}/tags`),
     createTag: (workspaceId: string, name: string) => request<Tag>('POST', `${workspace(workspaceId)}/tags`, { name }),
     setConversationTags: (workspaceId: string, id: string, tagIds: string[]) => request<void>('PUT', `${conversation(workspaceId, id)}/tags`, { tagIds }),

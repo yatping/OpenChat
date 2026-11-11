@@ -427,7 +427,7 @@ function Composer(props: { workspaceId: string; conversationId: string; drafts: 
   );
 }
 
-function ContactCard({ workspaceId, contactId }: { workspaceId: string; contactId: string }) {
+function ContactCard({ workspaceId, contactId, onErased }: { workspaceId: string; contactId: string; onErased: () => void }) {
   const client = useQueryClient();
   const contact = useQuery({ queryKey: ['contact', workspaceId, contactId], queryFn: () => api.getContact(workspaceId, contactId) });
   const [edits, setEdits] = useState<{ name?: string; email?: string; phone?: string }>({});
@@ -466,7 +466,56 @@ function ContactCard({ workspaceId, contactId }: { workspaceId: string; contactI
       {save.error ? <p className="error" role="alert">{errorMessage(save.error)}</p> : null}
       {Object.keys(edits).length > 0 && <button className="button-quiet" disabled={save.isPending}>Save contact</button>}
       {data && <p className="text-xs text-slate-600 dark:text-slate-400">First seen {new Date(data.firstSeenAt).toLocaleDateString()}</p>}
+      {data && <ContactRights workspaceId={workspaceId} contactId={contactId} label={data.name ?? data.email ?? 'this visitor'} onErased={onErased} />}
     </form>
+  );
+}
+
+/** For a person asking for their data, or for it to be deleted. Only an installation admin may (ADR-0016). */
+function ContactRights({ workspaceId, contactId, label, onErased }: { workspaceId: string; contactId: string; label: string; onErased: () => void }) {
+  const client = useQueryClient();
+  const me = useQuery({ queryKey: ['me'], queryFn: api.getMe });
+  const [notes, setNotes] = useState(false);
+  const exported = useMutation({
+    mutationFn: () => api.exportContact(workspaceId, contactId, notes),
+    onSuccess: (data) => {
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `contact-${contactId}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    },
+  });
+  const erased = useMutation({
+    mutationFn: () => api.eraseContact(workspaceId, contactId),
+    onSuccess: () => {
+      client.removeQueries({ queryKey: ['contact', workspaceId, contactId] });
+      void client.invalidateQueries({ queryKey: listKey(workspaceId) });
+      onErased();
+    },
+  });
+  if (me.data?.isInstallationAdmin !== true) return null;
+  return (
+    <div className="space-y-2 border-t border-slate-200 pt-2 dark:border-slate-700" aria-label="Personal data">
+      <label className="flex items-center gap-2 text-xs">
+        <input type="checkbox" checked={notes} onChange={(e) => setNotes(e.target.checked)} />
+        Export with notes
+      </label>
+      <button type="button" className="button-quiet" disabled={exported.isPending} onClick={() => exported.mutate()}>Export data</button>
+      <button
+        type="button"
+        className="button-quiet text-red-700 dark:text-red-400"
+        disabled={erased.isPending}
+        onClick={() => {
+          if (window.confirm(`Erase ${label}? This deletes them, their conversations, messages, and files, and cannot be undone.`)) erased.mutate();
+        }}
+      >
+        Erase contact
+      </button>
+      {exported.error ? <p className="error" role="alert">{errorMessage(exported.error)}</p> : null}
+      {erased.error ? <p className="error" role="alert">{errorMessage(erased.error)}</p> : null}
+    </div>
   );
 }
 
@@ -622,7 +671,7 @@ function Thread(props: { workspaceId: string; conversationId: string; members: M
     </section>
     {data && (
       <aside className="space-y-4 lg:w-64 lg:shrink-0">
-        <ContactCard key={data.contactId} workspaceId={workspaceId} contactId={data.contactId} />
+        <ContactCard key={data.contactId} workspaceId={workspaceId} contactId={data.contactId} onErased={props.onBack} />
         <TagPicker workspaceId={workspaceId} conversation={data} />
       </aside>
     )}

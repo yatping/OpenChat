@@ -90,6 +90,12 @@ async function dispatchRow(env: Env, db: Database, row: OutboxRow): Promise<void
     case 'push.subscription_removed':
       await pushJobsFor(env, row);
       return;
+    case 'contact.erased':
+      // The rows went with the erasure. Their files are named under each conversation, so a repeat finds fewer.
+      for (const conversationId of (JSON.parse(row.payloadJson) as { conversationIds: string[] }).conversationIds) {
+        await deleteStoredFiles(env, `w/${row.workspaceId}/c/${conversationId}/`);
+      }
+      return;
     default:
       // A newer Worker's row, read by an older one during a deploy. It stays for a Worker that knows it.
       throw new Error('Unknown outbox topic');
@@ -129,6 +135,16 @@ export function publishRead(c: Context<AppEnv>, event: Extract<DomainEvent, { ki
       ...(event.reader.type === 'member' ? [c.env.CONVERSATION_ROOM.getByName(roomName(event.workspaceId, event.conversationId)).publishDomainEvent(event)] : []),
     ]).catch((error: unknown) => createLogger({ workspaceId: event.workspaceId }).warn('read_publish_failed', { errorName: (error as Error).name })),
   );
+}
+
+/** R2 lists at most 1,000 keys at a time, and deletes as many in one call. */
+async function deleteStoredFiles(env: Env, prefix: string): Promise<void> {
+  for (;;) {
+    const listed = await env.ATTACHMENTS.list({ prefix, limit: 1000 });
+    if (listed.objects.length === 0) return;
+    await env.ATTACHMENTS.delete(listed.objects.map((object) => object.key));
+    if (!listed.truncated) return;
+  }
 }
 
 /** Storage first: if the row went first and this died, nothing would ever find the file again. */
