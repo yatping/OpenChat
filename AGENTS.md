@@ -41,7 +41,7 @@ These are the mistakes this architecture is designed to prevent. Each one is enf
 7. **Queue consumers are idempotent.** Delivery is at least once. Every job has an idempotency key and is acknowledged or retried explicitly.
 8. **Migrations are expand/contract.** A migration and a Worker deploy are not atomic. Every migration must work with the previous Worker version.
 9. **APNs tokens never enter an installation.** Installations hold opaque relay subscription handles.
-10. **The relay never receives content.** Notification schemas are closed. Do not add free-form fields.
+10. **The relay never receives readable content.** The only content it carries is per-phone ciphertext it cannot decrypt ([ADR-0017](docs/architecture/decisions/0017-encrypted-notifications.md)). Notification schemas are closed. Do not add free-form fields.
 11. **Never log** passwords, tokens, keys, full message content, or personal data. Use the shared logger.
 12. **Do not assume a platform limit.** Check [Cloudflare validation](docs/architecture/cloudflare-validation.md) and update it when you learn something new.
 

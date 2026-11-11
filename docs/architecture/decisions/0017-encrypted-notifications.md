@@ -1,6 +1,6 @@
 # ADR-0017: Encrypted notifications through the relay
 
-**Status:** Proposed, awaiting the owner's go-ahead. When accepted, it supersedes the parts of [ADR-0005](0005-relay-trust-model.md) that have the relay compose notification text and hold workspace names and phone languages. It also changes AGENTS.md rule 10, from "the relay never receives content" to "the relay never receives readable content". **Date:** 2026-11-11.
+**Status:** Accepted by the owner, 2026-11-11. Supersedes the parts of [ADR-0005](0005-relay-trust-model.md) that have the relay compose notification text and hold workspace names and phone languages. Changes AGENTS.md rule 10, from "the relay never receives content" to "the relay never receives readable content". Not built yet: until it ships, the relay still sends fixed text.
 
 ## Context
 
