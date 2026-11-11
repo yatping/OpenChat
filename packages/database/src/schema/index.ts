@@ -123,8 +123,6 @@ export const workspaces = sqliteTable(
     relayWorkspaceStatus: text('relay_workspace_status', { enum: ['unregistered', 'registered', 'revoked'] })
       .notNull()
       .default('unregistered'),
-    /** No longer used: the relay holds no workspace names (ADR-0017). Dropped in a later migration. */
-    relayDisplayName: text('relay_display_name'),
     createdAt: ts('created_at'),
     updatedAt: ts('updated_at'),
   },

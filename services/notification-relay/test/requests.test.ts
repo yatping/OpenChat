@@ -315,7 +315,8 @@ describe('workspaces', () => {
     const workspaceId = unique('work');
     expect((await send(me, workspaceBody(workspaceId))).status).toBe(201);
     expect((await send(me, workspaceBody(workspaceId))).status).toBe(200);
-    expect(await testEnv.DB.prepare('SELECT display_name AS n FROM workspaces WHERE installation_id = ? AND workspace_id = ?').bind(me.installationId, workspaceId).first()).toEqual({ n: null });
+    const columns = await testEnv.DB.prepare('SELECT name FROM pragma_table_info(?)').bind('workspaces').all<{ name: string }>();
+    expect(columns.results.map((c) => c.name)).not.toContain('display_name');
   });
 
   it('keeps the same workspace ID separate between installations', async () => {

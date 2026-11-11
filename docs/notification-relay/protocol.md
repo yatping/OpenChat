@@ -308,7 +308,7 @@ notifications   id, installation_id, workspace_id, notification_id, event, recip
                 UNIQUE(installation_id, workspace_id, notification_id)
 ```
 
-`workspaces.display_name` and `devices.locale` are no longer read or written. Migration `0004` emptied them, and a later migration drops them, once no Worker that reads them can still be running.
+The relay keeps no workspace names and no languages. Migration `0004` emptied `workspaces.display_name` and `devices.locale`, and migration `0005` dropped them.
 
 Every read filters by `installation_id`. `workspaceId` is never used alone, because it is only meaningful within an installation. `recipient_id` is the installation's opaque `memberId`.
 

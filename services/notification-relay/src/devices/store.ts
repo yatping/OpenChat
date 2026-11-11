@@ -56,12 +56,11 @@ export async function registerAnonymousDevice(db: D1Database, device: NewDevice,
     db.prepare('DELETE FROM subscriptions WHERE device_id IN (SELECT id FROM devices WHERE bundle_id = ? AND token_lookup = ?)').bind(device.bundleId, device.lookup),
     db
       .prepare(
-        // `locale` is no longer used, and is written empty until a later migration drops it.
-        `INSERT INTO devices (id, secret_hash, platform, bundle_id, environment, apns_token, token_lookup, locale, created_at, updated_at)
-         VALUES (?, ?, 'ios', ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO devices (id, secret_hash, platform, bundle_id, environment, apns_token, token_lookup, created_at, updated_at)
+         VALUES (?, ?, 'ios', ?, ?, ?, ?, ?, ?)
          ON CONFLICT (bundle_id, token_lookup) DO UPDATE SET secret_hash = excluded.secret_hash, environment = excluded.environment, apns_token = excluded.apns_token, updated_at = excluded.updated_at`,
       )
-      .bind(device.newDeviceId, device.secretHash, device.bundleId, device.environment, device.encryptedToken, device.lookup, '', device.now, device.now),
+      .bind(device.newDeviceId, device.secretHash, device.bundleId, device.environment, device.encryptedToken, device.lookup, device.now, device.now),
     db.prepare('SELECT id FROM devices WHERE bundle_id = ? AND token_lookup = ?').bind(device.bundleId, device.lookup),
     db
       .prepare(
