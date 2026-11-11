@@ -32,7 +32,7 @@ Beyond the spec's entities, the schema adds what stated requirements need:
 | `auth_tokens.consumed_by` | The same guard for one-time tokens: later statements in a reset batch apply only to the attempt that spent the token |
 | `conversations.next_automation_at` | Inactivity detection without table scans |
 | `tags`, `conversation_tags`, `contact_tags` | Tagging |
-| `push_subscriptions` | Replaces `Devices`. Holds handles, never APNs tokens |
+| `push_subscriptions` | Replaces `Devices`. Holds handles, never APNs tokens, and `preview_key`, the phone's public key that each notification is encrypted to ([ADR-0017](decisions/0017-encrypted-notifications.md)). Migration `0010` deleted rows without one. `workspaces.relay_display_name` is no longer used, and goes in a later migration |
 | `email_suppressions`, `email_deliveries` | Suppression and duplicate prevention |
 | `email_unsubscribe_links` | One row per link sent, with a hash of its token. Contact erasure must remove these too |
 | `contacts.follow_up_consent_*` | Consent evidence |

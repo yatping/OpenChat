@@ -6,7 +6,7 @@ This guide takes you from nothing to your own OpenChat. Either way, you self-hos
 |---|---|---|
 | You run | The backend, on your Cloudflare account | The backend, a notification relay, and your own iOS app |
 | Your team uses | The dashboard in a browser, and the official OpenChat app | The dashboard, and an app with your name and icon |
-| Push notifications go through | The OpenChat project's relay. It holds your team's device tokens and your workspace names, and sees when a notification is sent, but never receives message content or anything about your visitors | Your relay, with your own Apple push key |
+| Push notifications go through | The OpenChat project's relay. It holds your team's device tokens and sees when a notification is sent. Your backend encrypts each notification for each phone, so the relay carries the message text and workspace name without being able to read them ([ADR-0017](../architecture/decisions/0017-encrypted-notifications.md)). Message text appears in notifications for everyone; each person can hide it on the lock screen with iOS's **Show Previews** setting. Tell your team | Your relay, with your own Apple push key |
 | You need | A Cloudflare account | Also an Apple Developer account and a Mac with Xcode |
 | Steps | [1 to 6](#part-1-everyone) | [1 to 5](#part-1-everyone), then [7 to 10](#part-2-your-own-app) |
 | Time | About 30 minutes | About two hours, most of it in Apple's portals |

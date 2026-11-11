@@ -13,6 +13,8 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 
 function setup(options: { granted?: boolean; config?: PushConfig; relayDown?: boolean } = {}) {
   const values = new Map<string, string>();
+  /** The keychain the notification extension shares, by subscription. */
+  const keys = new Map<string, string>();
   const calls: { url: string; body: Record<string, unknown>; auth: string | null }[] = [];
   const state = { relayDown: options.relayDown ?? false, token: 'aa'.repeat(32), deviceUnknown: false, serverRows: new Set<string>() };
   let n = 0;
@@ -40,12 +42,22 @@ function setup(options: { granted?: boolean; config?: PushConfig; relayDown?: bo
   } as unknown as ApiClient;
   const registrar = createPushRegistrar({
     config: options.config ?? config,
-    native: { requestPermission: async () => options.granted ?? true, deviceToken: async () => state.token, locale: () => 'en-GB' },
+    native: {
+      requestPermission: async () => options.granted ?? true,
+      deviceToken: async () => state.token,
+      createPreviewKey: async (subscriptionId) => {
+        const key = `key-${subscriptionId}`.padEnd(43, 'x');
+        keys.set(subscriptionId, key);
+        return key;
+      },
+      hasPreviewKey: async (subscriptionId) => keys.has(subscriptionId),
+      deletePreviewKey: async (subscriptionId) => void keys.delete(subscriptionId),
+    },
     secure: { get: async (k) => values.get(k) ?? null, set: async (k, v) => void values.set(k, v), remove: async (k) => void values.delete(k) },
     fetch: fetcher as unknown as typeof fetch,
   });
   const sync = (workspaceIds = ['work_a'], discovered: typeof relay | null = relay) => registrar.sync({ connectionId: 'c1', api, relay: discovered, workspaceIds });
-  return { registrar, api, calls, values, state, fetcher, sync, paths: () => calls.map((c) => new URL(c.url).pathname) };
+  return { registrar, api, calls, values, keys, state, fetcher, sync, paths: () => calls.map((c) => new URL(c.url).pathname) };
 }
 
 describe('which relay the app will talk to', () => {
@@ -86,9 +98,26 @@ describe('registering', () => {
     const { sync, calls, api, registrar } = setup();
     await sync();
     expect(registrar.getStatus()).toBe('on');
-    expect(calls[0]!.body).toMatchObject({ grant: 'grant-work_a', platform: 'ios', apnsToken: 'aa'.repeat(32), bundleId: 'org.example.app', environment: 'production', locale: 'en-GB' });
+    expect(calls[0]!.body).toEqual({ grant: 'grant-work_a', platform: 'ios', apnsToken: 'aa'.repeat(32), bundleId: 'org.example.app', environment: 'production' });
     expect(JSON.stringify(vi.mocked(api.recordPushSubscription).mock.calls)).not.toContain('aa'.repeat(32));
-    expect(vi.mocked(api.recordPushSubscription).mock.calls[0]![1]).toEqual({ relaySubscriptionId: 'sub_1', deviceLabel: 'iOS app' });
+    expect(vi.mocked(api.recordPushSubscription).mock.calls[0]![1]).toEqual({ relaySubscriptionId: 'sub_1', previewKey: 'key-sub_1'.padEnd(43, 'x'), deviceLabel: 'iOS app' });
+  });
+
+  it('gives the relay no key, and the installation a key for each subscription', async () => {
+    const { sync, calls, keys, api } = setup();
+    await sync(['work_a', 'work_b']);
+    expect([...keys.keys()].sort()).toEqual(['sub_1', 'sub_2']);
+    expect(JSON.stringify(calls)).not.toContain('key-');
+    expect(vi.mocked(api.recordPushSubscription).mock.calls.map((call) => call[1].previewKey)).toEqual([keys.get('sub_1'), keys.get('sub_2')]);
+  });
+
+  it('registers again when the key is gone, and drops the old key when it does', async () => {
+    const { sync, keys, api } = setup();
+    await sync();
+    keys.delete('sub_1');
+    await sync();
+    expect(api.createPushGrant).toHaveBeenCalledTimes(2);
+    expect([...keys.keys()]).toEqual(['sub_2']);
   });
 
   it('asks nothing of the network without permission', async () => {
@@ -173,11 +202,12 @@ describe('a device the relay erased', () => {
 });
 
 describe('signing out', () => {
-  it('tells the relay and the installation, and keeps no record of this connection', async () => {
-    const { sync, registrar, api, calls, values } = setup();
+  it('tells the relay and the installation, and keeps no record or key for this connection', async () => {
+    const { sync, registrar, api, calls, values, keys } = setup();
     await sync();
     calls.length = 0;
     await registrar.forget('c1', api);
+    expect(keys.size).toBe(0);
     expect(calls).toEqual([{ url: `${RELAY}/v1/devices/unregister`, body: { deviceId: 'dev_1', subscriptionId: 'sub_1' }, auth: 'Bearer secret' }]);
     expect(api.removePushSubscription).toHaveBeenCalledWith('work_a', 'psub_sub_1');
     expect([...values.keys()].filter((k) => k.includes('subscriptions'))).toEqual([]);

@@ -26,7 +26,7 @@
                                   v                                                  v
                        +------------------------------------------------------------------+
                        | Notification relay: managed by the project, or customer-deployed |
-                       | Worker + D1 + RelayGuard DO + Queue. No conversation data.       |
+                       | Worker + D1 + RelayGuard DO + Queue. Only per-phone ciphertext.  |
                        +------------------------------------------------------------------+
                                   |
                                   v

@@ -57,7 +57,7 @@ Key rotation is a signed request by the current key adding a new key, which is a
 
 ### 2. Register a workspace
 
-`POST /v1/workspaces/register` (signed) with `workspaceId` and an optional `displayName` of up to 40 characters, used as the notification title. `POST /v1/workspaces/revoke` stops delivery and deletes that workspace's subscriptions.
+`POST /v1/workspaces/register` (signed) with `workspaceId` only. The workspace's name is never sent: it travels inside each phone's ciphertext ([ADR-0017](../architecture/decisions/0017-encrypted-notifications.md)). `POST /v1/workspaces/revoke` stops delivery and deletes that workspace's subscriptions.
 
 ### 3. Register a device
 
@@ -67,15 +67,16 @@ App                          Installation                         Relay
  | POST /push/grants  ----------->|                                 |
  |    <-- grant (EdDSA JWS, 5 min)|                                 |
  |                                                                  |
- | POST /v1/devices/register { grant, apnsToken, bundleId, env, locale, device } ->|
+ | POST /v1/devices/register { grant, apnsToken, bundleId, env, device } ->|
  |                                                                  | verify the grant against
  |                                                                  | the installation's key
  |    <-- { deviceId, deviceSecret (first time only), subscriptionId } -----------|
  |                                |                                 |
- | POST /push/subscriptions { subscriptionId } ->|                  |
+ | make an X25519 key for subscriptionId, private half in the keychain |
+ | POST /push/subscriptions { subscriptionId, previewKey } ->|      |
 ```
 
-The installation learns only the opaque `subscriptionId`, and never the token.
+The installation learns only the opaque `subscriptionId` and the phone's public key for it, and never the token. The relay never sees the key. The phone keeps the private key in a keychain group it shares with its notification extension, readable after the first unlock and never backed up.
 
 If the device sends its ID and secret, the same device is kept and no new secret is returned. With neither, but a token already on file, holding the token is the proof: it is an app reinstalled, or a phone passed on. The device gets a new secret, and **every earlier subscription of that device is removed**, so nobody receives a previous user's pushes. A different member signing in on the same device replaces the subscription for that workspace with a new `subscriptionId`.
 
@@ -178,28 +179,31 @@ POST /v1/notifications/send
   "recipientId": "mem_01JC...",
   "conversationId": "conv_01JC...",
   "notificationId": "ntf_01JC...",
+  "payloads": [{ "subscriptionId": "sub_01JC...", "ciphertext": "<406 base64url characters>" }],
   "expiresAt": "2026-11-03T11:00:00Z",
   "metadata": { "websiteId": "site_01JC..." }
 }
 ```
 
-- The schema is **closed**: unknown fields return 400. `metadata` accepts only `websiteId`. This is how the "no conversation data" promise is enforced in code.
+- The schema is **closed**: unknown fields return 400. `metadata` accepts only `websiteId`. The only content is `payloads`: the notification [sealed](#encrypted-notification-format) by the installation for each of the recipient's phones, which the relay cannot decrypt. This is how "the relay never receives readable content" is enforced in code.
+- `payloads` is required: 1 to 20 entries, one per subscription, each ciphertext exactly 406 characters. The relay sends each phone only its own, and nothing to a phone without one.
 - `event`: `new_conversation`, `new_message`, `conversation_assigned`, `conversation_transferred`, `mention`, `conversation_updated`.
 - `notificationId` is unique per recipient and stable across retries. The installation derives it from `(eventId, memberId)`.
-- `POST /v1/notifications/batch` takes `{ "notifications": [...] }`, up to 100 items for one workspace, and returns a per-item result.
+- `POST /v1/notifications/batch` takes `{ "notifications": [...] }`, up to 100 items for one workspace, and returns a per-item result. Notification requests may be up to 1 MiB; other requests, 64 KiB.
 - `expiresAt` defaults to one hour, and is limited to one day.
 - The response is `202`, with an `id` to check. A duplicate returns the original `id` and status.
+- The ciphertext travels only in the delivery queue's message, until it is sent or the retries end. It is never written to D1 and never logged.
 
 `GET /v1/notifications/{id}` is signed, and returns counts per outcome, but never tokens or device data.
 
 ### APNs payload
 
-The relay, not the installation, composes the notification text. So a malicious installation cannot use the official app's identity to display arbitrary phishing text, apart from its own `displayName`, shown as a label.
+The relay writes no text. Each phone receives only its own ciphertext, which its Notification Service Extension decrypts to show the workspace, the sender and the message.
 
 ```json
 {
   "aps": {
-    "alert": { "title": "Company A", "body": "New message" },
+    "alert": { "loc-key": "OC_NEW_MESSAGE" },
     "sound": "default",
     "thread-id": "<first 32 hex of SHA-256(installationId + conversationId)>",
     "mutable-content": 1
@@ -210,7 +214,9 @@ The relay, not the installation, composes the notification text. So a malicious 
     "installationId": "inst_01JC...",
     "workspaceId": "work_01JC...",
     "conversationId": "conv_01JC...",
-    "notificationId": "ntf_01JC..."
+    "notificationId": "ntf_01JC...",
+    "subscriptionId": "sub_01JC...",
+    "c": "<this phone's sealed notification>"
   }
 }
 ```
@@ -224,7 +230,7 @@ The relay, not the installation, composes the notification text. So a malicious 
 | `apns-collapse-id` | Hash of installation, conversation, and event, at most 64 bytes, so a burst collapses to one |
 | `apns-id` | Derived from `notificationId` |
 
-The body text uses the device's stored `locale`, from a table in the relay, which holds only English so far. There is no badge number, because no single server knows the total across installations. The app computes it locally.
+`loc-key` is `OC_` and the event in capitals. If the extension cannot decrypt in time, iOS shows the app's own phrase for it, in the phone's language, with no workspace name. The phrases are in the app's [config plugin](../../apps/mobile/plugins/notification-service/index.ts). The payload is about 1 KB, whatever the number of phones. There is no badge number, because no single server knows the total across installations. The app computes it locally.
 
 ### Delivery pipeline
 
@@ -275,7 +281,7 @@ A self-check reveals a platform behaviour change. Once a day, or on `POST /v1/op
 
 ## Encrypted notification format
 
-[ADR-0017](../architecture/decisions/0017-encrypted-notifications.md) replaces the relay's fixed text with text the installation encrypts for each phone. This section defines the format, implemented in [`notification-crypto.ts`](../../packages/notification-protocol/src/notification-crypto.ts). The relay and app switch to it in the next change; until then, the relay still writes the text described above.
+[ADR-0017](../architecture/decisions/0017-encrypted-notifications.md): the installation encrypts each notification for each phone. This section defines the format, implemented in [`notification-crypto.ts`](../../packages/notification-protocol/src/notification-crypto.ts) and, for the phone, in the extension's [`NotificationCrypto.swift`](../../apps/mobile/plugins/notification-service/ios/NotificationCrypto.swift).
 
 - **Key.** Each subscription has an X25519 key pair made on the phone. The public key, 32 bytes as base64url (`previewKey`), goes to the installation only.
 - **Cipher.** HPKE (RFC 9180), base mode, single shot: DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, AES-128-GCM. `info` is `OpenChat notification v1`.
@@ -283,22 +289,26 @@ A self-check reveals a platform behaviour change. Once a day, or on `POST /v1/op
 - **Plaintext.** Exactly 256 bytes: a 2-byte big-endian length, the UTF-8 JSON `{"v":1,"title":…,"sender":…,"text":…}`, then zeros. A reader refuses non-zero padding.
 - **Content.** At most 40, 40 and 150 characters. Line and control characters become spaces and bidi overrides are removed. If the JSON does not fit, the text is shortened first, then the sender, then the title, ending with `…`, never inside a character.
 - **Sealed form.** `enc` (32 bytes) then the ciphertext and tag (272 bytes), as 406 base64url characters, the same for every notification.
+- **Text.** `title` is the workspace name. For a message, `sender` is the contact's or colleague's name, or "Visitor", and `text` is the message, "Photo", "File", or for an internal note, "Note: " and the note. An assignment has no sender, and the text "Conversation assigned to you". The text is English for now.
+- **Who decides.** Nobody switches this off: there is no plain-text path. Each person hides message text on the lock screen with iOS's **Show Previews** setting.
 
 ## Relay data
 
-Own D1 database. No conversation data, and **no messages, names, or email addresses**.
+Own D1 database. No conversation data, and **no messages, names, languages, or email addresses**. Ciphertext is never stored.
 
 ```text
 installations   id, base_url, status, quota_tier, created_at
 installation_keys  installation_id, key_id, public_key, status, created_at
-workspaces      installation_id, workspace_id, display_name, status
-devices         id, secret_hash, platform, bundle_id, environment, apns_token, token_lookup, locale, created_at, updated_at
+workspaces      installation_id, workspace_id, status
+devices         id, secret_hash, platform, bundle_id, environment, apns_token, token_lookup, created_at, updated_at
                 UNIQUE(bundle_id, token_lookup)
 subscriptions   id, device_id, installation_id, workspace_id, recipient_id, muted, created_at
                 UNIQUE(device_id, installation_id, workspace_id)
 notifications   id, installation_id, workspace_id, notification_id, event, recipient_id, status, counts, created_at
                 UNIQUE(installation_id, workspace_id, notification_id)
 ```
+
+`workspaces.display_name` and `devices.locale` are no longer read or written. Migration `0004` emptied them, and a later migration drops them, once no Worker that reads them can still be running.
 
 Every read filters by `installation_id`. `workspaceId` is never used alone, because it is only meaningful within an installation. `recipient_id` is the installation's opaque `memberId`.
 
@@ -357,15 +367,15 @@ An installation may support both one day. `push_subscriptions.relay_id` and `rel
 |---|---|
 | Unauthenticated push | Signed requests only, with no exceptions |
 | Replay | Timestamp window, nonce store, `notificationId` dedupe |
-| Relay database leak | Public keys only; device secrets hashed; tokens encrypted; no content |
+| Relay database leak | Public keys only; device secrets hashed; tokens encrypted; no content, not even ciphertext |
 | Malicious installation pushing to strangers | It cannot obtain tokens, and subscriptions need a device-submitted grant |
-| Malicious installation phishing its own connected users | Fixed body text; `displayName` limited to 40 characters and sanitised; per-installation quotas; operator can revoke |
+| Malicious installation phishing its own connected users | Since ADR-0017 it can write any text into its own users' notifications, as it can into their conversations. It still reaches only people who connected to it. Control, line and bidi characters are removed; per-installation quotas; operator can revoke |
 | Malicious installation sending a fake relay URL to harvest tokens | Build-time relay allowlist in the app |
 | Workspace ID collision or spoofing | All keys scoped by `installationId`; verified against the signature |
 | Stolen grant | Short-lived, single-use, audience-bound. It needs a token to be useful, and the worst outcome is a subscription for the thief's own device under that member; the member's installation controls grant issuance |
 | Stolen device secret | Changes only that device's token. Delete and re-register to rotate |
 | Stolen installation key | The operator revokes it, by hand in D1 for now. Rotation is not built, so recovery means a new installation ID. Limited to pushing to that installation's own subscribers |
-| Compromised relay | It could send pushes to registered devices, but has no content and no way to read installations. Apps always authenticate separately to fetch |
+| Compromised relay | It could send pushes to registered devices, but only with the fallback phrases: it cannot forge or read ciphertext, which is bound to the notification and phone. It has no way to read installations. Apps always authenticate separately to fetch |
 | App impersonation for registration (later) | App Attest in a future version |
 
 ## Testing requirements

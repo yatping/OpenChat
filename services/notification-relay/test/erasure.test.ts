@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers';
-import { importPrivateKey, signGrant, signRequest, toBase64Url } from '@openchat/notification-protocol';
+import { importPrivateKey, NOTIFICATION_SEALED_LENGTH, signGrant, signRequest, toBase64Url } from '@openchat/notification-protocol';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Env } from '../src/env';
 import { createApp } from '../src/index';
@@ -37,7 +37,7 @@ const grantFor = (i: Installation) => {
 const post = (path: string, body: unknown, headers: Record<string, string> = {}) => app.request(path, { method: 'POST', headers: { 'cf-connecting-ip': unique('ip'), ...headers }, body: JSON.stringify(body) }, testEnv);
 
 async function register(grant: string, device?: { id: string; secret: string }) {
-  const response = await post('/v1/devices/register', { grant, platform: 'ios', apnsToken: randomToken(), bundleId: 'com.example.app', environment: 'production', locale: 'en-GB', ...(device ? { device } : {}) });
+  const response = await post('/v1/devices/register', { grant, platform: 'ios', apnsToken: randomToken(), bundleId: 'com.example.app', environment: 'production', ...(device ? { device } : {}) });
   expect(response.status).toBe(201);
   return (await response.json()) as { deviceId: string; deviceSecret?: string; subscriptionId: string };
 }
@@ -71,7 +71,7 @@ async function populated() {
   const shared = await register(await grantFor(leaving));
   await register(await grantFor(staying), { id: shared.deviceId, secret: shared.deviceSecret! });
   const only = await register(await grantFor(leaving));
-  const sent = await signedPost(leaving, '/v1/notifications/send', { workspaceId: leaving.workspaceId, event: 'new_message', recipientId: 'mem_a', conversationId: 'conv_1', notificationId: unique('ntf') }, { workspaceId: leaving.workspaceId });
+  const sent = await signedPost(leaving, '/v1/notifications/send', { workspaceId: leaving.workspaceId, event: 'new_message', recipientId: 'mem_a', conversationId: 'conv_1', notificationId: unique('ntf'), payloads: [{ subscriptionId: 'sub_any', ciphertext: 'A'.repeat(NOTIFICATION_SEALED_LENGTH) }] }, { workspaceId: leaving.workspaceId });
   expect(sent.status).toBe(202);
   return { leaving, staying, shared, only };
 }
@@ -98,7 +98,7 @@ describe('an installation unregistering', () => {
     const { leaving } = await populated();
     expect((await signedPost(leaving, '/v1/installations/unregister', {})).status).toBe(204);
     expect((await signedPost(leaving, '/v1/installations/unregister', {})).status).toBe(401);
-    const sent = await signedPost(leaving, '/v1/notifications/send', { workspaceId: leaving.workspaceId, event: 'new_message', recipientId: 'mem_a', conversationId: 'conv_1', notificationId: unique('ntf') }, { workspaceId: leaving.workspaceId });
+    const sent = await signedPost(leaving, '/v1/notifications/send', { workspaceId: leaving.workspaceId, event: 'new_message', recipientId: 'mem_a', conversationId: 'conv_1', notificationId: unique('ntf'), payloads: [{ subscriptionId: 'sub_any', ciphertext: 'A'.repeat(NOTIFICATION_SEALED_LENGTH) }] }, { workspaceId: leaving.workspaceId });
     expect(sent.status).toBe(401);
   });
 

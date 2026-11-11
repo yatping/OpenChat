@@ -18,13 +18,26 @@ export type NotificationEvent = (typeof NOTIFICATION_EVENTS)[number];
 export type PushEnvironment = 'sandbox' | 'production';
 export type Platform = 'ios';
 
-/** Closed by design. Adding free text here would break the promise that the relay receives no content. */
+/** Each person may have this many subscriptions, so a notification carries at most this many payloads. */
+export const MAX_NOTIFICATION_PAYLOADS = 20;
+
+/** One phone's copy of the notification, sealed with `sealNotification`. The relay cannot read it. */
+export interface NotificationPayload {
+  subscriptionId: string;
+  ciphertext: string;
+}
+
+/**
+ * Closed by design. The only content is per-phone ciphertext the relay cannot decrypt (ADR-0017). Adding a
+ * readable field here would break the promise that the relay receives no readable content.
+ */
 export interface NotificationRequest {
   workspaceId: string;
   event: NotificationEvent;
   recipientId: string;
   conversationId: string;
   notificationId: string;
+  payloads: NotificationPayload[];
   expiresAt?: string;
   metadata?: { websiteId?: string };
 }
@@ -43,7 +56,7 @@ export interface NotificationStatus {
   updatedAt: string;
 }
 
-/** The custom key inside the APNs payload. The app routes from this alone. */
+/** The custom key inside the APNs payload. The app routes from this alone, and its extension decrypts `c`. */
 export interface PushData {
   v: 1;
   event: NotificationEvent;
@@ -51,6 +64,9 @@ export interface PushData {
   workspaceId: string;
   conversationId: string;
   notificationId: string;
+  subscriptionId: string;
+  /** This phone's sealed notification. */
+  c: string;
 }
 
 export interface DeviceGrantClaims {
@@ -69,7 +85,6 @@ export interface DeviceRegisterRequest {
   apnsToken: string;
   bundleId: string;
   environment: PushEnvironment;
-  locale: string;
   device?: { id: string; secret: string };
 }
 

@@ -18,6 +18,8 @@ export interface DeliveryMessage {
   attempt: number;
   /** On a retry, only the devices still outstanding. */
   deviceIds?: string[];
+  /** Sealed notifications by subscription ID. Held only here, never in D1, and never logged. */
+  payloads?: Record<string, string>;
 }
 
 interface Record_ {
@@ -31,14 +33,13 @@ interface Record_ {
   status: string;
   processedAttempt: number;
   expiresAt: number;
-  title: string | null;
 }
 
 interface Target {
   deviceId: string;
+  subscriptionId: string;
   bundleId: string;
   token: string;
-  locale: string;
   muted: number;
 }
 
@@ -46,8 +47,8 @@ export function backoffSeconds(attempt: number): number {
   return BACKOFF_SECONDS[Math.min(attempt - 1, BACKOFF_SECONDS.length - 1)]!;
 }
 
-async function deliverOne(env: Env, transport: ApnsTransport, record: Record_, target: Target): Promise<'delivered' | 'invalid' | 'failed' | 'retry'> {
-  const push = await composePush({ ...record, title: record.title, locale: target.locale });
+async function deliverOne(env: Env, transport: ApnsTransport, record: Record_, target: Target, sealed: string): Promise<'delivered' | 'invalid' | 'failed' | 'retry'> {
+  const push = await composePush({ ...record, subscriptionId: target.subscriptionId, c: sealed });
   const token = await decryptToken(env.RELAY_TOKEN_KEY!, target.bundleId, target.token);
   const outcome = await sendToApns(env, transport, { deviceToken: token, topic: target.bundleId, ...push });
   const fields = { jobType: 'apns_send', errorCode: outcome.response?.reason ?? ('failure' in outcome ? outcome.failure : outcome.action), ...(outcome.response ? { status: outcome.response.status } : {}), installationId: record.installationId };
@@ -82,8 +83,8 @@ export async function deliver(env: Env, transport: ApnsTransport, message: Deliv
   const record = await db
     .prepare(
       `SELECT n.id, n.installation_id AS installationId, n.workspace_id AS workspaceId, n.notification_id AS notificationId, n.event, n.recipient_id AS recipientId,
-              n.conversation_id AS conversationId, n.status, n.processed_attempt AS processedAttempt, n.expires_at AS expiresAt, w.display_name AS title
-       FROM notifications n LEFT JOIN workspaces w ON w.installation_id = n.installation_id AND w.workspace_id = n.workspace_id
+              n.conversation_id AS conversationId, n.status, n.processed_attempt AS processedAttempt, n.expires_at AS expiresAt
+       FROM notifications n
        WHERE n.id = ? AND n.installation_id = ?`,
     )
     .bind(message.id, message.installationId)
@@ -93,7 +94,7 @@ export async function deliver(env: Env, transport: ApnsTransport, message: Deliv
   const now = Date.now();
   const rows = await db
     .prepare(
-      `SELECT d.id AS deviceId, d.bundle_id AS bundleId, d.apns_token AS token, d.locale, s.muted
+      `SELECT d.id AS deviceId, s.id AS subscriptionId, d.bundle_id AS bundleId, d.apns_token AS token, s.muted
        FROM subscriptions s JOIN devices d ON d.id = s.device_id
        JOIN workspaces w ON w.installation_id = s.installation_id AND w.workspace_id = s.workspace_id AND w.status = 'active'
        WHERE s.installation_id = ? AND s.workspace_id = ? AND s.recipient_id = ?`,
@@ -101,12 +102,15 @@ export async function deliver(env: Env, transport: ApnsTransport, message: Deliv
     .bind(record.installationId, record.workspaceId, record.recipientId)
     .all<Target>();
   const wanted = message.deviceIds ? new Set(message.deviceIds) : null;
-  const targets = rows.results.filter((row) => !wanted || wanted.has(row.deviceId));
+  // A message queued by an earlier version has none, and so delivers nothing.
+  const payloads = message.payloads ?? {};
+  // A phone the installation sent no ciphertext for gets nothing: there is no readable fallback to send instead.
+  const targets = rows.results.filter((row) => (!wanted || wanted.has(row.deviceId)) && payloads[row.subscriptionId] !== undefined);
   const muted = wanted ? 0 : targets.filter((t) => t.muted).length;
   const active = targets.filter((t) => !t.muted);
 
   const results = { delivered: 0, invalid: 0, failed: 0 };
-  const retry: string[] = [];
+  const retry: Target[] = [];
   const invalid: string[] = [];
   const expired = now >= record.expiresAt;
   if (expired) {
@@ -117,8 +121,8 @@ export async function deliver(env: Env, transport: ApnsTransport, message: Deliv
       Array.from({ length: Math.min(CONCURRENCY, active.length) }, async () => {
         while (next < active.length) {
           const target = active[next++]!;
-          const result = await deliverOne(env, transport, record, target);
-          if (result === 'retry') retry.push(target.deviceId);
+          const result = await deliverOne(env, transport, record, target, payloads[target.subscriptionId]!);
+          if (result === 'retry') retry.push(target);
           else {
             results[result] += 1;
             if (result === 'invalid') invalid.push(target.deviceId);
@@ -131,9 +135,18 @@ export async function deliver(env: Env, transport: ApnsTransport, message: Deliv
   const delay = backoffSeconds(message.attempt);
   const canRetry = retry.length > 0 && Date.now() + delay * 1000 < record.expiresAt;
   if (retry.length > 0 && !canRetry) results.failed += retry.length;
-  if (canRetry) await env.DELIVERY_QUEUE.send({ id: record.id, installationId: record.installationId, attempt: message.attempt + 1, deviceIds: retry } satisfies DeliveryMessage, { delaySeconds: delay, contentType: 'json' });
+  if (canRetry) {
+    const next: DeliveryMessage = {
+      id: record.id,
+      installationId: record.installationId,
+      attempt: message.attempt + 1,
+      deviceIds: retry.map((target) => target.deviceId),
+      payloads: Object.fromEntries(retry.map((target) => [target.subscriptionId, payloads[target.subscriptionId]!])),
+    };
+    await env.DELIVERY_QUEUE.send(next, { delaySeconds: delay, contentType: 'json' });
+  }
 
-  const hadNothing = !wanted && rows.results.length === 0;
+  const hadNothing = !wanted && targets.length === 0;
   const status = canRetry ? 'delivering' : hadNothing ? 'no_devices' : expired || (retry.length > 0 && !canRetry) ? 'expired' : 'completed';
   await db.batch([
     ...invalid.flatMap((deviceId) => [db.prepare('DELETE FROM subscriptions WHERE device_id = ?').bind(deviceId), db.prepare('DELETE FROM devices WHERE id = ?').bind(deviceId)]),

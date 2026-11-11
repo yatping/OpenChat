@@ -9,7 +9,6 @@ export interface NewDevice {
   environment: 'sandbox' | 'production';
   encryptedToken: string;
   lookup: string;
-  locale: string;
   now: number;
 }
 
@@ -57,11 +56,12 @@ export async function registerAnonymousDevice(db: D1Database, device: NewDevice,
     db.prepare('DELETE FROM subscriptions WHERE device_id IN (SELECT id FROM devices WHERE bundle_id = ? AND token_lookup = ?)').bind(device.bundleId, device.lookup),
     db
       .prepare(
+        // `locale` is no longer used, and is written empty until a later migration drops it.
         `INSERT INTO devices (id, secret_hash, platform, bundle_id, environment, apns_token, token_lookup, locale, created_at, updated_at)
          VALUES (?, ?, 'ios', ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (bundle_id, token_lookup) DO UPDATE SET secret_hash = excluded.secret_hash, environment = excluded.environment, apns_token = excluded.apns_token, locale = excluded.locale, updated_at = excluded.updated_at`,
+         ON CONFLICT (bundle_id, token_lookup) DO UPDATE SET secret_hash = excluded.secret_hash, environment = excluded.environment, apns_token = excluded.apns_token, updated_at = excluded.updated_at`,
       )
-      .bind(device.newDeviceId, device.secretHash, device.bundleId, device.environment, device.encryptedToken, device.lookup, device.locale, device.now, device.now),
+      .bind(device.newDeviceId, device.secretHash, device.bundleId, device.environment, device.encryptedToken, device.lookup, '', device.now, device.now),
     db.prepare('SELECT id FROM devices WHERE bundle_id = ? AND token_lookup = ?').bind(device.bundleId, device.lookup),
     db
       .prepare(
@@ -84,19 +84,19 @@ export async function findDeviceSecret(db: D1Database, deviceId: string): Promis
 }
 
 /** A known device's token may have changed, and another device row may hold that token after a restore. */
-export async function updateDeviceToken(db: D1Database, deviceId: string, device: Pick<NewDevice, 'bundleId' | 'encryptedToken' | 'lookup' | 'now'> & { locale?: string; environment?: NewDevice['environment'] }): Promise<void> {
+export async function updateDeviceToken(db: D1Database, deviceId: string, device: Pick<NewDevice, 'bundleId' | 'encryptedToken' | 'lookup' | 'now'> & { environment?: NewDevice['environment'] }): Promise<void> {
   await db.batch([
     ...deleteOtherHolderOfToken(db, device, deviceId),
     db
-      .prepare('UPDATE devices SET apns_token = ?, token_lookup = ?, locale = COALESCE(?, locale), environment = COALESCE(?, environment), updated_at = ? WHERE id = ?')
-      .bind(device.encryptedToken, device.lookup, device.locale ?? null, device.environment ?? null, device.now, deviceId),
+      .prepare('UPDATE devices SET apns_token = ?, token_lookup = ?, environment = COALESCE(?, environment), updated_at = ? WHERE id = ?')
+      .bind(device.encryptedToken, device.lookup, device.environment ?? null, device.now, deviceId),
   ]);
 }
 
-export async function subscribeKnownDevice(db: D1Database, deviceId: string, device: Pick<NewDevice, 'bundleId' | 'encryptedToken' | 'lookup' | 'now' | 'locale' | 'environment'>, sub: NewSubscription): Promise<string | null> {
+export async function subscribeKnownDevice(db: D1Database, deviceId: string, device: Pick<NewDevice, 'bundleId' | 'encryptedToken' | 'lookup' | 'now' | 'environment'>, sub: NewSubscription): Promise<string | null> {
   const results = await db.batch([
     ...deleteOtherHolderOfToken(db, device, deviceId),
-    db.prepare('UPDATE devices SET apns_token = ?, token_lookup = ?, locale = ?, environment = ?, updated_at = ? WHERE id = ?').bind(device.encryptedToken, device.lookup, device.locale, device.environment, device.now, deviceId),
+    db.prepare('UPDATE devices SET apns_token = ?, token_lookup = ?, environment = ?, updated_at = ? WHERE id = ?').bind(device.encryptedToken, device.lookup, device.environment, device.now, deviceId),
     upsertSubscription(db, deviceId, sub),
     readSubscription(db, deviceId, sub),
   ]);

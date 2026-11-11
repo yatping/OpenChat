@@ -123,7 +123,7 @@ export const workspaces = sqliteTable(
     relayWorkspaceStatus: text('relay_workspace_status', { enum: ['unregistered', 'registered', 'revoked'] })
       .notNull()
       .default('unregistered'),
-    /** The name the relay holds, which it shows as the notification title. A rename is sent with the next notification. */
+    /** No longer used: the relay holds no workspace names (ADR-0017). Dropped in a later migration. */
     relayDisplayName: text('relay_display_name'),
     createdAt: ts('created_at'),
     updatedAt: ts('updated_at'),
@@ -527,6 +527,8 @@ export const pushSubscriptions = sqliteTable(
     relayId: text('relay_id').notNull(),
     /** Opaque handle issued by the relay. */
     relaySubscriptionId: text('relay_subscription_id').notNull(),
+    /** The phone's X25519 public key for this subscription. Notifications are encrypted to it (ADR-0017). */
+    previewKey: text('preview_key').notNull().default(''),
     platform: text('platform', { enum: ['ios'] }).notNull(),
     deviceLabel: text('device_label'),
     createdAt: ts('created_at'),

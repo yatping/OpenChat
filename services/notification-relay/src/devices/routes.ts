@@ -21,7 +21,6 @@ const registerBody = z.strictObject({
   apnsToken,
   bundleId: z.string().max(155),
   environment: z.enum(['sandbox', 'production']),
-  locale: z.string().regex(/^[A-Za-z0-9-]{2,35}$/),
   device: z.strictObject({ id: deviceId, secret: z.string().max(128) }).optional(),
 });
 const tokenBody = z.strictObject({ deviceId, apnsToken });
@@ -97,7 +96,7 @@ export function deviceRoutes() {
     const encryptedToken = await encryptToken(tokenKey, body.bundleId, body.apnsToken);
     const lookup = await tokenLookup(tokenKey, body.bundleId, body.apnsToken);
     const sub = { subscriptionId: newOpaqueId('sub'), installationId: grant.claims.iss, workspaceId: grant.claims.wid, recipientId: grant.claims.sub, now };
-    const fields = { bundleId: body.bundleId, environment: body.environment, encryptedToken, lookup, locale: body.locale, now };
+    const fields = { bundleId: body.bundleId, environment: body.environment, encryptedToken, lookup, now };
 
     if (body.device) {
       const subscribed = await subscribeKnownDevice(c.env.DB, body.device.id, fields, sub);

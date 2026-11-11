@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { ExpoConfig } from 'expo/config';
 // With its extension, because Expo loads this file without TypeScript's module resolution.
 import { type AppVariant, variantProblems } from './config/variant.ts';
+import withNotificationService from './plugins/notification-service/index.ts';
 
 /** Reads `variants/<id>/variant.json`. A white-label build adds a directory, and sets APP_VARIANT. */
 function loadVariant(id: string): AppVariant {
@@ -24,7 +25,7 @@ const profile = process.env.APP_PROFILE ?? 'development';
 const pushPlugin: [string, { mode: string }][] = variant.push.enabled ? [['expo-notifications', { mode: profile === 'development' ? 'development' : 'production' }]] : [];
 
 // Nothing secret belongs in `extra`: it is embedded in the app, and anyone can read it.
-export default (): ExpoConfig => ({
+const config = (): ExpoConfig => ({
   name: variant.appName,
   slug: variant.slug,
   version: '0.1.0',
@@ -52,3 +53,6 @@ export default (): ExpoConfig => ({
     branding: variant.branding,
   },
 });
+
+// With push, a notification extension decrypts each notification on the phone (ADR-0017).
+export default (): ExpoConfig => (variant.push.enabled ? withNotificationService(config()) : config());

@@ -1,11 +1,11 @@
 import { env } from 'cloudflare:workers';
 import { runInDurableObject } from 'cloudflare:test';
-import { importPrivateKey, NOTIFICATION_EVENTS, signRequest, toBase64Url, type ApnsResponse } from '@openchat/notification-protocol';
+import { importPrivateKey, NOTIFICATION_EVENTS, NOTIFICATION_SEALED_LENGTH, signRequest, toBase64Url, type ApnsResponse } from '@openchat/notification-protocol';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { clearProviderTokenCache } from '../src/apns/client';
 import { MockApnsTransport } from '../src/apns/transport';
 import { backoffSeconds, deliver, type DeliveryMessage, handleDeliveryBatch } from '../src/delivery/consumer';
-import { bodyText, composePush } from '../src/delivery/payload';
+import { composePush, locKey } from '../src/delivery/payload';
 import { deleteOldNotifications, notificationBody } from '../src/delivery/routes';
 import { encryptToken, newOpaqueId, tokenLookup } from '../src/devices/crypto';
 import type { Env } from '../src/env';
@@ -54,7 +54,16 @@ async function addDevice(i: Installation, recipientId: string, more: { muted?: n
   return { deviceId, token };
 }
 
-const item = (i: Installation, more: Record<string, unknown> = {}) => ({ workspaceId: i.workspaceId, event: 'new_message', recipientId: 'mem_a', conversationId: 'conv_a', notificationId: unique('ntf'), ...more });
+/** A stand-in for a sealed notification. The relay never decrypts, so only the size matters to it. */
+const sealed = (fill = 'A') => fill.repeat(NOTIFICATION_SEALED_LENGTH);
+const item = (i: Installation, more: Record<string, unknown> = {}) => ({ workspaceId: i.workspaceId, event: 'new_message', recipientId: 'mem_a', conversationId: 'conv_a', notificationId: unique('ntf'), payloads: [{ subscriptionId: 'sub_none', ciphertext: sealed() }], ...more });
+
+/** One distinct ciphertext for each of the recipient's subscriptions, as the installation would send. */
+async function payloadsFor(i: Installation, recipientId: string) {
+  const rows = await testEnv.DB.prepare('SELECT id FROM subscriptions WHERE installation_id = ? AND workspace_id = ? AND recipient_id = ? ORDER BY id').bind(i.id, i.workspaceId, recipientId).all<{ id: string }>();
+  const letters = 'BCDEFGHIJKLMNOPQRSTUVWXYZ';
+  return rows.results.length > 0 ? rows.results.map((row, n) => ({ subscriptionId: row.id, ciphertext: sealed(letters[n % letters.length]) })) : [{ subscriptionId: 'sub_none', ciphertext: sealed() }];
+}
 
 async function signedRequest(i: Installation, path: string, body: unknown, environment: Env, method = 'POST', requestId: string = crypto.randomUUID(), workspaceId: string | undefined = i.workspaceId) {
   const bytes = new TextEncoder().encode(body === undefined ? '' : JSON.stringify(body));
@@ -65,7 +74,8 @@ async function signedRequest(i: Installation, path: string, body: unknown, envir
 
 async function queued(i: Installation, more: Record<string, unknown> = {}) {
   const context = capturing();
-  const response = await signedRequest(i, '/v1/notifications/send', item(i, more), context.environment);
+  const payloads = await payloadsFor(i, (more.recipientId as string | undefined) ?? 'mem_a');
+  const response = await signedRequest(i, '/v1/notifications/send', item(i, { payloads, ...more }), context.environment);
   expect(response.status).toBe(202);
   const accepted = (await response.json()) as { id: string };
   return { ...context, id: accepted.id, message: context.sent[0]!.body };
@@ -83,7 +93,7 @@ describe('sending', () => {
     const i = await newInstallation();
     const { id, sent } = await queued(i);
     expect(await recordOf(id)).toMatchObject({ status: 'queued' });
-    expect(sent[0]?.body).toEqual({ id, installationId: i.id, attempt: 1 });
+    expect(sent[0]?.body).toEqual({ id, installationId: i.id, attempt: 1, payloads: { sub_none: sealed() } });
   });
 
   it('keeps the record when queueing fails, and a retry queues it', async () => {
@@ -124,6 +134,12 @@ describe('sending', () => {
     ['an event not on the list', { event: 'custom' }],
     ['a recipient with spaces', { recipientId: 'Ann Smith' }],
     ['a date that is not one', { expiresAt: 'tomorrow' }],
+    ['no payloads', { payloads: [] }],
+    ['more than 20 payloads', { payloads: Array.from({ length: 21 }, (_, n) => ({ subscriptionId: `sub_${n}`, ciphertext: sealed() })) }],
+    ['a ciphertext of another size', { payloads: [{ subscriptionId: 'sub_a', ciphertext: 'A'.repeat(NOTIFICATION_SEALED_LENGTH - 1) }] }],
+    ['a ciphertext that is not base64url', { payloads: [{ subscriptionId: 'sub_a', ciphertext: `${'A'.repeat(NOTIFICATION_SEALED_LENGTH - 1)}=` }] }],
+    ['two payloads for one subscription', { payloads: [{ subscriptionId: 'sub_a', ciphertext: sealed() }, { subscriptionId: 'sub_a', ciphertext: sealed('B') }] }],
+    ['readable text beside a payload', { payloads: [{ subscriptionId: 'sub_a', ciphertext: sealed(), text: 'hello' }] }],
   ])('refuses %s, because the schema is closed', async (_name, more) => {
     const i = await newInstallation();
     const context = capturing();
@@ -132,7 +148,7 @@ describe('sending', () => {
   });
 
   it('allows a website ID in metadata', () => {
-    expect(notificationBody.safeParse({ workspaceId: 'w', event: 'mention', recipientId: 'r', conversationId: 'c', notificationId: 'n', metadata: { websiteId: 'site_a' } }).success).toBe(true);
+    expect(notificationBody.safeParse({ workspaceId: 'w', event: 'mention', recipientId: 'r', conversationId: 'c', notificationId: 'n', payloads: [{ subscriptionId: 's', ciphertext: sealed() }], metadata: { websiteId: 'site_a' } }).success).toBe(true);
   });
 
   it('refuses a workspace that does not match the header, is revoked, or is another installation\'s', async () => {
@@ -249,14 +265,18 @@ describe('status', () => {
 });
 
 describe('the payload', () => {
-  const input = { event: 'new_message' as const, installationId: 'inst_a', workspaceId: 'work_a', conversationId: 'conv_a', notificationId: 'ntf_a', title: 'Acme', locale: 'en-GB', expiresAt: 1_800_000_000_000 };
+  const input = { event: 'new_message' as const, installationId: 'inst_a', workspaceId: 'work_a', conversationId: 'conv_a', notificationId: 'ntf_a', subscriptionId: 'sub_a', c: sealed(), expiresAt: 1_800_000_000_000 };
 
-  it('holds only the fixed text, the label, and opaque IDs', async () => {
+  it('holds no readable text: a phrase key, opaque IDs, and this phone\'s ciphertext', async () => {
     const push = await composePush(input);
     expect(JSON.parse(push.body)).toEqual({
-      aps: { alert: { title: 'Acme', body: 'New message' }, sound: 'default', 'thread-id': expect.stringMatching(/^[0-9a-f]{32}$/), 'mutable-content': 1 },
-      oc: { v: 1, event: 'new_message', installationId: 'inst_a', workspaceId: 'work_a', conversationId: 'conv_a', notificationId: 'ntf_a' },
+      aps: { alert: { 'loc-key': 'OC_NEW_MESSAGE' }, sound: 'default', 'thread-id': expect.stringMatching(/^[0-9a-f]{32}$/), 'mutable-content': 1 },
+      oc: { v: 1, event: 'new_message', installationId: 'inst_a', workspaceId: 'work_a', conversationId: 'conv_a', notificationId: 'ntf_a', subscriptionId: 'sub_a', c: sealed() },
     });
+  });
+
+  it('fits well within the 4 KB APNs limit', async () => {
+    expect(new TextEncoder().encode((await composePush(input)).body).length).toBeLessThan(1024);
   });
 
   it('sets the headers APNs needs', async () => {
@@ -274,13 +294,8 @@ describe('the payload', () => {
     expect(JSON.parse(other.body).aps['thread-id']).not.toBe(JSON.parse(a.body).aps['thread-id']);
   });
 
-  it('falls back on a default title', async () => {
-    expect(JSON.parse((await composePush({ ...input, title: null })).body).aps.alert.title).toBe('OpenChat');
-  });
-
-  it('has text for every event, and falls back on English', () => {
-    for (const event of NOTIFICATION_EVENTS) expect(bodyText(event, 'en').length).toBeGreaterThan(0);
-    expect(bodyText('mention', 'xx-YY')).toBe(bodyText('mention', 'en'));
+  it('has a phrase key for every event', () => {
+    expect(NOTIFICATION_EVENTS.map(locKey)).toEqual(['OC_NEW_CONVERSATION', 'OC_NEW_MESSAGE', 'OC_CONVERSATION_ASSIGNED', 'OC_CONVERSATION_TRANSFERRED', 'OC_MENTION', 'OC_CONVERSATION_UPDATED']);
   });
 });
 
@@ -310,6 +325,46 @@ describe('delivering', () => {
     await deliver(environment, transport, message);
     expect(transport.requests.map((r) => r.token)).toEqual([onA.token]);
     expect(transport.requests.map((r) => r.token)).not.toContain(onB.token);
+  });
+
+  it('sends each phone only its own ciphertext', async () => {
+    const i = await newInstallation();
+    const a = await addDevice(i, 'mem_a');
+    const b = await addDevice(i, 'mem_a');
+    const { environment, message } = await queued(i);
+    const transport = new MockApnsTransport([{ status: 200 }]);
+    await deliver(environment, transport, message);
+    expect(transport.requests.map((r) => r.token).sort()).toEqual([a.token, b.token].sort());
+    const all = Object.values(message.payloads!);
+    expect(new Set(all).size).toBe(2);
+    for (const request of transport.requests) {
+      const oc = JSON.parse(request.body).oc as { subscriptionId: string; c: string };
+      expect(oc.c).toBe(message.payloads![oc.subscriptionId]);
+      for (const other of all.filter((value) => value !== oc.c)) expect(request.body).not.toContain(other);
+    }
+  });
+
+  it('sends nothing to a phone the installation sent no ciphertext for', async () => {
+    const i = await newInstallation();
+    const a = await addDevice(i, 'mem_a');
+    const { id, environment, message } = await queued(i);
+    const b = await addDevice(i, 'mem_a');
+    const transport = new MockApnsTransport([{ status: 200 }]);
+    await deliver(environment, transport, message);
+    expect(transport.requests.map((r) => r.token)).toEqual([a.token]);
+    expect(transport.requests.map((r) => r.token)).not.toContain(b.token);
+    expect(await recordOf(id)).toMatchObject({ status: 'completed', delivered: 1 });
+  });
+
+  it('records no devices for a message queued without ciphertext', async () => {
+    const i = await newInstallation();
+    await addDevice(i, 'mem_a');
+    const { id, environment, message } = await queued(i);
+    const transport = new MockApnsTransport();
+    const older: DeliveryMessage = { id: message.id, installationId: message.installationId, attempt: message.attempt };
+    await deliver(environment, transport, older);
+    expect(transport.requests).toHaveLength(0);
+    expect(await recordOf(id)).toMatchObject({ status: 'no_devices' });
   });
 
   it('uses the device\'s bundle as the topic', async () => {
@@ -414,6 +469,8 @@ describe('each answer from APNs', () => {
     const first: MockApnsTransport = { requests: [], send: async (r: { token: string }) => (r.token === a.token ? { status: 200 } : { status: 503 }) } as unknown as MockApnsTransport;
     await deliver(environment, first, message);
     expect(sent[1]?.body.deviceIds).toEqual([b.deviceId]);
+    // Only the outstanding phone's ciphertext goes into the retry.
+    expect(Object.values(sent[1]!.body.payloads!)).toHaveLength(1);
     const second = new MockApnsTransport([{ status: 200 }]);
     await deliver(environment, second, sent[1]!.body);
     expect(second.requests.map((r) => r.token)).toEqual([b.token]);

@@ -32,16 +32,20 @@ export function pushRepository(database: Database, ctx: WorkspaceContext) {
       return results;
     },
 
-    /** The same handle again answers the row it has, so an app can repeat this. Null if it is someone else's. */
-    async recordSubscription(input: { relayId: string; relaySubscriptionId: string; deviceLabel: string | null }): Promise<PushSubscriptionRow | null> {
+    /**
+     * The same handle again answers the row it has, and takes the key it brings, so an app can repeat this or replace
+     * a lost key. Null if the handle is someone else's, whose key is left alone.
+     */
+    async recordSubscription(input: { relayId: string; relaySubscriptionId: string; previewKey: string; deviceLabel: string | null }): Promise<PushSubscriptionRow | null> {
       await d1.batch([
         d1
           .prepare(
-            `INSERT INTO push_subscriptions (id, workspace_id, member_id, relay_id, relay_subscription_id, platform, device_label, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, 'ios', ?6, ${DB_NOW_MS}, ${DB_NOW_MS})
-             ON CONFLICT (relay_id, relay_subscription_id) DO NOTHING`,
+            `INSERT INTO push_subscriptions (id, workspace_id, member_id, relay_id, relay_subscription_id, preview_key, platform, device_label, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?7, 'ios', ?6, ${DB_NOW_MS}, ${DB_NOW_MS})
+             ON CONFLICT (relay_id, relay_subscription_id) DO UPDATE SET preview_key = excluded.preview_key, updated_at = excluded.updated_at
+               WHERE push_subscriptions.workspace_id = excluded.workspace_id AND push_subscriptions.member_id = excluded.member_id`,
           )
-          .bind(newId('pushSubscription'), w, ctx.memberId, input.relayId, input.relaySubscriptionId, input.deviceLabel),
+          .bind(newId('pushSubscription'), w, ctx.memberId, input.relayId, input.relaySubscriptionId, input.deviceLabel, input.previewKey),
         d1
           .prepare(
             `DELETE FROM push_subscriptions WHERE workspace_id = ?1 AND member_id = ?2 AND id NOT IN
@@ -104,14 +108,13 @@ export interface RelayRegistration {
   relayDisconnectedId: string | null;
   workspaceName: string;
   workspaceStatus: 'unregistered' | 'registered' | 'revoked';
-  workspaceDisplayName: string | null;
 }
 
 export function relayRegistration(database: Database, workspaceId: string): Promise<RelayRegistration | null> {
   return rawHandle(database)
     .prepare(
       `SELECT i.id AS installationId, i.relay_registered_id AS installationRelayId, i.relay_disconnected_id AS relayDisconnectedId, w.name AS workspaceName,
-              w.relay_workspace_status AS workspaceStatus, w.relay_display_name AS workspaceDisplayName
+              w.relay_workspace_status AS workspaceStatus
          FROM workspaces w, installation i WHERE w.id = ?1`,
     )
     .bind(workspaceId)
@@ -122,13 +125,13 @@ export function relayRegistration(database: Database, workspaceId: string): Prom
 export async function markInstallationRegistered(database: Database, relayId: string): Promise<void> {
   const d1 = rawHandle(database);
   await d1.batch([
-    d1.prepare(`UPDATE workspaces SET relay_workspace_status = 'unregistered', relay_display_name = NULL WHERE (SELECT relay_registered_id FROM installation) IS NOT ?1`).bind(relayId),
+    d1.prepare(`UPDATE workspaces SET relay_workspace_status = 'unregistered' WHERE (SELECT relay_registered_id FROM installation) IS NOT ?1`).bind(relayId),
     d1.prepare(`UPDATE installation SET relay_registered_id = ?1, updated_at = ${DB_NOW_MS}`).bind(relayId),
   ]);
 }
 
-export async function markWorkspaceRegistered(database: Database, workspaceId: string, displayName: string): Promise<void> {
-  await rawHandle(database).prepare(`UPDATE workspaces SET relay_workspace_status = 'registered', relay_display_name = ?2 WHERE id = ?1`).bind(workspaceId, displayName).run();
+export async function markWorkspaceRegistered(database: Database, workspaceId: string): Promise<void> {
+  await rawHandle(database).prepare(`UPDATE workspaces SET relay_workspace_status = 'registered' WHERE id = ?1`).bind(workspaceId).run();
 }
 
 /** For a relay that no longer knows this installation. The next attempt registers everything again. */
@@ -174,6 +177,27 @@ export async function memberStillReachable(database: Database, workspaceId: stri
     .bind(workspaceId, memberId)
     .first();
   return row !== null;
+}
+
+export interface PushTarget {
+  memberId: string;
+  relaySubscriptionId: string;
+  previewKey: string;
+}
+
+/** Every phone of these members on this relay, with the key each notification is encrypted to. */
+export async function pushTargets(database: Database, workspaceId: string, relayId: string, memberIds: string[]): Promise<PushTarget[]> {
+  if (memberIds.length === 0) return [];
+  const { results } = await rawHandle(database)
+    .prepare(
+      `SELECT member_id AS memberId, relay_subscription_id AS relaySubscriptionId, preview_key AS previewKey
+         FROM push_subscriptions
+        WHERE workspace_id = ?1 AND relay_id = ?2 AND preview_key <> '' AND member_id IN (SELECT value FROM json_each(?3))
+        ORDER BY member_id, id DESC`,
+    )
+    .bind(workspaceId, relayId, JSON.stringify(memberIds))
+    .all<PushTarget>();
+  return results;
 }
 
 export async function deleteMemberSubscriptions(database: Database, workspaceId: string, memberId: string): Promise<void> {

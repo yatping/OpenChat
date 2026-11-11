@@ -285,11 +285,21 @@ export const recordPushSubscriptionRoute = createRoute({
   path: '/api/v1/workspaces/{workspaceId}/push/subscriptions',
   tags: ['push'],
   operationId: 'recordPushSubscription',
-  summary: 'Store the opaque handle returned by the relay. No device token is sent here.',
+  summary: 'Store the opaque handle returned by the relay, and the public key this phone made for it. No device token is sent here.',
   security: bearer,
   request: {
     params: workspaceParams,
-    body: { required: true, ...json(z.object({ relaySubscriptionId: z.string().regex(/^sub_[A-Za-z0-9_-]{1,64}$/), deviceLabel: z.string().max(100).optional() })) },
+    body: {
+      required: true,
+      ...json(
+        z.object({
+          relaySubscriptionId: z.string().regex(/^sub_[A-Za-z0-9_-]{1,64}$/),
+          // X25519, 32 bytes, base64url. Each notification is encrypted to it, so the relay cannot read it (ADR-0017).
+          previewKey: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+          deviceLabel: z.string().max(100).optional(),
+        }),
+      ),
+    },
   },
   responses: { 201: { description: 'Recorded', ...json(PushSubscriptionSchema) }, default: problemResponse },
 });

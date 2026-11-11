@@ -9,7 +9,7 @@ Decisions for the project owner. Each has a recommended default so work is not b
 | # | Question | Why it matters | Recommendation |
 |---|---|---|---|
 | Q5 | **Who operates the managed relay, who pays, and what are the terms?** | The operator holds the Apple signing identity, device tokens, and abuse duties, and may be a data processor under GDPR. Spec §1 forbids a mandatory subscription. | A named legal entity runs it free with quotas, under published terms and a privacy policy. Cost should be small, since a Workers Paid account covers it at low volume, but measure it. |
-| Q7 | **Default push text: generic, or with some content?** | The spec prefers no content. A Notification Service Extension could fetch and show real text on the device, but needs native code and shared credentials. | Generic text with the workspace name for the MVP. The extension is post-MVP and needs a security review. |
+| Q7 | **Default push text: generic, or with some content?** | The spec prefers no content. A Notification Service Extension could fetch and show real text on the device, but needs native code and shared credentials. | **Decided by [ADR-0017](decisions/0017-encrypted-notifications.md):** real text, always, encrypted by the installation for each phone and decrypted by an extension. The relay cannot read it. |
 | Q8 | **Who keeps the App Review demo installation running?** | Guideline 2.1 requires a live backend and demo account. | The relay's operator hosts a small demo installation with seeded data that resets nightly. |
 
 ## Needed before the relevant milestone

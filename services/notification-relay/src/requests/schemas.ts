@@ -9,16 +9,10 @@ export const registerInstallationBody = z.strictObject({
   publicKey: z.strictObject({ id, alg: z.literal('Ed25519'), key: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }),
 });
 
-export const registerWorkspaceBody = z.strictObject({ workspaceId: id, displayName: z.string().max(40).optional() });
+/** The workspace's name is not sent: it travels inside each phone's ciphertext (ADR-0017). */
+export const registerWorkspaceBody = z.strictObject({ workspaceId: id });
 
 export const revokeWorkspaceBody = z.strictObject({ workspaceId: id });
 
 /** Asks for everything about the installation to be erased. Nothing else may come with it. */
 export const unregisterInstallationBody = z.strictObject({});
-
-/** Shown as a notification title, so nothing here may disguise it: no control, format, or line characters. */
-export function sanitizeDisplayName(value: string | undefined): string | null {
-  if (value === undefined) return null;
-  const clean = value.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, '').trim();
-  return clean.length > 0 ? clean : null;
-}
