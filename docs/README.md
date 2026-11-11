@@ -42,6 +42,7 @@ Suggested reading order for a new contributor is top to bottom.
 | [notification-relay/protocol.md](notification-relay/protocol.md) | Relay protocol, authentication, and delivery rules |
 | [notification-relay/openapi.draft.yaml](notification-relay/openapi.draft.yaml) | Relay REST contract |
 | [notification-relay/protocol.draft.ts](notification-relay/protocol.draft.ts) | Relay shared TypeScript types |
+| [legal/](legal/README.md) | **Drafts for a lawyer, not in force:** privacy policy, relay terms, data processing agreement, records of processing, and subprocessors for the managed relay |
 
 Files named `*.draft.*` are design artifacts. Phase 0 moves them into `packages/`, after which the package is the source of truth and the draft is deleted.
 
