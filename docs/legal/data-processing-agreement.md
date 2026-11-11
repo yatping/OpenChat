@@ -17,11 +17,11 @@ This agreement forms part of the [relay terms](relay-terms.md). It is between th
 
 | Data subjects | Data |
 |---|---|
-| The controller's team members who allow notifications in the app | Push token (encrypted), a device ID and hashed secret, app bundle ID, push environment, language setting, and the controller's pseudonymous ID for the member |
+| The controller's team members who allow notifications in the app | Push token (encrypted), a device ID and hashed secret, app bundle ID, push environment, and the controller's pseudonymous ID for the member |
 | The same, through their activity | Per notification: an ID, the event type, a conversation ID, and the delivery outcome |
-| Anyone named in a workspace name | The workspace name, up to 40 characters, shown as the notification title |
+| Team members, and the visitors and contacts they talk to | Encrypted notifications: the workspace name, sender name and up to 150 characters of message text, encrypted by the controller's installation for each phone. The processor cannot decrypt them, never stores them, and passes them only to Apple |
 
-No special category data. No message content. The relay's request formats are closed, and it refuses unknown fields.
+No special category data is intended, though the controller cannot rule it out in message text. No readable message content: the processor holds no key that can decrypt a notification. The relay's request formats are closed, and it refuses unknown fields. **[CHECK]** whether encrypted data the processor cannot decrypt is personal data in its hands.
 
 ## 3. The processor's obligations
 
@@ -47,7 +47,7 @@ The processor and its subprocessors may process the data outside the UK and EEA,
 - Every installation request signed with Ed25519, with replay protection and timestamps.
 - Every query scoped to one installation. No installation can read another's data.
 - Rate limits per installation and per recipient.
-- No message content accepted. Fixed notification text, written by the relay.
+- Notifications encrypted end to end, from the installation to each phone, with HPKE (RFC 9180). Keys are made on the phone and never reach the processor. Ciphertext is padded to a fixed size and is never stored or logged.
 - Access to the deployment limited to the processor's authorised operators, with multi-factor authentication. **[CHECK]**
 - Notification records deleted after 30 days. Devices with no subscription deleted after 7 days.
 

@@ -18,18 +18,19 @@ The app connects directly to the OpenChat address you enter. Your messages, your
 
 ## What reaches us, and why
 
-Only what is needed to deliver a push notification to your phone reaches the relay. **No message text, no names, no email addresses, and nothing about the website visitors you talk to.**
+Only what is needed to deliver a push notification to your phone reaches the relay. The notification itself, including the message text, is **encrypted by your organisation's OpenChat for your phone alone**. Only your phone holds the key. We cannot read it, and neither can Apple. **We receive no readable message text, no names, no email addresses, and nothing about the website visitors you talk to.**
 
 | Data | Where it comes from | Why |
 |---|---|---|
 | Your phone's push token from Apple, stored encrypted | The app, when you allow notifications | To address notifications to your phone |
-| An ID and secret for your phone, the app's bundle ID, push environment, and language setting | The app | To recognise your phone again, and choose the notification's language |
+| An ID and secret for your phone, the app's bundle ID and push environment | The app | To recognise your phone again |
 | An ID your organisation gives you, which is not your user account, name or email | Your organisation's OpenChat | To send a notification to the right person |
-| Your organisation's installation ID, web address and public key, plus each workspace's ID and name, up to 40 characters | Your organisation's OpenChat | To check that requests really come from it. The workspace name is shown as the notification title |
+| Your organisation's installation ID, web address and public key, plus an ID for each workspace | Your organisation's OpenChat | To check that requests really come from it |
 | For each notification: its ID, the event type (such as "new message"), a conversation ID, and whether it was delivered | Your organisation's OpenChat, and Apple | To deliver it once, and to see delivery problems |
+| For each notification: the encrypted notification for each of your phones, which we cannot read | Your organisation's OpenChat | To pass it to Apple. We never store or log it |
 | Request metadata, which may include an IP address | Our hosting provider's logs | To keep the relay secure and running **[CHECK]** |
 
-A notification shows the workspace name as its title and a fixed phrase as its text, such as "New message". Apple delivers it.
+Your phone decrypts the notification and shows the workspace name, the sender, and the start of the message. If it cannot, it shows a fixed phrase such as "New message". To hide message text on your lock screen, use **Show Previews** in iOS Settings > Notifications.
 
 ## Our role, and the legal basis
 
@@ -62,7 +63,7 @@ We do not sell data, show advertising, or use analytics or crash reporting in th
 
 ## Security
 
-Push tokens are encrypted at rest. Phone secrets are stored only as hashes. Every request from an organisation's OpenChat is signed with its own key, and no organisation can see another's data. The relay never receives message content.
+Push tokens are encrypted at rest. Phone secrets are stored only as hashes. Every request from an organisation's OpenChat is signed with its own key, and no organisation can see another's data. The relay never receives readable message content: notifications are encrypted for each phone with a key only that phone holds.
 
 ## Your rights
 
