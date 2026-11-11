@@ -149,6 +149,7 @@ Community forks can run all but the last. Nothing else depends on project-held c
 Orango Labs runs it at `https://openchat-relay.orangolabs.com`, with the relay ID `managed`, on the same Cloudflare account as its other projects. That was the owner's choice on 2026-11-05, in place of a separate account, so everyone with access to that account can reach the APNs key.
 
 - **Private mode for now.** Only installations in `RELAY_ALLOWED_INSTALLATIONS` can register. It moves to `open` after legal review of the terms and privacy policy ([Q5](../architecture/open-questions.md)).
+- **Limits** are Worker variables, listed in [Rate limits](../notification-relay/protocol.md#rate-limits). Set them in `vars` in the managed relay's configuration, and give one installation more with `RELAY_LIMIT_OVERRIDES`. Before opening the relay, also set a Cloudflare billing alert.
 - **Production APNs only**, because the key is production only. A relay serves one environment.
 - **Configuration** is in the operator's `.openchat/managed-relay/`, which Git ignores. Worker secrets cannot be read back, so `RELAY_TOKEN_KEY` and the operator token are kept with the signing keys. Losing `RELAY_TOKEN_KEY` means every device has to register again.
 - **To admit an installation:** add its ID, from its `/.well-known/openchat.json`, to `RELAY_ALLOWED_INSTALLATIONS`, and deploy the relay. Then deploy the installation with `--relay-url https://openchat-relay.orangolabs.com --relay-id managed --relay-bundle-ids com.orangolabs.openchat`.

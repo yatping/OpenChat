@@ -1,14 +1,13 @@
 import { NONCE_TTL_SECONDS } from '@openchat/notification-protocol';
 import { DurableObject } from 'cloudflare:workers';
+import { DEFAULT_LIMITS, type NotificationLimits } from '../limits';
 
 /** Signed requests of any kind. Notification quotas are separate, and arrive with delivery. */
 export const REQUEST_BURST = 300;
 export const REQUESTS_PER_SECOND = 5;
-/** Defaults for a managed relay, tuned from real usage. See docs/notification-relay/protocol.md. */
-export const NOTIFICATION_BURST = 300;
-export const NOTIFICATIONS_PER_SECOND = 1;
-export const RECIPIENT_BURST = 30;
-export const RECIPIENT_PER_SECOND = 0.5;
+const DAY_MS = 24 * 60 * 60_000;
+/** A quota row untouched this long is full again, or from a day already over, so it can go. */
+const QUOTA_IDLE_MS = DAY_MS;
 
 export type AdmitResult = { ok: true } | { ok: false; reason: 'replayed' } | { ok: false; reason: 'rate_limited'; retryAfterSeconds: number };
 
@@ -54,36 +53,66 @@ export class RelayGuard extends DurableObject {
     return true;
   }
 
-  /** Takes one token per notification, or nothing at all. Installation and recipient limits both have to allow it. */
-  async takeNotificationQuota(recipientIds: string[]): Promise<{ ok: true } | { ok: false; retryAfterSeconds: number }> {
+  /**
+   * Takes one token per notification, or nothing at all. The installation's rate and daily count, and each
+   * recipient's rate, all have to allow it. A limit of 0 is off. Limits arrive with the call, so that the operator's
+   * settings apply without a migration; a caller from before them sends none, and gets the defaults.
+   */
+  async takeNotificationQuota(recipientIds: string[], limits: NotificationLimits = DEFAULT_LIMITS): Promise<{ ok: true } | { ok: false; retryAfterSeconds: number }> {
     const { sql } = this.ctx.storage;
     const now = Date.now();
-    const level = (name: string, burst: number, rate: number) => {
-      const row = sql.exec<{ tokens: number; updated_at: number }>('SELECT tokens, updated_at FROM quotas WHERE name = ?', name).toArray()[0];
-      return row ? Math.min(burst, row.tokens + ((now - row.updated_at) / 1000) * rate) : burst;
-    };
+    const read = (name: string) => sql.exec<{ tokens: number; updated_at: number }>('SELECT tokens, updated_at FROM quotas WHERE name = ?', name).toArray()[0];
     const counts = new Map<string, number>();
     for (const id of recipientIds) counts.set(id, (counts.get(id) ?? 0) + 1);
     const plans: [string, number][] = [];
     let wait = 0;
-    const plan = (name: string, burst: number, rate: number, cost: number) => {
-      const tokens = level(name, burst, rate);
+    const bucket = (name: string, burst: number, perMinute: number, cost: number) => {
+      if (burst <= 0 || perMinute <= 0) return;
+      const rate = perMinute / 60;
+      const row = read(name);
+      const tokens = row ? Math.min(burst, row.tokens + ((now - row.updated_at) / 1000) * rate) : burst;
       if (tokens < cost) wait = Math.max(wait, Math.ceil((Math.min(cost, burst) - tokens) / rate), 1);
       plans.push([name, tokens - cost]);
     };
-    plan('installation', NOTIFICATION_BURST, NOTIFICATIONS_PER_SECOND, recipientIds.length);
-    for (const [id, cost] of counts) plan(`recipient:${id}`, RECIPIENT_BURST, RECIPIENT_PER_SECOND, cost);
+    bucket('installation', limits.notificationBurst, limits.notificationsPerMinute, recipientIds.length);
+    for (const [id, cost] of counts) bucket(`recipient:${id}`, limits.recipientBurst, limits.recipientNotificationsPerMinute, cost);
+    if (limits.notificationsPerDay > 0) {
+      // A count, not a bucket: the day is a UTC calendar day, and the count starts again at midnight.
+      const day = `day:${new Date(now).toISOString().slice(0, 10)}`;
+      const used = read(day)?.tokens ?? 0;
+      if (used + recipientIds.length > limits.notificationsPerDay) wait = Math.max(wait, Math.ceil((DAY_MS - (now % DAY_MS)) / 1000), 1);
+      plans.push([day, used + recipientIds.length]);
+    }
     if (wait > 0) return { ok: false, retryAfterSeconds: wait };
     for (const [name, tokens] of plans) sql.exec('INSERT INTO quotas (name, tokens, updated_at) VALUES (?, ?, ?) ON CONFLICT (name) DO UPDATE SET tokens = excluded.tokens, updated_at = excluded.updated_at', name, tokens, now);
     if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(now + NONCE_TTL_SECONDS * 1000);
     return { ok: true };
   }
 
+  /**
+   * New installations from one IP address, in an object named for a hash of it. Counted before the domain is
+   * checked, so that failed attempts count too. Answers how long to wait, or 0.
+   */
+  async takeRegistration(perHour: number): Promise<number> {
+    if (perHour <= 0) return 0;
+    const { sql } = this.ctx.storage;
+    const now = Date.now();
+    const rate = perHour / 3600;
+    const row = sql.exec<{ tokens: number; updated_at: number }>("SELECT tokens, updated_at FROM quotas WHERE name = 'registration'").toArray()[0];
+    const tokens = row ? Math.min(perHour, row.tokens + ((now - row.updated_at) / 1000) * rate) : perHour;
+    if (tokens < 1) return Math.max(1, Math.ceil((1 - tokens) / rate));
+    sql.exec("INSERT INTO quotas (name, tokens, updated_at) VALUES ('registration', ?, ?) ON CONFLICT (name) DO UPDATE SET tokens = excluded.tokens, updated_at = excluded.updated_at", tokens - 1, now);
+    if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(now + NONCE_TTL_SECONDS * 1000);
+    return 0;
+  }
+
   override async alarm() {
     const { sql } = this.ctx.storage;
     sql.exec('DELETE FROM nonces WHERE expires_at <= ?', Date.now());
-    // A recipient's quota is full again by now, so an absent row means the same.
+    // A recipient's quota is full again by now at the default rate, so an absent row means the same. Any other row
+    // left alone for a day is full again, or counts a day that is over. Without this, the alarm would never stop.
     sql.exec("DELETE FROM quotas WHERE name LIKE 'recipient:%' AND updated_at <= ?", Date.now() - NONCE_TTL_SECONDS * 1000);
+    sql.exec('DELETE FROM quotas WHERE updated_at <= ?', Date.now() - QUOTA_IDLE_MS);
     const left = sql.exec<{ n: number }>('SELECT (SELECT count(*) FROM nonces) + (SELECT count(*) FROM quotas) AS n').one().n;
     if (left > 0) await this.ctx.storage.setAlarm(Date.now() + NONCE_TTL_SECONDS * 1000);
   }

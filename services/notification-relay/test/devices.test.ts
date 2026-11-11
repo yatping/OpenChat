@@ -105,6 +105,40 @@ describe('registering a device', () => {
   });
 });
 
+describe('the device limit', () => {
+  const limited: Env = { ...testEnv, RELAY_DEVICES_PER_INSTALLATION: '2' };
+  const registerUnder = async (environment: Env, i: Installation, more: object = {}) => post('/v1/devices/register', registerBody(await grantFor(i), more), {}, environment);
+
+  it('refuses a device past the limit, and still lets a device it has come back', async () => {
+    const i = await newInstallation();
+    const first = (await (await registerUnder(limited, i)).json()) as Registered;
+    expect((await registerUnder(limited, i, { apnsToken: randomToken() })).status).toBe(201);
+    const refused = await registerUnder(limited, i);
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ code: 'device_limit_reached' });
+    const again = await registerUnder(limited, i, { device: { id: first.deviceId, secret: first.deviceSecret } });
+    expect(again.status).toBe(201);
+  });
+
+  it('counts each installation separately, and can be raised for one', async () => {
+    const full = await newInstallation();
+    const other = await newInstallation();
+    const raised: Env = { ...limited, RELAY_LIMIT_OVERRIDES: { [full.id]: { devicesPerInstallation: 3 } } };
+    for (let n = 0; n < 2; n++) expect((await registerUnder(limited, full)).status).toBe(201);
+    expect((await registerUnder(limited, other)).status).toBe(201);
+    expect((await registerUnder(raised, full)).status).toBe(201);
+    expect((await registerUnder(raised, full)).status).toBe(403);
+  });
+
+  it('still says when the workspace is the reason', async () => {
+    const i = await newInstallation();
+    const response = await registerUnder(limited, i, {});
+    expect(response.status).toBe(201);
+    const gone = await post('/v1/devices/register', registerBody(await grantFor(i, { wid: 'work_gone' })), {}, limited);
+    expect(await gone.json()).toMatchObject({ code: 'workspace_not_registered' });
+  });
+});
+
 describe('grants at the relay', () => {
   it('refuses a reused grant', async () => {
     const i = await newInstallation();

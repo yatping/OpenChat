@@ -74,6 +74,40 @@ async function registered(actor?: Actor) {
 
 beforeEach(() => clearKeyCache());
 
+describe('limits on new installations', () => {
+  it('allows a few from one address an hour, and counts failed attempts', async () => {
+    const [a, b, c, stranger] = await Promise.all([newActor(), newActor(), newActor(), newActor()]);
+    const { send } = clientFor([a, b, c], { ...openEnv, RELAY_NEW_INSTALLATIONS_PER_IP_PER_HOUR: '2' });
+    expect((await send(a, registration(a))).status).toBe(201);
+    // Not on the stand-in internet, so its domain check fails, and the attempt still counts.
+    expect((await send(stranger, registration(stranger))).status).toBe(422);
+    const refused = await send(b, registration(b));
+    expect(refused.status).toBe(429);
+    expect(Number(refused.headers.get('retry-after'))).toBeGreaterThan(0);
+    expect((await send(a, registration(a))).status).toBe(200);
+    expect((await send(c, registration(c), unique('ip'))).status).toBe(201);
+  });
+
+  it('stops new ones across the relay at the daily limit, and says why', async () => {
+    const recent = await testEnv.DB.prepare('SELECT count(*) AS n FROM installations WHERE created_at > ?').bind(Date.now() - 86_400_000).first<{ n: number }>();
+    const [a, b] = await Promise.all([newActor(), newActor()]);
+    const { send } = clientFor([a, b], { ...openEnv, RELAY_NEW_INSTALLATIONS_PER_DAY: String(recent!.n + 1) });
+    expect((await send(a, registration(a))).status).toBe(201);
+    const refused = await send(b, registration(b), unique('ip'));
+    expect(refused.status).toBe(429);
+    expect(await refused.json()).toMatchObject({ code: 'registrations_paused' });
+    expect(await testEnv.DB.prepare('SELECT 1 FROM installations WHERE id = ?').bind(b.installationId).first()).toBeNull();
+  });
+
+  it('leaves a private relay to its allowlist', async () => {
+    const [a, b] = await Promise.all([newActor(), newActor()]);
+    const environment: Env = { ...testEnv, RELAY_MODE: 'private', RELAY_ALLOWED_INSTALLATIONS: `${a.installationId},${b.installationId}`, RELAY_NEW_INSTALLATIONS_PER_DAY: '1', RELAY_NEW_INSTALLATIONS_PER_IP_PER_HOUR: '1' };
+    const { send } = clientFor([a, b], environment);
+    expect((await send(a, registration(a))).status).toBe(201);
+    expect((await send(b, registration(b))).status).toBe(201);
+  });
+});
+
 describe('registering an installation', () => {
   it('registers after reading the discovery document, without following redirects', async () => {
     const { me, net } = await registered();

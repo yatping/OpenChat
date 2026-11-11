@@ -2,12 +2,19 @@ import { MAX_CLOCK_SKEW_SECONDS, RELAY_PROTOCOL_VERSION } from '@openchat/notifi
 import { type Context, Hono } from 'hono';
 import type { z } from 'zod';
 import type { Env } from '../env';
+import { limitsFor } from '../limits';
 import { documentProvesControl, normalizeBaseUrl } from './domain-proof';
 import { registerInstallationBody, registerWorkspaceBody, revokeWorkspaceBody, unregisterInstallationBody } from './schemas';
 import { eraseInstallation, findActiveKey, hasInstallation, insertInstallation, revokeWorkspace, upsertWorkspace } from './store';
 import { admitToGuard, checkSignature, clearKeyCache, MAX_BODY_BYTES, type Rejection, readSignedHeaders, type SignedHeaders, verifyKnownInstallation } from './verify';
 
 type Ctx = Context<{ Bindings: Env }>;
+
+/** Names a guard object for an IP address, without the address itself. */
+async function hashAddress(address: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`openchat-relay-registration\n${address}`));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
 
 function problem(c: Ctx, rejection: Rejection | { status: 400 | 403 | 409 | 422 | 429; code: string; retryAfterSeconds?: number }) {
   if ('retryAfterSeconds' in rejection && rejection.retryAfterSeconds !== undefined) c.header('Retry-After', String(rejection.retryAfterSeconds));
@@ -69,10 +76,18 @@ export function relayRoutes(fetcher: typeof fetch) {
       const allowed = (c.env.RELAY_ALLOWED_INSTALLATIONS ?? '').split(',').map((id) => id.trim());
       if (!allowed.includes(signed.installationId)) return problem(c, { status: 403, code: 'installation_not_allowed' });
     }
+    const limits = limitsFor(c.env);
+    if (c.env.RELAY_MODE === 'open') {
+      // Counted before the domain check, so that failed attempts count too.
+      const wait = await c.env.RELAY_GUARD.getByName(`registration:${await hashAddress(c.req.header('cf-connecting-ip') ?? 'unknown')}`).takeRegistration(limits.newInstallationsPerIpPerHour);
+      if (wait > 0) return problem(c, { status: 429, code: 'rate_limited', retryAfterSeconds: wait });
+    }
     const proven = await documentProvesControl(fetcher, baseUrl, { installationId: signed.installationId, keyId: signed.keyId, publicKey: parsed.publicKey.key });
     if (!proven) return problem(c, { status: 422, code: 'domain_not_verified' });
 
-    await insertInstallation(c.env.DB, { installationId: signed.installationId, baseUrl, keyId: signed.keyId, publicKey: parsed.publicKey.key, now: Date.now() });
+    const perDay = c.env.RELAY_MODE === 'open' ? limits.newInstallationsPerDay : 0;
+    const admitted = await insertInstallation(c.env.DB, { installationId: signed.installationId, baseUrl, keyId: signed.keyId, publicKey: parsed.publicKey.key, now: Date.now(), perDay });
+    if (!admitted) return problem(c, { status: 429, code: 'registrations_paused', retryAfterSeconds: 3600 });
     // Another request may have won the race, or this address may belong to another installation.
     return (await stored()) ? c.json({ status: 'registered' }, 201) : problem(c, { status: 409, code: 'already_registered' });
   });

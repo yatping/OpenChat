@@ -28,6 +28,19 @@ export interface Env {
   APNS_PRIVATE_KEY?: string;
   /** The app's bundle ID, used only as the topic of the self-check. */
   APNS_SELF_CHECK_TOPIC?: string;
+  /**
+   * Limits, as numbers or numeric strings, and per-installation exceptions as JSON. Read by `limitsFor` in
+   * limits.ts, which names every variable and its default.
+   */
+  RELAY_NOTIFICATIONS_PER_MINUTE?: string | number;
+  RELAY_NOTIFICATION_BURST?: string | number;
+  RELAY_NOTIFICATIONS_PER_DAY?: string | number;
+  RELAY_RECIPIENT_NOTIFICATIONS_PER_MINUTE?: string | number;
+  RELAY_RECIPIENT_BURST?: string | number;
+  RELAY_DEVICES_PER_INSTALLATION?: string | number;
+  RELAY_NEW_INSTALLATIONS_PER_IP_PER_HOUR?: string | number;
+  RELAY_NEW_INSTALLATIONS_PER_DAY?: string | number;
+  RELAY_LIMIT_OVERRIDES?: string | Record<string, Partial<Record<string, number>>>;
   /** A Worker secret. The operator routes do not exist unless this is set. */
   RELAY_OPERATOR_TOKEN?: string;
 }

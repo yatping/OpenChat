@@ -22,12 +22,19 @@ export async function hasInstallation(db: D1Database, installationId: string): P
 
 /**
  * First registration wins, enforced in SQL because D1 has no interactive transactions. The key goes in only if
- * this installation row has this address and no key yet, so a lost race cannot attach a second key.
+ * this installation row has this address and no key yet, so a lost race cannot attach a second key. With a daily
+ * limit above 0, the row goes in only while fewer than that many installations arrived in the last 24 hours.
+ * Answers false when that limit stopped it.
  */
-export async function insertInstallation(db: D1Database, input: { installationId: string; baseUrl: string; keyId: string; publicKey: string; now: number }): Promise<void> {
-  const { installationId, baseUrl, keyId, publicKey, now } = input;
-  await db.batch([
-    db.prepare('INSERT OR IGNORE INTO installations (id, base_url, created_at) VALUES (?, ?, ?)').bind(installationId, baseUrl, now),
+export async function insertInstallation(db: D1Database, input: { installationId: string; baseUrl: string; keyId: string; publicKey: string; now: number; perDay?: number }): Promise<boolean> {
+  const { installationId, baseUrl, keyId, publicKey, now, perDay = 0 } = input;
+  const [inserted] = await db.batch([
+    db
+      .prepare(
+        `INSERT OR IGNORE INTO installations (id, base_url, created_at)
+         SELECT ?1, ?2, ?3 WHERE ?4 = 0 OR (SELECT count(*) FROM installations WHERE created_at > ?3 - 86400000) < ?4`,
+      )
+      .bind(installationId, baseUrl, now, perDay),
     db
       .prepare(
         `INSERT INTO installation_keys (installation_id, key_id, public_key, created_at)
@@ -37,6 +44,9 @@ export async function insertInstallation(db: D1Database, input: { installationId
       )
       .bind(installationId, keyId, publicKey, now, baseUrl),
   ]);
+  if (inserted?.meta.changes) return true;
+  // Nothing went in: another request won, the address is taken, or the limit was reached.
+  return (await db.prepare('SELECT 1 FROM installations WHERE id = ? OR base_url = ?').bind(installationId, baseUrl).first()) !== null;
 }
 
 export async function upsertWorkspace(db: D1Database, input: { installationId: string; workspaceId: string; now: number }): Promise<'created' | 'updated'> {
