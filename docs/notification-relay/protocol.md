@@ -273,6 +273,17 @@ interface ApnsTransport {
 
 A self-check reveals a platform behaviour change. Once a day, or on `POST /v1/operator/apns-check`, the relay sends to a device token of 64 zeros, which no phone can have. `BadDeviceToken` is the only healthy answer. It proves the path and the key, **not the topic**: real APNs answered the same for a made-up topic. The route takes `Authorization: Bearer` with `RELAY_OPERATOR_TOKEN`, and answers 404 to anyone else, or if that secret is not set.
 
+## Encrypted notification format
+
+[ADR-0017](../architecture/decisions/0017-encrypted-notifications.md) replaces the relay's fixed text with text the installation encrypts for each phone. This section defines the format, implemented in [`notification-crypto.ts`](../../packages/notification-protocol/src/notification-crypto.ts). The relay and app switch to it in the next change; until then, the relay still writes the text described above.
+
+- **Key.** Each subscription has an X25519 key pair made on the phone. The public key, 32 bytes as base64url (`previewKey`), goes to the installation only.
+- **Cipher.** HPKE (RFC 9180), base mode, single shot: DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, AES-128-GCM. `info` is `OpenChat notification v1`.
+- **Associated data.** `OCN1`, `installationId`, `workspaceId`, `notificationId` and the relay `subscriptionId`, joined with line feeds. A ciphertext opens only for that notification on that phone.
+- **Plaintext.** Exactly 256 bytes: a 2-byte big-endian length, the UTF-8 JSON `{"v":1,"title":…,"sender":…,"text":…}`, then zeros. A reader refuses non-zero padding.
+- **Content.** At most 40, 40 and 150 characters. Line and control characters become spaces and bidi overrides are removed. If the JSON does not fit, the text is shortened first, then the sender, then the title, ending with `…`, never inside a character.
+- **Sealed form.** `enc` (32 bytes) then the ciphertext and tag (272 bytes), as 406 base64url characters, the same for every notification.
+
 ## Relay data
 
 Own D1 database. No conversation data, and **no messages, names, or email addresses**.
@@ -364,3 +375,5 @@ From spec §16: registration, multiple devices per user, multiple workspaces, in
 ## Test vector
 
 [`packages/notification-protocol/test/test-vector.json`](../../packages/notification-protocol/test/test-vector.json) holds a key, canonical string, and signature, so that another implementation can check compatibility. The key is public and for testing only. The tests check it in Node and workerd.
+
+The encrypted notification format is checked against RFC 9180, Appendix A.1.1, which uses the same cipher suite, in [`notification-crypto.test.ts`](../../packages/notification-protocol/test/notification-crypto.test.ts). The iOS extension must pass the same vector.
