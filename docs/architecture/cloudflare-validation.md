@@ -580,6 +580,19 @@ A throwaway relay and installation, `preview-e`, then removed. The installation 
 
 After `oc relay erase`, grants still answered 201 for that workspace, because the installation still believed it was registered and signs grants itself. A phone presenting one is refused by the relay before anything is stored. The next relay request the installation makes is answered 401, and it then forgets the registration.
 
+## Encrypted notifications on a real iPhone (2026-11-11)
+
+[ADR-0017](decisions/0017-encrypted-notifications.md), end to end on production APNs. The managed relay, `openchat-relay`, was deployed from #85 with its migration `0004`, and admitted one throwaway installation, `preview-n`, then removed. The app was a signed ad-hoc build from #85, on the owner's iPhone 12 Pro.
+
+| Check | Result |
+|---|---|
+| The build | `NotificationService.appex` embedded, signed with its own ad-hoc profile. App and extension both hold the keychain group `7G7VCCC56S.com.orangolabs.openchat.notifications`, and `OCKeychainGroup` expanded to it |
+| Registering | The installation held one subscription with a 43-character `preview_key`. The relay was sent no key and no workspace name |
+| A visitor's first message | Relay record `new_conversation`, `completed`, 1 delivered |
+| On the phone | The owner saw the workspace name as the title, and "Visitor:" with the message text, emoji included: the extension decrypted it |
+
+Not tried on the phone: the fallback phrase when decryption fails, a time-out in the extension, and an internal note or assignment. The Swift check covers the refusals; the phrases are checked by a test.
+
 ## Sources
 
 - [D1 limits](https://developers.cloudflare.com/d1/platform/limits/), [D1 database API](https://developers.cloudflare.com/d1/worker-api/d1-database/), [migrations](https://developers.cloudflare.com/d1/reference/migrations/), [foreign keys](https://developers.cloudflare.com/d1/sql-api/foreign-keys/), [read replication](https://developers.cloudflare.com/d1/best-practices/read-replication/), [Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/)
