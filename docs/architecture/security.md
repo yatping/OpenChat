@@ -110,6 +110,7 @@ The iOS app removes metadata, including location, from photos before upload, and
 | `AUTH_SIGNING_KEY` (Ed25519) | Worker secret | Key ID in the JWT header; two active keys during rotation |
 | Socket tickets | Signed with the access token key | One key to rotate. Tickets carry `aud: 'realtime'`, last 30 seconds, and neither kind of token is accepted as the other |
 | `RELAY_SIGNING_KEY` (Ed25519) | Worker secret | Key ID; relay accepts registered keys |
+| `OPERATOR_TOKEN` | Worker secret, and `.openchat/<name>/operator-token` on the deploying computer | Opens `/health/*` only, which return counts and times, never content or IDs. To rotate, delete `operatorTokenSet` from `state.json` and run `oc deploy` |
 | `DATA_ENCRYPTION_KEY` | Worker secret | `key_version` per row |
 | Workspace email credentials | D1, AES-GCM encrypted with the key above and bound to `workspace_id` as associated data | Re-encryption job |
 | APNs `.p8` | Relay Worker secret only | Apple key rotation, documented |

@@ -9,6 +9,7 @@ import { registerConversationRoutes } from './routes/conversations';
 import { registerRealtimeRoutes } from './routes/realtime';
 import { registerWidgetRoutes } from './routes/widget';
 import { registerAdminRoutes } from './routes/admin';
+import { registerHealthRoutes } from './routes/health';
 import { registerEmailRoutes } from './routes/email';
 import { registerPushRoutes } from './routes/push';
 import { registerWorkspaceRoutes } from './routes/workspaces';
@@ -104,6 +105,7 @@ export function createApp() {
   registerPushRoutes(app);
   registerEmailRoutes(app);
   registerAdminRoutes(app);
+  registerHealthRoutes(app);
   registerConversationRoutes(app);
   registerWidgetRoutes(app);
   registerRealtimeRoutes(app);

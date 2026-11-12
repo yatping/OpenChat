@@ -98,6 +98,7 @@ Delivered in basic form in Milestone 1, and polished in Milestone 5. Each step i
 | 8 | Domain | `--public-url` for a domain you attached. Attaching it *(M5)* | 7 |
 | 9 | Initialise | `wrangler d1 execute`: creates the installation, first owner, and workspace, guarded so a repeat adds nothing. The owner has no password until they use the printed link | 8 |
 | 10 | Relay signing key | If a relay was given: generated once, as the secret `RELAY_SIGNING_KEY`. The Worker registers itself when the first device asks for a grant, not during the deploy | |
+| 10a | Operator token | Generated once, as the secret `OPERATOR_TOKEN`, with the only copy in `.openchat/<name>/operator-token`, readable only by you. Opens the [health checks](monitoring.md). A deployment from before it existed gets one on its next `oc deploy` | |
 | 11 | Verify | Health, discovery, and a login probe that proves the signing key loads. A synthetic visitor message *(M1b)* | 9 |
 | 12 | Print | Dashboard URL and the owner's link. Widget snippet and restore command *(M5)* | 10 |
 
@@ -209,14 +210,7 @@ The second acceptance journey in spec §20 is then tested in CI as far as is pra
 
 ## Health checks
 
-`/health` is public and returns status only. The following need an operator token, per [amendment A9](../architecture/spec-review.md#amendments-to-the-specification):
-
-| Endpoint | Checks |
-|---|---|
-| `/health/database` | `SELECT 1` latency, migration version, size against the 10 GB limit |
-| `/health/queues` | Cron heartbeat age, oldest undispatched outbox row, unreviewed failed jobs |
-| `/health/realtime` | RPC round trip to a probe object |
-| `/health/notifications` | Relay reachable, and signature accepted. **Failure here is a warning, not an outage** |
+`/health` is public and returns status only. `/health/database`, `/health/queues`, `/health/realtime` and `/health/notifications` need the operator token that `oc deploy` generates, per [amendment A9](../architecture/spec-review.md#amendments-to-the-specification). `pnpm oc health --env <name>` reads them all. What each checks, and what to alert on, is in [monitoring](monitoring.md).
 
 ## Cost
 

@@ -6,6 +6,7 @@ export * from './outbox-repository';
 export * from './push-repository';
 export * from './email-repository';
 export * from './retention-repository';
+export * from './health-repository';
 export { authorizeWorkspaceMember, type Role, type WorkspaceContext } from './context';
 export {
   claimJob,

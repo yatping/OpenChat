@@ -175,7 +175,7 @@ Off for the MVP. Queries go through a `DatabaseProvider` so that `withSession()`
 
 ### Reaching the 10 GB limit
 
-1. Expose database size at `/health/database` to operators, and alert at 70%.
+1. `/health/database` reports the size to operators, and warns at 70% ([monitoring](../operations/monitoring.md)).
 2. After MVP, archive old conversations to R2 as NDJSON and delete in chunks. Meanwhile a workspace can set [retention](#retention), which deletes closed conversations once they are old enough.
 3. Move message bodies to a second D1 database if necessary. The repository layer hides this, though `batch()` cannot span two databases, so that move needs a redesign of Pattern 1. Treat it as a major change, not a tuning step.
 

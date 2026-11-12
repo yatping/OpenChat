@@ -39,6 +39,11 @@
         "scheme": "bearer",
         "bearerFormat": "JWT"
       },
+      "operatorAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The operator token that oc deploy generates and keeps on the deploying computer."
+      },
       "visitorAuth": {
         "type": "http",
         "scheme": "bearer",
@@ -2955,6 +2960,164 @@
           "workspace",
           "target",
           "metadata"
+        ]
+      },
+      "DatabaseHealth": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "warn",
+              "fail"
+            ]
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "latencyMs": {
+            "type": "integer"
+          },
+          "sizeBytes": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "sizeLimitBytes": {
+            "type": "integer"
+          },
+          "migration": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "status",
+          "problems",
+          "latencyMs",
+          "sizeBytes",
+          "sizeLimitBytes",
+          "migration"
+        ]
+      },
+      "QueueHealth": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "warn",
+              "fail"
+            ]
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "heartbeatAgeSeconds": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "oldestPendingOutboxSeconds": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "unreviewedFailedJobs": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status",
+          "problems",
+          "heartbeatAgeSeconds",
+          "oldestPendingOutboxSeconds",
+          "unreviewedFailedJobs"
+        ]
+      },
+      "RealtimeHealth": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "warn",
+              "fail"
+            ]
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "roundTripMs": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "status",
+          "problems",
+          "roundTripMs"
+        ]
+      },
+      "NotificationHealth": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "warn",
+              "fail"
+            ]
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "relay": {
+            "type": "string",
+            "enum": [
+              "off",
+              "disconnected",
+              "unregistered",
+              "ok",
+              "unreachable",
+              "rejected"
+            ]
+          },
+          "roundTripMs": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "status",
+          "problems",
+          "relay",
+          "roundTripMs"
         ]
       }
     },
@@ -7972,6 +8135,180 @@
                     "data",
                     "nextCursor"
                   ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/database": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "security": [
+          {
+            "operatorAuth": []
+          }
+        ],
+        "operationId": "getDatabaseHealth",
+        "summary": "Query latency, the latest migration, and size against the D1 limit.",
+        "responses": {
+          "200": {
+            "description": "The database is ok, or only warns",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseHealth"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The database is failing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseHealth"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/queues": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "security": [
+          {
+            "operatorAuth": []
+          }
+        ],
+        "operationId": "getQueueHealth",
+        "summary": "Age of the last cron heartbeat to pass through the jobs queue, the oldest undispatched outbox row, and unreviewed failed jobs.",
+        "responses": {
+          "200": {
+            "description": "Background work is ok, or only warns",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueHealth"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Background work is failing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueHealth"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/realtime": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "security": [
+          {
+            "operatorAuth": []
+          }
+        ],
+        "operationId": "getRealtimeHealth",
+        "summary": "Round trip to a Durable Object that holds no data.",
+        "responses": {
+          "200": {
+            "description": "Realtime is ok, or only warns",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RealtimeHealth"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Realtime is failing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RealtimeHealth"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/notifications": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "security": [
+          {
+            "operatorAuth": []
+          }
+        ],
+        "operationId": "getNotificationHealth",
+        "summary": "Whether the relay answers and accepts this installation's signature. A problem here only warns: messaging works without push.",
+        "responses": {
+          "200": {
+            "description": "Push is ok, off, or only warns",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationHealth"
                 }
               }
             }
