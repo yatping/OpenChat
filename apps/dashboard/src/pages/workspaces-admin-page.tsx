@@ -15,7 +15,12 @@ const refreshWebsites = (client: QueryClient, workspaceId: string) =>
 
 export function CopyableSnippet({ website }: { website: Website }) {
   const snippet = `<script src="${window.location.origin}/widget/widget.js" data-website-key="${website.websiteKey}" async></script>`;
-  return <pre className="overflow-x-auto rounded-md bg-slate-100 p-3 text-xs dark:bg-slate-800">{snippet}</pre>;
+  // It scrolls sideways, so it takes focus: a keyboard user can then scroll it with the arrow keys.
+  return (
+    <pre className="overflow-x-auto rounded-md bg-slate-100 p-3 text-xs focus-visible:outline-2 focus-visible:outline-offset-2 dark:bg-slate-800" tabIndex={0}>
+      {snippet}
+    </pre>
+  );
 }
 
 /** The widget's languages, each named in itself, as a visitor would look for it. */

@@ -105,6 +105,7 @@ Versions were the latest published on 2026-11-03. The lockfile pins exact versio
 | Widget | Preact, with a small vanilla loader | preact 11.1 |
 | Mobile | Expo, with React Navigation ([ADR-0013](decisions/0013-react-navigation-not-expo-router.md)), TanStack Query, and `expo-notifications`, built with `expo prebuild` and fastlane ([ADR-0012](decisions/0012-native-builds-without-eas.md)) | SDK 58 |
 | E2E | Playwright | |
+| Accessibility tests | axe-core through `@axe-core/playwright`, in end-to-end tests only ([ADR-0018](decisions/0018-axe-core-for-accessibility-tests.md)) | 4.14 |
 | Metrics | Workers Analytics Engine, an addition to the spec's list | |
 
 Spec constraints still hold: no PostgreSQL, Redis, Kubernetes, or conventional application servers. The only external dependencies are APNs and email providers.
