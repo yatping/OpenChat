@@ -22,6 +22,7 @@ import {
   dismissFailedJobRoute,
   getRetentionRoute,
   setRetentionRoute,
+  listAuditLogRoute,
   listAdminWebsitesRoute,
   createVisitorConversationRoute,
   uploadAttachmentRoute,
@@ -160,6 +161,7 @@ export const ALL_ROUTES = [
   dismissFailedJobRoute,
   getRetentionRoute,
   setRetentionRoute,
+  listAuditLogRoute,
 ] as const;
 
 export function buildOpenApiDocument() {

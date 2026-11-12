@@ -8,6 +8,7 @@ import {
   dismissFailedJobRoute,
   getRelayStatusRoute,
   getRetentionRoute,
+  listAuditLogRoute,
   listFailedJobsRoute,
   replayFailedJobRoute,
   listAdminWebsitesRoute,
@@ -32,6 +33,7 @@ import {
   dismissFailedJob,
   getRetention,
   listAdminWebsites,
+  listAuditLog,
   listFailedJobs,
   listAdminWorkspaces,
   listPeople,
@@ -210,5 +212,10 @@ export function registerAdminRoutes(app: App) {
   app.openapi(setRetentionRoute, async (c) => {
     const { deps, ctx } = await admin(c);
     return c.json(await setRetention(deps.db, ctx, c.req.valid('param').workspaceId, c.req.valid('json').retentionDays), 200);
+  });
+
+  app.openapi(listAuditLogRoute, async (c) => {
+    const { deps, ctx } = await admin(c);
+    return c.json(await listAuditLog(deps.db, ctx, c.req.valid('query')), 200);
   });
 }

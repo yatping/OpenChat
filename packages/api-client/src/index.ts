@@ -35,6 +35,7 @@ import type {
   getRelayStatusRoute,
   listFailedJobsRoute,
   getRetentionRoute,
+  listAuditLogRoute,
   listPeopleRoute,
   updateWebsiteRoute,
   updateWorkspaceRoute,
@@ -71,6 +72,8 @@ export type RelayStatus = Json200<typeof getRelayStatusRoute>;
 export type FailedJobPage = Json200<typeof listFailedJobsRoute>;
 export type FailedJob = FailedJobPage['data'][number];
 export type Retention = Json200<typeof getRetentionRoute>;
+export type AuditLogPage = Json200<typeof listAuditLogRoute>;
+export type AuditEntry = AuditLogPage['data'][number];
 export type LoginInput = BodyOf<typeof loginRoute>;
 export type CreatedWorkspace = Json201<typeof createWorkspaceRoute>;
 export type Conversation = Json200<typeof getConversationRoute>;
@@ -183,6 +186,7 @@ export function createClient(options: ClientOptions) {
     reconnectRelay: () => request<RelayStatus>('POST', '/api/v1/admin/push/reconnect'),
     listFailedJobs: (input: { cursor?: string | undefined; limit?: number } = {}) => get<FailedJobPage>(`/api/v1/admin/failed-jobs${query(input)}`),
     replayFailedJob: (id: string) => request<FailedJob>('POST', `/api/v1/admin/failed-jobs/${encodeURIComponent(id)}/replay`),
+    listAuditLog: (input: { cursor?: string | undefined; limit?: number; workspaceId?: string | undefined } = {}) => get<AuditLogPage>(`/api/v1/admin/audit-log${query(input)}`),
     getRetention: (workspaceId: string) => get<Retention>(`/api/v1/admin/workspaces/${encodeURIComponent(workspaceId)}/retention`),
     setRetention: (workspaceId: string, retentionDays: number | null) => request<Retention>('PUT', `/api/v1/admin/workspaces/${encodeURIComponent(workspaceId)}/retention`, { retentionDays }),
     dismissFailedJob: (id: string) => request<void>('DELETE', `/api/v1/admin/failed-jobs/${encodeURIComponent(id)}`),

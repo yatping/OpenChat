@@ -1298,3 +1298,27 @@ export const setRetentionRoute = createRoute({
   request: { params: workspaceParams, body: { required: true, ...json(RetentionSchema.strict()) } },
   responses: { 200: { description: 'Set', ...json(RetentionSchema) }, default: problemResponse },
 });
+
+export const AuditEntrySchema = z
+  .object({
+    id: z.string(),
+    createdAt: z.iso.datetime(),
+    action: z.string().openapi({ description: 'Such as person.created or contact.erased. New actions may appear.' }),
+    actor: z.object({ type: z.string().openapi({ description: 'user, or system for the retention sweep.' }), id: z.string().nullable(), name: z.string().nullable() }),
+    workspace: z.object({ id: z.string(), name: z.string() }).nullable().openapi({ description: 'Null for an installation action, or a workspace that is gone.' }),
+    target: z
+      .object({ type: z.string(), id: z.string(), name: z.string().nullable().openapi({ description: 'For a person, member, workspace, or website only. A contact is never named.' }) })
+      .nullable(),
+    metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
+  })
+  .openapi('AuditEntry');
+
+export const listAuditLogRoute = createRoute({
+  ...adminRoute,
+  method: 'get',
+  path: '/api/v1/admin/audit-log',
+  operationId: 'listAuditLog',
+  summary: 'What admins, members, and the system changed, newest first. IDs and names of what was changed only, never content.',
+  request: { query: PaginationQuery.extend({ workspaceId: z.string().optional() }) },
+  responses: { 200: { description: 'Audit entries', ...json(page(AuditEntrySchema)) }, default: problemResponse },
+});

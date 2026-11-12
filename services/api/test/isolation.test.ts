@@ -62,6 +62,7 @@ const CASES: Record<string, Case> = {
   dismissFailedJob: { kind: 'installation' },
   getRetention: { kind: 'installation' },
   setRetention: { kind: 'installation', body: { retentionDays: 30 } },
+  listAuditLog: { kind: 'installation' },
   getWorkspace: { kind: 'workspace', ownerStatus: 200 },
   listMembers: { kind: 'workspace', ownerStatus: 200 },
   listWebsites: { kind: 'workspace', ownerStatus: 200 },

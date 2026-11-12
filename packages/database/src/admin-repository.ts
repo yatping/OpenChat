@@ -128,8 +128,69 @@ const toFailedJob = (row: RawFailedJob): FailedJobRow => ({
   wellFormed: row.wellFormed === 1,
 });
 
-/** A cursor is `failedAt.id` of the last row seen. Anything else starts from the newest. */
-function parseFailedJobCursor(cursor: string | undefined): [number, string] {
+/** An audit row as an admin sees it, with names for the people, workspaces and websites it refers to. */
+export interface AuditEntryRow {
+  id: string;
+  createdAt: number;
+  action: string;
+  actor: { type: string; id: string | null; name: string | null };
+  workspace: { id: string; name: string } | null;
+  target: { type: string; id: string; name: string | null } | null;
+  metadata: Record<string, unknown>;
+}
+
+interface RawAuditEntry {
+  id: string;
+  createdAt: number;
+  action: string;
+  actorType: string;
+  actorId: string | null;
+  actorName: string | null;
+  workspaceId: string | null;
+  workspaceName: string | null;
+  targetType: string | null;
+  targetId: string | null;
+  targetName: string | null;
+  metadata: string | null;
+}
+
+/**
+ * Names only for what an admin manages anyway. A contact, a conversation, a relay or a job stays an ID, so that the
+ * log names no visitor.
+ */
+const AUDIT_SELECT = `SELECT a.id, a.created_at AS createdAt, a.action, a.actor_type AS actorType, a.actor_id AS actorId, u.name AS actorName,
+    a.workspace_id AS workspaceId, w.name AS workspaceName, a.target_type AS targetType, a.target_id AS targetId,
+    CASE a.target_type
+      WHEN 'user' THEN (SELECT name FROM users WHERE id = a.target_id)
+      WHEN 'member' THEN (SELECT tu.name FROM workspace_members m JOIN users tu ON tu.id = m.user_id WHERE m.id = a.target_id)
+      WHEN 'workspace' THEN (SELECT name FROM workspaces WHERE id = a.target_id)
+      WHEN 'website' THEN (SELECT name FROM websites WHERE id = a.target_id)
+    END AS targetName,
+    a.metadata_json AS metadata
+  FROM audit_log a LEFT JOIN users u ON a.actor_type = 'user' AND u.id = a.actor_id LEFT JOIN workspaces w ON w.id = a.workspace_id`;
+
+function parseMetadata(json: string | null): Record<string, unknown> {
+  if (!json) return {};
+  try {
+    const value: unknown = JSON.parse(json);
+    return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+const toAuditEntry = (row: RawAuditEntry): AuditEntryRow => ({
+  id: row.id,
+  createdAt: row.createdAt,
+  action: row.action,
+  actor: { type: row.actorType, id: row.actorId, name: row.actorName },
+  workspace: row.workspaceId && row.workspaceName !== null ? { id: row.workspaceId, name: row.workspaceName } : null,
+  target: row.targetType && row.targetId ? { type: row.targetType, id: row.targetId, name: row.targetName } : null,
+  metadata: parseMetadata(row.metadata),
+});
+
+/** A cursor is `<time>.<id>` of the last row seen, newest first. Anything else starts from the newest. */
+function parseTimeCursor(cursor: string | undefined): [number, string] {
   const match = cursor ? /^(\d{1,15})\.(.+)$/.exec(cursor) : null;
   return match ? [Number(match[1]), match[2]!] : [Number.MAX_SAFE_INTEGER, ''];
 }
@@ -482,7 +543,7 @@ export function adminRepository(database: Database, ctx: AdminContext) {
 
     /** Newest first, keyed on (failed_at, id). Never the envelope, which only replay reads. */
     async listFailedJobs(input: { cursor?: string | undefined; limit: number }): Promise<{ data: FailedJobRow[]; nextCursor: string | null }> {
-      const [at, id] = parseFailedJobCursor(input.cursor);
+      const [at, id] = parseTimeCursor(input.cursor);
       const { results } = await d1
         .prepare(
           `SELECT ${FAILED_JOB_COLUMNS} FROM failed_jobs f LEFT JOIN workspaces w ON w.id = f.workspace_id
@@ -493,6 +554,17 @@ export function adminRepository(database: Database, ctx: AdminContext) {
       const data = results.slice(0, input.limit).map(toFailedJob);
       const last = data.at(-1);
       return { data, nextCursor: results.length > input.limit && last ? `${last.failedAt}.${last.id}` : null };
+    },
+
+    /** Newest first, keyed on (created_at, id), for the whole installation or one workspace. */
+    async listAudit(input: { cursor?: string | undefined; limit: number; workspaceId?: string | undefined }): Promise<{ data: AuditEntryRow[]; nextCursor: string | null }> {
+      const [at, id] = parseTimeCursor(input.cursor);
+      const scope = input.workspaceId === undefined ? '' : 'a.workspace_id = ?4 AND ';
+      const statement = d1.prepare(`${AUDIT_SELECT} WHERE ${scope}(a.created_at, a.id) < (?1, ?2) ORDER BY a.created_at DESC, a.id DESC LIMIT ?3`);
+      const { results } = await (input.workspaceId === undefined ? statement.bind(at, id, input.limit + 1) : statement.bind(at, id, input.limit + 1, input.workspaceId)).all<RawAuditEntry>();
+      const data = results.slice(0, input.limit).map(toAuditEntry);
+      const last = data.at(-1);
+      return { data, nextCursor: results.length > input.limit && last ? `${last.createdAt}.${last.id}` : null };
     },
 
     async getFailedJob(id: string): Promise<FailedJobRow | null> {
