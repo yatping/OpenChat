@@ -7,6 +7,7 @@ import {
   disconnectRelayRoute,
   dismissFailedJobRoute,
   getRelayStatusRoute,
+  getRetentionRoute,
   listFailedJobsRoute,
   replayFailedJobRoute,
   listAdminWebsitesRoute,
@@ -14,6 +15,7 @@ import {
   listPeopleRoute,
   reactivatePersonRoute,
   reconnectRelayRoute,
+  setRetentionRoute,
   unassignPersonRoute,
   updateWebsiteRoute,
   updatePersonRoute,
@@ -28,6 +30,7 @@ import {
   deactivatePerson,
   disconnectRelay,
   dismissFailedJob,
+  getRetention,
   listAdminWebsites,
   listFailedJobs,
   listAdminWorkspaces,
@@ -38,6 +41,7 @@ import {
   replayFailedJob,
   type ReplayQueue,
   setInstallationAdmin,
+  setRetention,
   unassignPerson,
   updateWebsite,
   updateWorkspace,
@@ -196,5 +200,15 @@ export function registerAdminRoutes(app: App) {
     const { deps, ctx } = await admin(c);
     await dismissFailedJob(deps.db, ctx, c.req.valid('param').failedJobId);
     return c.body(null, 204);
+  });
+
+  app.openapi(getRetentionRoute, async (c) => {
+    const { deps, ctx } = await admin(c);
+    return c.json(await getRetention(deps.db, ctx, c.req.valid('param').workspaceId), 200);
+  });
+
+  app.openapi(setRetentionRoute, async (c) => {
+    const { deps, ctx } = await admin(c);
+    return c.json(await setRetention(deps.db, ctx, c.req.valid('param').workspaceId, c.req.valid('json').retentionDays), 200);
   });
 }

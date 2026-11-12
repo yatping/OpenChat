@@ -1270,3 +1270,31 @@ export const dismissFailedJobRoute = createRoute({
   request: { params: failedJobParams },
   responses: { 204: { description: 'Dismissed' }, default: problemResponse },
 });
+
+export const RetentionSchema = z
+  .object({
+    retentionDays: z.number().int().min(30).max(3650).nullable().openapi({
+      description: 'Resolved and archived conversations whose last message is older than this many days are deleted, with their messages and files, by an hourly sweep. Contacts left with no conversations, and not seen for as long, go too. Null keeps everything.',
+    }),
+  })
+  .openapi('Retention');
+
+export const getRetentionRoute = createRoute({
+  ...adminRoute,
+  method: 'get',
+  path: '/api/v1/admin/workspaces/{workspaceId}/retention',
+  operationId: 'getRetention',
+  summary: 'How long a workspace keeps closed conversations',
+  request: { params: workspaceParams },
+  responses: { 200: { description: 'Retention', ...json(RetentionSchema) }, default: problemResponse },
+});
+
+export const setRetentionRoute = createRoute({
+  ...adminRoute,
+  method: 'put',
+  path: '/api/v1/admin/workspaces/{workspaceId}/retention',
+  operationId: 'setRetention',
+  summary: 'Set how long a workspace keeps closed conversations. Deletion starts within the hour and cannot be undone.',
+  request: { params: workspaceParams, body: { required: true, ...json(RetentionSchema.strict()) } },
+  responses: { 200: { description: 'Set', ...json(RetentionSchema) }, default: problemResponse },
+});

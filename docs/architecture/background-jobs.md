@@ -129,8 +129,8 @@ One schedule, `* * * * *`, with a dispatcher inside. Each sweep is bounded and m
 | Outbox | Every minute | `dispatched_at IS NULL AND created_at < now - 60 s LIMIT 200` | Re-dispatch. If `attempts` exceeds 20, raise an alert |
 | Automation | Every minute | `next_automation_at <= now LIMIT 200` | Enqueue `automation.evaluate`; clear or advance the column |
 | Attachment orphans | Hourly | Unattached and older than 24 h, `LIMIT 200` | Delete from R2, then the row |
-| Token and session expiry | Hourly | Expired, in chunks | Delete |
-| Outbox and receipt purge | Hourly | Older than 14 days, in chunks | Delete |
+| Outbox purge | Hourly | Dispatched more than 14 days ago, in chunks | Delete |
+| Retention | Hourly | Expired sessions and tokens, old receipts and failed jobs, and anonymous visitors, then each workspace's setting, in chunks | Delete. See [retention](data-model.md#retention) |
 | Heartbeat | Every minute | | Record the time for `/health/queues` |
 
 Sweeps from overlapping cron runs are harmless, because each action is idempotent. Sweep writes use small chunks, because D1 is shared with live traffic.

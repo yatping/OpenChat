@@ -128,6 +128,34 @@ For a person's request to see, or delete, what a workspace holds about them. Bot
 
 **Not reached:** a push job already queued holds a notification's text for at most an hour, when it expires. The relay holds nothing about contacts. Copies in D1 Time Travel last 30 days. Erasure does not close a visitor's open socket. Nothing more is published to it, because the conversation is gone, and it cannot get a new ticket, because the visitor's token is gone too.
 
+## Retention
+
+Each workspace has `retention_days`, set by an installation admin under **Workspaces** (`PUT /api/v1/admin/workspaces/{id}/retention`), from 30 days to ten years. NULL, the default, keeps everything. A change is audited as `workspace.retention_changed`, with the old and new values.
+
+An hourly sweep, in `services/api/src/retention.ts`, then deletes for each workspace with a setting:
+
+| Removed | When |
+|---|---|
+| Conversations, with their messages, events, tags, read positions, automation runs, files, and `failed_jobs` naming them | Resolved or archived, and the last message is older than the setting. Open and pending conversations are kept, however old |
+| Contacts, with their browsers and tags | No conversations left, and not seen within the setting |
+| `email_unsubscribe_links` | Created before the cutoff, for an address no contact in the workspace still has |
+| `email_deliveries` | Created before the cutoff |
+
+Conversations go as erasure does them: one batch writes an outbox row, `conversations.expired`, whose ID list fixes which conversations go, an audit row with the count, and the deletions. Dispatch then deletes their files from R2. A conversation that gets a new message before the batch no longer qualifies and stays. Every statement repeats the check that the setting is still what the sweep read. Contacts that go are counted in a `contacts.expired` audit row. Merge pointers to them are cleared first.
+
+**Kept, on purpose:** `email_suppressions`, as for erasure, and the audit log, which holds IDs only.
+
+Whatever the setting, every installation also deletes, hourly:
+
+| Removed | When |
+|---|---|
+| `auth_sessions`, `auth_tokens` | Expired |
+| `job_receipts` | Claimed more than 14 days ago, past the longest a queue keeps a message |
+| `failed_jobs` | Failed more than 90 days ago |
+| Contacts with no address and no conversations, with their browsers | Not seen for 30 days: visitors who opened the widget but never wrote |
+
+**Rate.** Each run takes at most 500 conversations from each of 200 workspaces, in chunks of 50, and 500 rows of each other kind, so turning retention on for a large backlog takes hours, not one long write that holds up live traffic. D1 Time Travel keeps copies for 30 days.
+
 ## Concurrency and capacity rules
 
 | Rule | Reason |
@@ -148,7 +176,7 @@ Off for the MVP. Queries go through a `DatabaseProvider` so that `withSession()`
 ### Reaching the 10 GB limit
 
 1. Expose database size at `/health/database` to operators, and alert at 70%.
-2. After MVP, archive old conversations to R2 as NDJSON and delete in chunks. A retention setting per workspace comes with Milestone 6.
+2. After MVP, archive old conversations to R2 as NDJSON and delete in chunks. Meanwhile a workspace can set [retention](#retention), which deletes closed conversations once they are old enough.
 3. Move message bodies to a second D1 database if necessary. The repository layer hides this, though `batch()` cannot span two databases, so that move needs a redesign of Pattern 1. Treat it as a major change, not a tuning step.
 
 ## Migration strategy

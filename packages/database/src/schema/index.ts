@@ -123,6 +123,8 @@ export const workspaces = sqliteTable(
     relayWorkspaceStatus: text('relay_workspace_status', { enum: ['unregistered', 'registered', 'revoked'] })
       .notNull()
       .default('unregistered'),
+    /** Closed conversations older than this, by their last message, are deleted. NULL keeps them. */
+    retentionDays: integer('retention_days'),
     createdAt: ts('created_at'),
     updatedAt: ts('updated_at'),
   },
@@ -232,6 +234,8 @@ export const contacts = sqliteTable(
     }),
     index('contacts_email_idx').on(t.workspaceId, t.email).where(sql`${t.email} IS NOT NULL`),
     index('contacts_list_idx').on(t.workspaceId, sql`${t.lastSeenAt} DESC`, sql`${t.id} DESC`),
+    // For the retention sweep, across workspaces.
+    index('contacts_stale_idx').on(t.lastSeenAt),
   ],
 );
 
@@ -713,7 +717,7 @@ export const jobReceipts = sqliteTable(
     claimedAt: ts('claimed_at'),
     completedAt: integer('completed_at'),
   },
-  (t) => [check('job_receipts_status_ck', sql`${t.status} IN ('claimed','done')`)],
+  (t) => [check('job_receipts_status_ck', sql`${t.status} IN ('claimed','done')`), index('job_receipts_claimed_idx').on(t.claimedAt)],
 );
 
 /** The DLQ sink, so that failures outlive queue retention. IDs only, no message content. */

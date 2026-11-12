@@ -323,7 +323,7 @@ Before the official app or the managed relay is opened to others, someone other 
 
 ## M6: Hardening and release (M)
 
-Configurable relay limits, so that the managed relay can open to everyone, [built](../notification-relay/protocol.md#rate-limits). Contact export and erasure, which must also delete `email_unsubscribe_links`, [built](../architecture/data-model.md#contact-export-and-erasure). A page to see and replay failed jobs, [built](../architecture/background-jobs.md#failure-monitoring). Retention settings. Audit log UI. Accessibility pass on widget and dashboard. Widget translations. Monitoring guides and alert recommendations. Backup and restore rehearsal. External security review. App Store submission. Licence and CLA checks. Public documentation, `security.txt`.
+Configurable relay limits, so that the managed relay can open to everyone, [built](../notification-relay/protocol.md#rate-limits). Contact export and erasure, which must also delete `email_unsubscribe_links`, [built](../architecture/data-model.md#contact-export-and-erasure). A page to see and replay failed jobs, [built](../architecture/background-jobs.md#failure-monitoring). Retention settings, [built](../architecture/data-model.md#retention). Audit log UI. Accessibility pass on widget and dashboard. Widget translations. Monitoring guides and alert recommendations. Backup and restore rehearsal. External security review. App Store submission. Licence and CLA checks. Public documentation, `security.txt`.
 
 **Exit:** both acceptance journeys in spec §20 are demonstrated end to end on production infrastructure, with recordings or logs. Known issues published.
 

@@ -357,6 +357,28 @@ export function adminRepository(database: Database, ctx: AdminContext) {
       return allowed?.meta.changes === 1 ? d1.prepare(`SELECT ${WORKSPACE_COLUMNS} FROM workspaces WHERE id = ?1`).bind(workspaceId).first<WorkspaceRow>() : null;
     },
 
+    /** Undefined if the workspace does not exist. Null keeps conversations. */
+    async retention(workspaceId: string): Promise<number | null | undefined> {
+      const row = await d1.prepare(`SELECT retention_days AS days FROM workspaces WHERE id = ?1`).bind(workspaceId).first<{ days: number | null }>();
+      return row ? row.days : undefined;
+    },
+
+    /** False if the workspace does not exist, or the caller is no longer an admin at commit. */
+    async setRetention(workspaceId: string, days: number | null): Promise<boolean> {
+      const audit = newId('audit');
+      const [allowed] = await d1.batch([
+        d1
+          .prepare(
+            `INSERT INTO audit_log (id, workspace_id, actor_type, actor_id, action, target_type, target_id, metadata_json, created_at)
+             SELECT ?1, w.id, 'user', ?2, 'workspace.retention_changed', 'workspace', w.id, json_object('from', w.retention_days, 'to', CAST(?4 AS INTEGER)), ${DB_NOW_MS}
+               FROM workspaces w WHERE w.id = ?3 AND ${actorIsAdmin('?2')}`,
+          )
+          .bind(audit, actor, workspaceId, days),
+        d1.prepare(`UPDATE workspaces SET retention_days = ?1, updated_at = ${DB_NOW_MS} WHERE id = ?2 AND EXISTS (SELECT 1 FROM audit_log WHERE id = ?3)`).bind(days, workspaceId, audit),
+      ]);
+      return allowed?.meta.changes === 1;
+    },
+
     /** Null if the workspace does not exist. */
     async listWebsites(workspaceId: string): Promise<WebsiteRow[] | null> {
       const workspace = await d1.prepare(`SELECT id FROM workspaces WHERE id = ?1`).bind(workspaceId).first();

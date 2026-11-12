@@ -140,7 +140,7 @@ Customers are the controllers of visitor data. For GDPR and similar laws, the pr
 - A way to erase a former agent's name on request. Removal keeps it, and no tool for this exists yet.
 - Consent evidence for follow-ups.
 - A widget consent mode which uses session-only storage until the host site grants consent. Built.
-- Retention settings (Milestone 6).
+- Retention settings. Built: a workspace can delete closed conversations after a set time, and every installation deletes expired sessions, old job records, and visitors who never wrote. See [retention](data-model.md#retention).
 - A location hint for D1 and a jurisdiction for Durable Objects and R2 where needed. See [open question Q10](open-questions.md).
 
 The operator of a **managed relay** holds device tokens and recipient IDs, which may be personal data. That operator needs a privacy policy and terms. See [Q5](open-questions.md).

@@ -201,6 +201,7 @@ The second acceptance journey in spec §20 is then tested in CI as far as is pra
 | Rotate a signing key | Add new key, deploy, wait out the token lifetime, remove the old key |
 | Rotate the relay key | Register a new key with the relay, switch, revoke the old key |
 | Reset an owner's password with no email configured | `oc admin reset-password`, which issues a one-time link. It must run with deploy credentials |
+| Set retention | In the dashboard, **Workspaces**, choose the workspace, then **Keep closed conversations**. Deletion starts within the hour and cannot be undone, except from D1 Time Travel within 30 days |
 | Inspect failed jobs | In the dashboard, **Failed jobs**, for an installation admin. Fix the cause, then **Replay**, or **Dismiss** what is no longer needed. A job past the time it had to run by cannot be replayed. Both actions are in the audit log |
 | Disable push | In the dashboard, **Workspaces**, **Push notifications**, **Disconnect and erase**: push stops, and the relay erases what it holds about this installation. Then, to take the relay out of the deployment, `pnpm oc deploy --env <name> --no-relay`. Messaging is unaffected |
 | Backup | Time Travel covers 30 days. For longer, `oc backup` uses `wrangler d1 export` to R2 or local disk. An export may block other queries, so schedule it off-peak, and read the current documentation first |

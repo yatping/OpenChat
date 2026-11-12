@@ -245,3 +245,14 @@ export async function replayFailedJob(db: Database, ctx: AdminContext, id: strin
 export async function dismissFailedJob(db: Database, ctx: AdminContext, id: string): Promise<void> {
   if (!(await adminRepository(db, ctx).dismissFailedJob(id))) throw notFound();
 }
+
+export async function getRetention(db: Database, ctx: AdminContext, workspaceId: string): Promise<{ retentionDays: number | null }> {
+  const days = await adminRepository(db, ctx).retention(workspaceId);
+  if (days === undefined) throw notFound();
+  return { retentionDays: days };
+}
+
+export async function setRetention(db: Database, ctx: AdminContext, workspaceId: string, retentionDays: number | null): Promise<{ retentionDays: number | null }> {
+  if (!(await adminRepository(db, ctx).setRetention(workspaceId, retentionDays))) throw notFound();
+  return { retentionDays };
+}
