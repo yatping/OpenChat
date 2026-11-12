@@ -74,33 +74,36 @@ export class RelayError extends Error {
   }
 }
 
-export async function relayRequest(relay: RelayConfig, installationId: string, path: string, body: unknown, workspaceId?: string): Promise<unknown> {
-  const bytes = new TextEncoder().encode(JSON.stringify(body));
+async function signedHeaders(relay: RelayConfig, installationId: string, method: 'GET' | 'POST', path: string, body: Uint8Array, workspaceId?: string): Promise<Record<string, string>> {
   const requestId = crypto.randomUUID();
   const timestamp = String(Math.floor(Date.now() / 1000));
   const signature = await signRequest(await importPrivateKey(relay.key.privateKey), {
-    method: 'POST',
+    method,
     path,
     installationId,
     ...(workspaceId === undefined ? {} : { workspaceId }),
     keyId: relay.key.kid,
     requestId,
     timestamp,
-    body: bytes,
+    body,
   });
+  return {
+    'x-installation-id': installationId,
+    ...(workspaceId === undefined ? {} : { 'x-workspace-id': workspaceId }),
+    'x-key-id': relay.key.kid,
+    'x-request-id': requestId,
+    'x-timestamp': timestamp,
+    'x-signature': signature,
+  };
+}
+
+export async function relayRequest(relay: RelayConfig, installationId: string, path: string, body: unknown, workspaceId?: string): Promise<unknown> {
+  const bytes = new TextEncoder().encode(JSON.stringify(body));
   const response = await fetch(`${relay.url}${path}`, {
     method: 'POST',
     redirect: 'manual',
     signal: AbortSignal.timeout(TIMEOUT_MS),
-    headers: {
-      'content-type': 'application/json',
-      'x-installation-id': installationId,
-      ...(workspaceId === undefined ? {} : { 'x-workspace-id': workspaceId }),
-      'x-key-id': relay.key.kid,
-      'x-request-id': requestId,
-      'x-timestamp': timestamp,
-      'x-signature': signature,
-    },
+    headers: { 'content-type': 'application/json', ...(await signedHeaders(relay, installationId, 'POST', path, bytes, workspaceId)) },
     body: bytes,
   });
   if (response.ok) return response.status === 204 ? null : response.json().catch(() => null);
@@ -218,5 +221,29 @@ export async function eraseAtRelay(db: Database, relay: RelayConfig): Promise<vo
     await relayRequest(relay, installation.id, '/v1/installations/unregister', {});
   } catch (error) {
     if (!(error instanceof RelayError && error.unrecognised)) throw error;
+  }
+}
+
+export type RelayCheck = 'ok' | 'rejected' | 'unreachable';
+
+/**
+ * Asks the relay about a notification that cannot exist. A 404 means the relay knows this installation and accepted
+ * its signature, and nothing is sent. 401 or 403 means it did not. Used by /health/notifications.
+ */
+export async function checkRelay(relay: RelayConfig, installationId: string): Promise<RelayCheck> {
+  const path = `/v1/notifications/${crypto.randomUUID()}`;
+  try {
+    const response = await fetch(`${relay.url}${path}`, {
+      method: 'GET',
+      redirect: 'manual',
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      headers: await signedHeaders(relay, installationId, 'GET', path, new Uint8Array()),
+    });
+    await response.body?.cancel();
+    // The relay checks the signature before its rate limit, so a 429 also means it was accepted.
+    if (response.status === 404 || response.status === 429) return 'ok';
+    return response.status === 401 || response.status === 403 ? 'rejected' : 'unreachable';
+  } catch {
+    return 'unreachable';
   }
 }

@@ -18,6 +18,7 @@ function usage(): never {
   pnpm oc upgrade --env <name>      after checking out a newer release
   pnpm oc rollback --env <name>     puts back the Worker from before the last upgrade
   pnpm oc recover --env <name> --email <address>
+  pnpm oc health --env <name>       the operator health checks, with the token oc deploy kept
   pnpm oc render --env <name> --service <api|notification-relay>
 
 Your own notification relay, for your own iOS app and APNs key:
@@ -144,6 +145,10 @@ async function main(name: string) {
   }
   if (command === 'upgrade') return deployer.upgrade(name);
   if (command === 'rollback') return deployer.rollback(name);
+  if (command === 'health') {
+    if (!(await deployer.health(name))) process.exitCode = 1;
+    return;
+  }
   if (command === 'recover') {
     const email = flag('email');
     if (!email) usage();

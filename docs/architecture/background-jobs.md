@@ -170,7 +170,7 @@ Follow-ups use one fixed template, in `packages/core/src/email-templates.ts`, wi
 - **Replay** marks the record replayed, then sends the stored envelope, unchanged and with the same idempotency key, to the queue it came from: a `-dlq` name maps back to its original. A send that fails clears the mark, so it can be tried again. A record replays once; a job that fails again is recorded anew. Refused with `409 not_replayable` when the envelope is malformed, is past its `notAfter`, which the consumer would drop anyway, or names a queue this Worker has no binding for.
 - **Dismiss** deletes the record. Replay and dismiss each write an audit row with no workspace, written first in the same batch, as for other installation-admin actions.
 - Metrics to Analytics Engine: processed, retried, and failed by job type; queue-to-completion latency; outbox age.
-- `/health/queues` reports the last cron heartbeat, the oldest undispatched outbox row, and unreviewed `failed_jobs`. Actual queue depth is on Cloudflare's dashboard and GraphQL API, since the binding does not expose it.
+- `/health/queues` reports the age of the last cron heartbeat to come back through the jobs queue, the oldest undispatched outbox row, and unreviewed `failed_jobs` ([monitoring](../operations/monitoring.md)). Actual queue depth is on Cloudflare's dashboard and GraphQL API, since the binding does not expose it.
 
 ## Limits to respect
 

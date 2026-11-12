@@ -4,7 +4,7 @@
  * run, so that a deployment never adopts something it did not create.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { generateOpaqueToken, generateSerializedKey, hashOpaqueToken } from '@openchat/auth';
 import { assertEmail, assertPublicUrl, bootstrapSql, recoverySql, resetLink } from './bootstrap';
@@ -20,6 +20,8 @@ export interface State extends Omit<DeploymentState, 'd1DatabaseId'> {
   deployed?: boolean;
   secretsSet?: boolean;
   relayKeySet?: boolean;
+  /** OPERATOR_TOKEN, for the health checks under /health/*. Its only copy is .openchat/<name>/operator-token. */
+  operatorTokenSet?: boolean;
   initialized?: boolean;
   publicBaseUrl?: string;
   /** The release last deployed. Missing for deployments made before it was recorded. */
@@ -69,6 +71,7 @@ export function createDeployer(root: string, deps: DeployerDeps = {}) {
   const release = releaseVersion(root);
   const dirOf = (name: string) => join(root, '.openchat', name);
   const statePath = (name: string) => join(dirOf(name), 'state.json');
+  const operatorTokenPath = (name: string) => join(dirOf(name), 'operator-token');
   const configPath = (name: string) => `../../.openchat/${name}/api.wrangler.jsonc`;
 
   const wrangler = deps.wrangler ?? wranglerIn(root, '@openchat/api');
@@ -164,6 +167,17 @@ export function createDeployer(root: string, deps: DeployerDeps = {}) {
       const active = await generateSerializedKey(`relay-${Date.now().toString(36)}`);
       putSecrets(state, { RELAY_SIGNING_KEY: JSON.stringify({ active }) });
       state.relayKeySet = true;
+      save(state);
+    }
+    if (!state.operatorTokenSet) {
+      // Kept on this computer only, readable by this user, for `oc health` and for a monitor.
+      log('Generating the operator token for health checks');
+      const token = generateOpaqueToken();
+      mkdirSync(dirOf(state.name), { recursive: true });
+      writeFileSync(operatorTokenPath(state.name), `${token}\n`, { mode: 0o600 });
+      chmodSync(operatorTokenPath(state.name), 0o600);
+      putSecrets(state, { OPERATOR_TOKEN: token });
+      state.operatorTokenSet = true;
       save(state);
     }
     const resendKey = process.env.RESEND_API_KEY;
@@ -373,6 +387,37 @@ export function createDeployer(root: string, deps: DeployerDeps = {}) {
     },
 
     /** Works with no email provider. Holding Cloudflare access is the proof of authority. */
+    /** Reads the four operator health checks. True unless one of them fails. */
+    async health(name: string): Promise<boolean> {
+      const state = load(name);
+      if (!state.publicBaseUrl) throw new Error(`No deployment named ${name} in .openchat`);
+      if (!state.operatorTokenSet || !existsSync(operatorTokenPath(name))) {
+        throw new Error(`${name} has no operator token on this computer. Run pnpm oc deploy --env ${name} once to create one.`);
+      }
+      const token = readFileSync(operatorTokenPath(name), 'utf8').trim();
+      let healthy = true;
+      for (const check of HEALTH_CHECKS) {
+        let line: string;
+        try {
+          const response = await fetch(`${state.publicBaseUrl}/health/${check}`, { headers: { authorization: `Bearer ${token}` } });
+          const result = (await response.json().catch(() => null)) as HealthResult | null;
+          if (!result || typeof result.status !== 'string') {
+            healthy = false;
+            line = `FAIL ${check}: answered ${response.status}`;
+          } else {
+            if (result.status === 'fail') healthy = false;
+            const problems = result.problems.length > 0 ? ` (${result.problems.join(', ')})` : '';
+            line = `${result.status.toUpperCase().padEnd(4)} ${check}${problems}: ${describeHealth(check, result)}`;
+          }
+        } catch (error) {
+          healthy = false;
+          line = `FAIL ${check}: ${(error as Error).message}`;
+        }
+        log(line);
+      }
+      return healthy;
+    },
+
     async recover(name: string, email: string) {
       assertEmail(email);
       const state = load(name);
@@ -385,4 +430,18 @@ export function createDeployer(root: string, deps: DeployerDeps = {}) {
       log(`Set a new password within one hour. Using this link signs the account out everywhere:\n${resetLink(state.publicBaseUrl, token)}`);
     },
   };
+}
+
+export const HEALTH_CHECKS = ['database', 'queues', 'realtime', 'notifications'] as const;
+type HealthResult = { status: 'ok' | 'warn' | 'fail'; problems: string[] } & Record<string, unknown>;
+
+const megabytes = (bytes: unknown) => (typeof bytes === 'number' ? `${(bytes / 1024 ** 2).toFixed(1)} MB` : 'unknown size');
+const secondsAgo = (value: unknown) => (typeof value === 'number' ? `${value} s ago` : 'never');
+
+/** One line for each check, from the fields its contract defines. */
+export function describeHealth(check: (typeof HEALTH_CHECKS)[number], r: HealthResult): string {
+  if (check === 'database') return `${String(r.latencyMs)} ms, ${megabytes(r.sizeBytes)} of ${megabytes(r.sizeLimitBytes)}, migration ${String(r.migration ?? 'unknown')}`;
+  if (check === 'queues') return `heartbeat ${secondsAgo(r.heartbeatAgeSeconds)}, oldest outbox row ${r.oldestPendingOutboxSeconds === null ? 'none' : secondsAgo(r.oldestPendingOutboxSeconds)}, ${String(r.unreviewedFailedJobs)} failed jobs to review`;
+  if (check === 'realtime') return r.roundTripMs === null ? 'no answer' : `${String(r.roundTripMs)} ms round trip`;
+  return `relay ${String(r.relay)}${typeof r.roundTripMs === 'number' ? `, ${r.roundTripMs} ms` : ''}`;
 }

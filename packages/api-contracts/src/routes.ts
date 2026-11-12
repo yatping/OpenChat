@@ -1326,3 +1326,85 @@ export const listAuditLogRoute = createRoute({
   request: { query: PaginationQuery.extend({ workspaceId: z.string().optional() }) },
   responses: { 200: { description: 'Audit entries', ...json(page(AuditEntrySchema)) }, default: problemResponse },
 });
+
+// Operator health checks. Each answers 200 when it is ok or only a warning, and 503 when it fails, so that a
+// monitor can watch the status code alone. Anyone without the operator token gets 404.
+// See docs/operations/monitoring.md.
+
+const operator = [{ operatorAuth: [] }];
+const HealthStatusSchema = z.enum(['ok', 'warn', 'fail']);
+/** Short codes, such as `heartbeat_stale`, for what made the status worse than ok. */
+const HealthProblemsSchema = z.array(z.string());
+const healthResponses = (schema: z.ZodType, name: string) => ({
+  200: { description: `${name} is ok, or only warns`, ...json(schema) },
+  503: { description: `${name} is failing`, ...json(schema) },
+  default: problemResponse,
+});
+
+export const DatabaseHealthSchema = z
+  .object({
+    status: HealthStatusSchema,
+    problems: HealthProblemsSchema,
+    latencyMs: z.number().int(),
+    sizeBytes: z.number().int().nullable(),
+    sizeLimitBytes: z.number().int(),
+    migration: z.string().nullable(),
+  })
+  .openapi('DatabaseHealth');
+
+export const QueueHealthSchema = z
+  .object({
+    status: HealthStatusSchema,
+    problems: HealthProblemsSchema,
+    heartbeatAgeSeconds: z.number().int().nullable(),
+    oldestPendingOutboxSeconds: z.number().int().nullable(),
+    unreviewedFailedJobs: z.number().int(),
+  })
+  .openapi('QueueHealth');
+
+export const RealtimeHealthSchema = z
+  .object({ status: HealthStatusSchema, problems: HealthProblemsSchema, roundTripMs: z.number().int().nullable() })
+  .openapi('RealtimeHealth');
+
+export const NotificationHealthSchema = z
+  .object({
+    status: HealthStatusSchema,
+    problems: HealthProblemsSchema,
+    relay: z.enum(['off', 'disconnected', 'unregistered', 'ok', 'unreachable', 'rejected']),
+    roundTripMs: z.number().int().nullable(),
+  })
+  .openapi('NotificationHealth');
+
+const healthRoute = { method: 'get' as const, tags: ['health'], security: operator };
+
+export const getDatabaseHealthRoute = createRoute({
+  ...healthRoute,
+  path: '/health/database',
+  operationId: 'getDatabaseHealth',
+  summary: 'Query latency, the latest migration, and size against the D1 limit.',
+  responses: healthResponses(DatabaseHealthSchema, 'The database'),
+});
+
+export const getQueueHealthRoute = createRoute({
+  ...healthRoute,
+  path: '/health/queues',
+  operationId: 'getQueueHealth',
+  summary: 'Age of the last cron heartbeat to pass through the jobs queue, the oldest undispatched outbox row, and unreviewed failed jobs.',
+  responses: healthResponses(QueueHealthSchema, 'Background work'),
+});
+
+export const getRealtimeHealthRoute = createRoute({
+  ...healthRoute,
+  path: '/health/realtime',
+  operationId: 'getRealtimeHealth',
+  summary: 'Round trip to a Durable Object that holds no data.',
+  responses: healthResponses(RealtimeHealthSchema, 'Realtime'),
+});
+
+export const getNotificationHealthRoute = createRoute({
+  ...healthRoute,
+  path: '/health/notifications',
+  operationId: 'getNotificationHealth',
+  summary: 'Whether the relay answers and accepts this installation\'s signature. A problem here only warns: messaging works without push.',
+  responses: { 200: { description: 'Push is ok, off, or only warns', ...json(NotificationHealthSchema) }, default: problemResponse },
+});

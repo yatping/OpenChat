@@ -278,6 +278,8 @@ pnpm oc relay deploy --env production     # path 2 only
 
 `oc upgrade` records how to undo itself before changing anything, and puts the old version back by itself if the new one is unhealthy. If you find a problem later, `pnpm oc rollback --env production` puts the previous version back. See [upgrades](deployment.md#upgrades-oc-upgrade).
 
+To check on it at any time, `pnpm oc health --env production` reads the [health checks](monitoring.md), which also says what to alert on.
+
 For path 2, rebuild your app only when the release notes say the app changed. For path 1, the official app updates through the App Store.
 
 ## When something goes wrong

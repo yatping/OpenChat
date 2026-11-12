@@ -24,7 +24,9 @@ type Unscoped = { kind: 'public' | 'self'; reason: string };
 type VisitorScoped = { kind: 'visitor'; body?: Record<string, unknown>; ownerStatus: number };
 /** For installation admins only, across workspaces. Everyone else gets 404, as if the route were not there. ADR-0015. */
 type InstallationAdmin = { kind: 'installation'; body?: Record<string, unknown> };
-type Case = Scoped | Unscoped | VisitorScoped | InstallationAdmin;
+/** For the installation's operator, with OPERATOR_TOKEN. Everyone else, signed in or not, gets 404. */
+type Operator = { kind: 'operator' };
+type Case = Scoped | Unscoped | VisitorScoped | InstallationAdmin | Operator;
 
 /** Stands for a file in the cases below: the harness sends these bytes as the body. */
 const UPLOAD = { __file: true };
@@ -34,6 +36,10 @@ const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2
 const CASES: Record<string, Case> = {
   getHealth: { kind: 'public', reason: 'Status only' },
   getDiscovery: { kind: 'public', reason: 'Describes the installation. No workspace data' },
+  getDatabaseHealth: { kind: 'operator' },
+  getQueueHealth: { kind: 'operator' },
+  getRealtimeHealth: { kind: 'operator' },
+  getNotificationHealth: { kind: 'operator' },
   login: { kind: 'public', reason: 'Acts only on the submitted credentials' },
   refreshSession: { kind: 'public', reason: 'Acts only on the session of the presented token' },
   requestPasswordReset: { kind: 'public', reason: 'Answers the same for every address' },
@@ -353,8 +359,12 @@ describe('across tenants', () => {
   it.each(contractRoutes.filter((r) => !r.isPublic))('$id refuses a request with no token', async ({ method, path, id }) => {
     const before = await snapshotOfA();
     const response = await request(method, urlFor(path, RESOURCES.a), null, CASES[id]?.kind === 'self' ? undefined : bodyOf(id));
-    expect(response.status).toBe(401);
+    expect(response.status).toBe(CASES[id]?.kind === 'operator' ? 404 : 401);
     expect(await snapshotOfA()).toBe(before);
+  });
+
+  it.each(contractRoutes.filter((r) => CASES[r.id]?.kind === 'operator'))('$id is not there for a signed-in member', async ({ method, path }) => {
+    expect((await request(method, path, tokens.ownerB, undefined)).status).toBe(404);
   });
 
   it.each(scopedRoutes)('$id answers 404 to the owner of another workspace', async ({ method, path, id }) => {
