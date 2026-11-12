@@ -166,7 +166,9 @@ Follow-ups use one fixed template, in `packages/core/src/email-templates.ts`, wi
 ## Failure monitoring
 
 - The DLQ consumer writes to `failed_jobs`, because a DLQ message only lasts as long as retention. Records hold IDs only.
-- The dashboard's operator page lists failures and offers replay. Replay re-enqueues the envelope with the same idempotency key, so it remains safe.
+- The dashboard's **Failed jobs** page, for installation admins, lists failures newest first: the job type, workspace, attempts, and when. It never shows the envelope. Built in M6.
+- **Replay** marks the record replayed, then sends the stored envelope, unchanged and with the same idempotency key, to the queue it came from: a `-dlq` name maps back to its original. A send that fails clears the mark, so it can be tried again. A record replays once; a job that fails again is recorded anew. Refused with `409 not_replayable` when the envelope is malformed, is past its `notAfter`, which the consumer would drop anyway, or names a queue this Worker has no binding for.
+- **Dismiss** deletes the record. Replay and dismiss each write an audit row with no workspace, written first in the same batch, as for other installation-admin actions.
 - Metrics to Analytics Engine: processed, retried, and failed by job type; queue-to-completion latency; outbox age.
 - `/health/queues` reports the last cron heartbeat, the oldest undispatched outbox row, and unreviewed `failed_jobs`. Actual queue depth is on Cloudflare's dashboard and GraphQL API, since the binding does not expose it.
 

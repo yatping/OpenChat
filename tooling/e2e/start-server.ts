@@ -34,6 +34,11 @@ INSERT INTO websites (id, workspace_id, name, website_key, allowed_origins_json,
 INSERT INTO websites (id, workspace_id, name, website_key, allowed_origins_json, settings_json, created_at, updated_at) VALUES
   ('site_styled', ${quote(WORKSPACE_ID)}, 'Styled', ${quote(STYLED_WEBSITE_KEY)}, ${quote(JSON.stringify([SITE_ORIGIN]))}, ${quote(JSON.stringify(STYLED_WEBSITE_SETTINGS))}, 1, 1),
   ('site_turnstile', ${quote(WORKSPACE_ID)}, 'Checked', ${quote(TURNSTILE_WEBSITE_KEY)}, ${quote(JSON.stringify([SITE_ORIGIN]))}, '{"requireTurnstile":true}', 1, 1);
+INSERT INTO failed_jobs (id, workspace_id, queue, job_type, idempotency_key, attempts, envelope_json, failed_at) VALUES
+  ('fjob_e2e_check', ${quote(WORKSPACE_ID)}, 'oc-local-jobs-dlq', 'automation.evaluate', 'automation.evaluate:conv_gone:1', 5,
+   ${quote(JSON.stringify({ v: 1, type: 'automation.evaluate', id: 'job_e2e_check', idempotencyKey: 'automation.evaluate:conv_gone:1', workspaceId: WORKSPACE_ID, occurredAt: '2026-01-01T00:00:00.000Z', payload: { conversationId: 'conv_gone' } }))}, 2),
+  ('fjob_e2e_stale', ${quote(WORKSPACE_ID)}, 'oc-local-email', 'email.follow_up', 'email.follow_up:stale', 8,
+   ${quote(JSON.stringify({ v: 1, type: 'email.follow_up', id: 'job_e2e_stale', idempotencyKey: 'email.follow_up:stale', workspaceId: WORKSPACE_ID, occurredAt: '2026-01-01T00:00:00.000Z', notAfter: '2026-01-02T00:00:00.000Z', payload: {} }))}, 1);
 `;
 const seedFile = `${state}/seed.sql`;
 writeFileSync(join(api, seedFile), seed);

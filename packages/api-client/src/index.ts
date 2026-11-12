@@ -33,6 +33,7 @@ import type {
   createPersonRoute,
   listAdminWorkspacesRoute,
   getRelayStatusRoute,
+  listFailedJobsRoute,
   listPeopleRoute,
   updateWebsiteRoute,
   updateWorkspaceRoute,
@@ -66,6 +67,8 @@ export type PersonAssignment = BodyOf<typeof assignPersonRoute>;
 export type People = Json200<typeof listPeopleRoute>;
 export type AdminWorkspaces = Json200<typeof listAdminWorkspacesRoute>;
 export type RelayStatus = Json200<typeof getRelayStatusRoute>;
+export type FailedJobPage = Json200<typeof listFailedJobsRoute>;
+export type FailedJob = FailedJobPage['data'][number];
 export type LoginInput = BodyOf<typeof loginRoute>;
 export type CreatedWorkspace = Json201<typeof createWorkspaceRoute>;
 export type Conversation = Json200<typeof getConversationRoute>;
@@ -176,6 +179,9 @@ export function createClient(options: ClientOptions) {
     getRelayStatus: () => get<RelayStatus>('/api/v1/admin/push'),
     disconnectRelay: () => request<RelayStatus>('POST', '/api/v1/admin/push/disconnect'),
     reconnectRelay: () => request<RelayStatus>('POST', '/api/v1/admin/push/reconnect'),
+    listFailedJobs: (input: { cursor?: string | undefined; limit?: number } = {}) => get<FailedJobPage>(`/api/v1/admin/failed-jobs${query(input)}`),
+    replayFailedJob: (id: string) => request<FailedJob>('POST', `/api/v1/admin/failed-jobs/${encodeURIComponent(id)}/replay`),
+    dismissFailedJob: (id: string) => request<void>('DELETE', `/api/v1/admin/failed-jobs/${encodeURIComponent(id)}`),
     listWebsites: (workspaceId: string) => get<{ data: Website[] }>(`${workspace(workspaceId)}/websites`),
 
     listConversations: (workspaceId: string, input: { status: Conversation['status']; assignee?: string | undefined; cursor?: string | undefined }) =>

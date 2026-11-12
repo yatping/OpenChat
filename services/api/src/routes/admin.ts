@@ -5,7 +5,10 @@ import {
   createWorkspaceRoute,
   deactivatePersonRoute,
   disconnectRelayRoute,
+  dismissFailedJobRoute,
   getRelayStatusRoute,
+  listFailedJobsRoute,
+  replayFailedJobRoute,
   listAdminWebsitesRoute,
   listAdminWorkspacesRoute,
   listPeopleRoute,
@@ -24,12 +27,16 @@ import {
   createWorkspace,
   deactivatePerson,
   disconnectRelay,
+  dismissFailedJob,
   listAdminWebsites,
+  listFailedJobs,
   listAdminWorkspaces,
   listPeople,
   reactivatePerson,
   reconnectRelay,
   relayState,
+  replayFailedJob,
+  type ReplayQueue,
   setInstallationAdmin,
   unassignPerson,
   updateWebsite,
@@ -38,6 +45,7 @@ import {
 import { AppError, createLogger } from '@openchat/shared';
 import type { Context } from 'hono';
 import { authDeps, type App, type AppEnv } from '../context';
+import type { Env } from '../env';
 import { dispatchSoon } from '../dispatch';
 import { eraseAtRelay, RelayError, relayConfig } from '../push/relay-client';
 import { requireAuth } from './auth';
@@ -57,6 +65,10 @@ async function relayStatus(c: Context<AppEnv>, db: Awaited<ReturnType<typeof aut
     registered: relay !== null && state.registeredId === relay.id,
     subscriptions: state.subscriptions,
   };
+}
+
+function replayQueue(env: Env, queue: ReplayQueue): Queue {
+  return queue === 'notifications' ? env.NOTIFICATIONS_QUEUE : queue === 'email' ? env.EMAIL_QUEUE : env.JOBS_QUEUE;
 }
 
 export function registerAdminRoutes(app: App) {
@@ -160,5 +172,29 @@ export function registerAdminRoutes(app: App) {
     const { workspaceId, websiteId } = c.req.valid('param');
     const { deps, ctx } = await admin(c);
     return c.json(await updateWebsite(deps.db, ctx, workspaceId, websiteId, c.req.valid('json'), { turnstileAvailable: deps.turnstile !== undefined }), 200);
+  });
+
+  app.openapi(listFailedJobsRoute, async (c) => {
+    const { deps, ctx } = await admin(c);
+    return c.json(await listFailedJobs(deps.db, ctx, c.req.valid('query')), 200);
+  });
+
+  app.openapi(replayFailedJobRoute, async (c) => {
+    const { deps, ctx } = await admin(c);
+    const job = await replayFailedJob(deps.db, ctx, c.req.valid('param').failedJobId, async (queue, envelope) => {
+      try {
+        await replayQueue(c.env, queue).send(envelope);
+      } catch (error) {
+        createLogger().warn('failed_job_replay_send_failed', { jobType: envelope.type, errorName: (error as Error).name });
+        throw new AppError(503, 'queue_unavailable', 'The job could not be queued. Try again.');
+      }
+    });
+    return c.json(job, 200);
+  });
+
+  app.openapi(dismissFailedJobRoute, async (c) => {
+    const { deps, ctx } = await admin(c);
+    await dismissFailedJob(deps.db, ctx, c.req.valid('param').failedJobId);
+    return c.body(null, 204);
   });
 }

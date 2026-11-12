@@ -10,6 +10,7 @@ import {
   issueAuthToken,
   type AdminContext,
   type Database,
+  type FailedJobRow,
   type PersonChange,
   type Principal,
   type Role,
@@ -167,4 +168,80 @@ export async function disconnectRelay(db: Database, ctx: AdminContext, relayId: 
 
 export async function reconnectRelay(db: Database, ctx: AdminContext): Promise<void> {
   if (!(await adminRepository(db, ctx).reconnectRelay())) throw notFound();
+}
+
+/** The queue a failed job belongs on, from the name it was recorded under. Its dead-letter queue sends it back to the original. */
+export type ReplayQueue = 'notifications' | 'email' | 'jobs';
+
+export function replayQueueFor(queue: string): ReplayQueue | null {
+  const original = queue.replace(/-dlq$/, '');
+  for (const kind of ['notifications', 'email', 'jobs'] as const) if (original.endsWith(`-${kind}`)) return kind;
+  return null;
+}
+
+export interface FailedJob {
+  id: string;
+  jobType: string;
+  queue: string;
+  workspace: { id: string; name: string } | null;
+  attempts: number;
+  failedAt: string;
+  replayedAt: string | null;
+  replayable: boolean;
+}
+
+/** A job past its deadline would be dropped by the consumer, so replaying it would only look like it worked. */
+function toFailedJobView(row: FailedJobRow, now: number): FailedJob {
+  const expired = row.notAfter !== null && !(Date.parse(row.notAfter) > now);
+  return {
+    id: row.id,
+    jobType: row.jobType,
+    queue: row.queue,
+    workspace: row.workspace,
+    attempts: row.attempts,
+    failedAt: toIso(row.failedAt),
+    replayedAt: row.replayedAt === null ? null : toIso(row.replayedAt),
+    replayable: row.replayedAt === null && row.wellFormed && !expired && replayQueueFor(row.queue) !== null,
+  };
+}
+
+export async function listFailedJobs(db: Database, ctx: AdminContext, input: { cursor?: string | undefined; limit: number }) {
+  const page = await adminRepository(db, ctx).listFailedJobs(input);
+  const now = Date.now();
+  return { data: page.data.map((row) => toFailedJobView(row, now)), nextCursor: page.nextCursor };
+}
+
+/**
+ * Marks the record replayed, then hands its envelope to `send`. A send that fails releases it, so that it can be
+ * tried again. The envelope keeps its idempotency key, so work the job already did is not repeated.
+ */
+export async function replayFailedJob(db: Database, ctx: AdminContext, id: string, send: (queue: ReplayQueue, envelope: JobEnvelope) => Promise<void>): Promise<FailedJob> {
+  const repository = adminRepository(db, ctx);
+  const row = await repository.getFailedJob(id);
+  if (!row) throw notFound();
+  const view = toFailedJobView(row, Date.now());
+  const queue = replayQueueFor(row.queue);
+  if (!view.replayable || !queue) {
+    throw row.replayedAt !== null
+      ? new AppError(409, 'already_replayed', 'This job was already replayed. If it failed again, it is listed again.')
+      : new AppError(409, 'not_replayable', 'This job cannot be replayed: it is past the time it had to run by, or it could not be read.');
+  }
+  const envelope = await repository.takeFailedJobForReplay(id);
+  if (envelope === null) {
+    if (!(await authorizeInstallationAdmin(db, ctx.userId)) || !(await repository.getFailedJob(id))) throw notFound();
+    throw new AppError(409, 'already_replayed', 'This job was already replayed. If it failed again, it is listed again.');
+  }
+  try {
+    await send(queue, JSON.parse(envelope) as JobEnvelope);
+  } catch (error) {
+    await repository.releaseFailedJob(id);
+    throw error;
+  }
+  const replayed = await repository.getFailedJob(id);
+  if (!replayed) throw notFound();
+  return toFailedJobView(replayed, Date.now());
+}
+
+export async function dismissFailedJob(db: Database, ctx: AdminContext, id: string): Promise<void> {
+  if (!(await adminRepository(db, ctx).dismissFailedJob(id))) throw notFound();
 }
