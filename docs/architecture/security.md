@@ -132,6 +132,12 @@ CI runs secret scanning. `.dev.vars.example` contains placeholders only, and `.d
 
 The shared logger takes a typed field allowlist, so sensitive data has to be deliberately added. Every line has `requestId`, `installationId`, `workspaceId`, and `route`. Never logged: passwords, tokens, tickets, keys, message content, or email addresses and names.
 
+## Audit log
+
+Admin actions, membership changes, erasure, failed-job replays, and retention sweeps each write a row to `audit_log`, usually as the first statement of the batch that does the work ([Pattern 2a](data-model.md#pattern-2a-the-audit-row-as-the-guard)). A row holds the actor, the action, IDs of the workspace and target, and small flat metadata such as a role or a count. Never message content, addresses, or names of visitors.
+
+Installation admins read it on the dashboard's **Audit log** page (`GET /api/v1/admin/audit-log`), newest first, for the whole installation or one workspace. People, members, workspaces, and websites are shown by name. A contact, conversation, relay, or job stays an ID, so the log names no visitor. Nobody else can read it. Rows are kept until their workspace is deleted. Retention does not touch them.
+
 ## Privacy
 
 Customers are the controllers of visitor data. For GDPR and similar laws, the product needs:

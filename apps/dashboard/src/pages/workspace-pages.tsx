@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { api, errorMessage, preference, queryClient, session } from '../app-context';
 import { InboxPanel } from '../inbox/inbox-panel';
 import { FollowUpRulesPanel, SuppressionsPanel } from './email-panels';
+import { AuditLogPage } from './audit-log-page';
 import { FailedJobsPage } from './failed-jobs-page';
 import { PeoplePage } from './people-page';
 import { CopyableSnippet, WorkspacesAdminPage } from './workspaces-admin-page';
@@ -84,7 +85,7 @@ export function WorkspaceApp() {
   const me = useQuery({ queryKey: ['me'], queryFn: api.getMe });
   const [selectedId, setSelectedId] = useState(() => preference.get(WORKSPACE_PREFERENCE));
   const [tab, setTab] = useState<'inbox' | 'websites' | 'members' | 'email'>('inbox');
-  const [adminPage, setAdminPage] = useState<'people' | 'workspaces' | 'jobs' | null>(null);
+  const [adminPage, setAdminPage] = useState<'people' | 'workspaces' | 'jobs' | 'audit' | null>(null);
   const isAdmin = me.data?.isInstallationAdmin === true;
 
   const memberships = me.data?.memberships ?? [];
@@ -105,7 +106,7 @@ export function WorkspaceApp() {
           </select>
         )}
         {isAdmin &&
-          ([['people', 'People'], ['workspaces', 'Workspaces'], ['jobs', 'Failed jobs']] as const).map(([page, label]) => (
+          ([['people', 'People'], ['workspaces', 'Workspaces'], ['jobs', 'Failed jobs'], ['audit', 'Audit log']] as const).map(([page, label]) => (
             <button key={page} className={adminPage === page ? 'button' : 'button-quiet'} aria-current={adminPage === page ? 'page' : undefined} onClick={() => setAdminPage(adminPage === page ? null : page)}>
               {label}
             </button>
@@ -117,6 +118,7 @@ export function WorkspaceApp() {
       {isAdmin && adminPage === 'people' && <PeoplePage myId={me.data?.id} />}
       {isAdmin && adminPage === 'workspaces' && <WorkspacesAdminPage />}
       {isAdmin && adminPage === 'jobs' && <FailedJobsPage />}
+      {isAdmin && adminPage === 'audit' && <AuditLogPage />}
       {me.data && !current && !adminPage && (
         <p className="card text-sm">{isAdmin ? 'You are not in a workspace. To read its conversations, add yourself on the People page.' : 'You are not in a workspace yet. Ask your administrator to add you.'}</p>
       )}

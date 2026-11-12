@@ -750,7 +750,11 @@ export const auditLog = sqliteTable(
     metadataJson: json('metadata_json'),
     createdAt: ts('created_at'),
   },
-  (t) => [index('audit_log_idx').on(t.workspaceId, sql`${t.createdAt} DESC`, sql`${t.id} DESC`)],
+  (t) => [
+    index('audit_log_idx').on(t.workspaceId, sql`${t.createdAt} DESC`, sql`${t.id} DESC`),
+    // For the installation-wide list, newest first.
+    index('audit_log_recent_idx').on(sql`${t.createdAt} DESC`, sql`${t.id} DESC`),
+  ],
 );
 
 /** Tables with no workspace_id. Every other table must have the column, and a test enforces this. */

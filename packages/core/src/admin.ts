@@ -10,6 +10,7 @@ import {
   issueAuthToken,
   type AdminContext,
   type Database,
+  type AuditEntryRow,
   type FailedJobRow,
   type PersonChange,
   type Principal,
@@ -255,4 +256,25 @@ export async function getRetention(db: Database, ctx: AdminContext, workspaceId:
 export async function setRetention(db: Database, ctx: AdminContext, workspaceId: string, retentionDays: number | null): Promise<{ retentionDays: number | null }> {
   if (!(await adminRepository(db, ctx).setRetention(workspaceId, retentionDays))) throw notFound();
   return { retentionDays };
+}
+
+/** Metadata is small, flat and IDs-only by how it is written. Anything else is dropped rather than shown. */
+function flatMetadata(metadata: Record<string, unknown>): Record<string, string | number | boolean | null> {
+  return Object.fromEntries(Object.entries(metadata).filter((entry): entry is [string, string | number | boolean | null] => entry[1] === null || ['string', 'number', 'boolean'].includes(typeof entry[1])));
+}
+
+export async function listAuditLog(db: Database, ctx: AdminContext, input: { cursor?: string | undefined; limit: number; workspaceId?: string | undefined }) {
+  const page = await adminRepository(db, ctx).listAudit(input);
+  return {
+    data: page.data.map((row: AuditEntryRow) => ({
+      id: row.id,
+      createdAt: toIso(row.createdAt),
+      action: row.action,
+      actor: row.actor,
+      workspace: row.workspace,
+      target: row.target,
+      metadata: flatMetadata(row.metadata),
+    })),
+    nextCursor: page.nextCursor,
+  };
 }
