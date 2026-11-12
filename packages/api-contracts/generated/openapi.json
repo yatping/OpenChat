@@ -2745,6 +2745,67 @@
           "registered",
           "subscriptions"
         ]
+      },
+      "FailedJob": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "jobType": {
+            "type": "string"
+          },
+          "queue": {
+            "type": "string"
+          },
+          "workspace": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ],
+            "description": "Null for an installation job, or one whose workspace is gone."
+          },
+          "attempts": {
+            "type": "integer"
+          },
+          "failedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "replayedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "replayable": {
+            "type": "boolean",
+            "description": "False once replayed, past the time the job had to run by, or when this Worker has nowhere to send it."
+          }
+        },
+        "required": [
+          "id",
+          "jobType",
+          "queue",
+          "workspace",
+          "attempts",
+          "failedAt",
+          "replayedAt",
+          "replayable"
+        ]
       }
     },
     "parameters": {}
@@ -7406,6 +7467,166 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/failed-jobs": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "operationId": "listFailedJobs",
+        "summary": "Background jobs that failed for good, newest first. Shows no job contents.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "cursor",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Failed jobs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/FailedJob"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/failed-jobs/{failedJobId}/replay": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "operationId": "replayFailedJob",
+        "summary": "Queue a failed job again, with the same idempotency key, so that work already done is not repeated. Each record replays once; a job that fails again is recorded anew.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "failedJobId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Queued again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FailedJob"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/failed-jobs/{failedJobId}": {
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "operationId": "dismissFailedJob",
+        "summary": "Delete the record of a failed job",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "failedJobId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Dismissed"
           },
           "default": {
             "description": "RFC 9457 problem details",

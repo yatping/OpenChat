@@ -17,6 +17,9 @@ import {
   getRelayStatusRoute,
   disconnectRelayRoute,
   reconnectRelayRoute,
+  listFailedJobsRoute,
+  replayFailedJobRoute,
+  dismissFailedJobRoute,
   listAdminWebsitesRoute,
   createVisitorConversationRoute,
   uploadAttachmentRoute,
@@ -150,6 +153,9 @@ export const ALL_ROUTES = [
   getRelayStatusRoute,
   disconnectRelayRoute,
   reconnectRelayRoute,
+  listFailedJobsRoute,
+  replayFailedJobRoute,
+  dismissFailedJobRoute,
 ] as const;
 
 export function buildOpenApiDocument() {

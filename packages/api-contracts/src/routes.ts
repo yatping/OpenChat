@@ -1225,3 +1225,48 @@ export const reconnectRelayRoute = createRoute({
   summary: 'Turn push back on. Phones register again the next time the app starts.',
   responses: { 200: { description: 'Reconnected', ...json(RelayStatusSchema) }, default: problemResponse },
 });
+
+export const FailedJobSchema = z
+  .object({
+    id: z.string(),
+    jobType: z.string(),
+    queue: z.string(),
+    workspace: z.object({ id: z.string(), name: z.string() }).nullable().openapi({ description: 'Null for an installation job, or one whose workspace is gone.' }),
+    attempts: z.number().int(),
+    failedAt: z.iso.datetime(),
+    replayedAt: z.iso.datetime().nullable(),
+    replayable: z.boolean().openapi({ description: 'False once replayed, past the time the job had to run by, or when this Worker has nowhere to send it.' }),
+  })
+  .openapi('FailedJob');
+
+const failedJobParams = z.object({ failedJobId: z.string() });
+
+export const listFailedJobsRoute = createRoute({
+  ...adminRoute,
+  method: 'get',
+  path: '/api/v1/admin/failed-jobs',
+  operationId: 'listFailedJobs',
+  summary: 'Background jobs that failed for good, newest first. Shows no job contents.',
+  request: { query: PaginationQuery },
+  responses: { 200: { description: 'Failed jobs', ...json(page(FailedJobSchema)) }, default: problemResponse },
+});
+
+export const replayFailedJobRoute = createRoute({
+  ...adminRoute,
+  method: 'post',
+  path: '/api/v1/admin/failed-jobs/{failedJobId}/replay',
+  operationId: 'replayFailedJob',
+  summary: 'Queue a failed job again, with the same idempotency key, so that work already done is not repeated. Each record replays once; a job that fails again is recorded anew.',
+  request: { params: failedJobParams },
+  responses: { 200: { description: 'Queued again', ...json(FailedJobSchema) }, default: problemResponse },
+});
+
+export const dismissFailedJobRoute = createRoute({
+  ...adminRoute,
+  method: 'delete',
+  path: '/api/v1/admin/failed-jobs/{failedJobId}',
+  operationId: 'dismissFailedJob',
+  summary: 'Delete the record of a failed job',
+  request: { params: failedJobParams },
+  responses: { 204: { description: 'Dismissed' }, default: problemResponse },
+});

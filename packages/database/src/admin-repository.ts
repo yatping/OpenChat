@@ -82,6 +82,58 @@ const actorIsAdmin = (actor: string) => `EXISTS (SELECT 1 FROM users a WHERE a.i
 
 const WORKSPACE_COLUMNS = `id, name, slug, created_at AS createdAt`;
 
+/** A failed job as an admin sees it: what and where, never what it carried. */
+export interface FailedJobRow {
+  id: string;
+  jobType: string;
+  queue: string;
+  workspace: { id: string; name: string } | null;
+  attempts: number;
+  failedAt: number;
+  replayedAt: number | null;
+  /** When the job had to run by, read from the envelope. Null if it had no deadline or could not be read. */
+  notAfter: string | null;
+  /** Whether the envelope is one the queue consumers accept. */
+  wellFormed: boolean;
+}
+
+const FAILED_JOB_COLUMNS = `f.id, f.job_type AS jobType, f.queue, f.workspace_id AS workspaceId, w.name AS workspaceName, f.attempts,
+  f.failed_at AS failedAt, f.replayed_at AS replayedAt,
+  CASE WHEN json_valid(f.envelope_json) THEN json_extract(f.envelope_json, '$.notAfter') END AS notAfter,
+  CASE WHEN json_valid(f.envelope_json) THEN json_extract(f.envelope_json, '$.v') = 1 AND json_type(f.envelope_json, '$.type') = 'text'
+    AND json_type(f.envelope_json, '$.idempotencyKey') = 'text' ELSE 0 END AS wellFormed`;
+
+interface RawFailedJob {
+  id: string;
+  jobType: string;
+  queue: string;
+  workspaceId: string | null;
+  workspaceName: string | null;
+  attempts: number;
+  failedAt: number;
+  replayedAt: number | null;
+  notAfter: unknown;
+  wellFormed: number | null;
+}
+
+const toFailedJob = (row: RawFailedJob): FailedJobRow => ({
+  id: row.id,
+  jobType: row.jobType,
+  queue: row.queue,
+  workspace: row.workspaceId && row.workspaceName !== null ? { id: row.workspaceId, name: row.workspaceName } : null,
+  attempts: row.attempts,
+  failedAt: row.failedAt,
+  replayedAt: row.replayedAt,
+  notAfter: typeof row.notAfter === 'string' ? row.notAfter : null,
+  wellFormed: row.wellFormed === 1,
+});
+
+/** A cursor is `failedAt.id` of the last row seen. Anything else starts from the newest. */
+function parseFailedJobCursor(cursor: string | undefined): [number, string] {
+  const match = cursor ? /^(\d{1,15})\.(.+)$/.exec(cursor) : null;
+  return match ? [Number(match[1]), match[2]!] : [Number.MAX_SAFE_INTEGER, ''];
+}
+
 const otherAdminExists = (user: string) => `EXISTS (SELECT 1 FROM users o WHERE o.id <> ${user} AND o.is_installation_admin = 1 AND o.disabled_at IS NULL)`;
 
 export function adminRepository(database: Database, ctx: AdminContext) {
@@ -402,6 +454,67 @@ export function adminRepository(database: Database, ctx: AdminContext) {
           )
           .bind(audit, actor),
         d1.prepare(`UPDATE installation SET relay_disconnected_id = NULL, updated_at = ${DB_NOW_MS} WHERE EXISTS (SELECT 1 FROM audit_log WHERE id = ?1)`).bind(audit),
+      ]);
+      return allowed?.meta.changes === 1;
+    },
+
+    /** Newest first, keyed on (failed_at, id). Never the envelope, which only replay reads. */
+    async listFailedJobs(input: { cursor?: string | undefined; limit: number }): Promise<{ data: FailedJobRow[]; nextCursor: string | null }> {
+      const [at, id] = parseFailedJobCursor(input.cursor);
+      const { results } = await d1
+        .prepare(
+          `SELECT ${FAILED_JOB_COLUMNS} FROM failed_jobs f LEFT JOIN workspaces w ON w.id = f.workspace_id
+            WHERE (f.failed_at, f.id) < (?1, ?2) ORDER BY f.failed_at DESC, f.id DESC LIMIT ?3`,
+        )
+        .bind(at, id, input.limit + 1)
+        .all<RawFailedJob>();
+      const data = results.slice(0, input.limit).map(toFailedJob);
+      const last = data.at(-1);
+      return { data, nextCursor: results.length > input.limit && last ? `${last.failedAt}.${last.id}` : null };
+    },
+
+    async getFailedJob(id: string): Promise<FailedJobRow | null> {
+      const row = await d1.prepare(`SELECT ${FAILED_JOB_COLUMNS} FROM failed_jobs f LEFT JOIN workspaces w ON w.id = f.workspace_id WHERE f.id = ?1`).bind(id).first<RawFailedJob>();
+      return row ? toFailedJob(row) : null;
+    },
+
+    /**
+     * Marks the record replayed and returns its envelope, so that two clicks cannot queue it twice. Null if it is
+     * gone, already replayed, or the caller is no longer an admin at commit.
+     */
+    async takeFailedJobForReplay(id: string): Promise<string | null> {
+      const audit = newId('audit');
+      const [, , taken] = await d1.batch([
+        d1
+          .prepare(
+            `INSERT INTO audit_log (id, workspace_id, actor_type, actor_id, action, target_type, target_id, metadata_json, created_at)
+             SELECT ?1, NULL, 'user', ?2, 'failed_job.replayed', 'failed_job', f.id, json_object('jobType', f.job_type), ${DB_NOW_MS}
+               FROM failed_jobs f WHERE f.id = ?3 AND f.replayed_at IS NULL AND ${actorIsAdmin('?2')}`,
+          )
+          .bind(audit, actor, id),
+        d1.prepare(`UPDATE failed_jobs SET replayed_at = ${DB_NOW_MS} WHERE id = ?1 AND EXISTS (SELECT 1 FROM audit_log WHERE id = ?2)`).bind(id, audit),
+        d1.prepare(`SELECT envelope_json AS envelopeJson FROM failed_jobs WHERE id = ?1 AND EXISTS (SELECT 1 FROM audit_log WHERE id = ?2)`).bind(id, audit),
+      ]);
+      return (taken?.results[0] as { envelopeJson: string } | undefined)?.envelopeJson ?? null;
+    },
+
+    /** The queue refused the job, so it can be replayed again. The audit row stays, as a record of the attempt. */
+    async releaseFailedJob(id: string): Promise<void> {
+      await d1.prepare(`UPDATE failed_jobs SET replayed_at = NULL WHERE id = ?1`).bind(id).run();
+    },
+
+    /** False if it is gone, or the caller is no longer an admin at commit. */
+    async dismissFailedJob(id: string): Promise<boolean> {
+      const audit = newId('audit');
+      const [allowed] = await d1.batch([
+        d1
+          .prepare(
+            `INSERT INTO audit_log (id, workspace_id, actor_type, actor_id, action, target_type, target_id, metadata_json, created_at)
+             SELECT ?1, NULL, 'user', ?2, 'failed_job.dismissed', 'failed_job', f.id, json_object('jobType', f.job_type), ${DB_NOW_MS}
+               FROM failed_jobs f WHERE f.id = ?3 AND ${actorIsAdmin('?2')}`,
+          )
+          .bind(audit, actor, id),
+        d1.prepare(`DELETE FROM failed_jobs WHERE id = ?1 AND EXISTS (SELECT 1 FROM audit_log WHERE id = ?2)`).bind(id, audit),
       ]);
       return allowed?.meta.changes === 1;
     },
