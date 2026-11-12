@@ -2806,6 +2806,23 @@
           "replayedAt",
           "replayable"
         ]
+      },
+      "Retention": {
+        "type": "object",
+        "properties": {
+          "retentionDays": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 30,
+            "maximum": 3650,
+            "description": "Resolved and archived conversations whose last message is older than this many days are deleted, with their messages and files, by an hourly sweep. Contacts left with no conversations, and not seen for as long, go too. Null keeps everything."
+          }
+        },
+        "required": [
+          "retentionDays"
+        ]
       }
     },
     "parameters": {}
@@ -7627,6 +7644,121 @@
         "responses": {
           "204": {
             "description": "Dismissed"
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/workspaces/{workspaceId}/retention": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "operationId": "getRetention",
+        "summary": "How long a workspace keeps closed conversations",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Retention",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Retention"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "RFC 9457 problem details",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "operationId": "setRetention",
+        "summary": "Set how long a workspace keeps closed conversations. Deletion starts within the hour and cannot be undone.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "retentionDays": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 30,
+                    "maximum": 3650,
+                    "description": "Resolved and archived conversations whose last message is older than this many days are deleted, with their messages and files, by an hourly sweep. Contacts left with no conversations, and not seen for as long, go too. Null keeps everything."
+                  }
+                },
+                "required": [
+                  "retentionDays"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Retention"
+                }
+              }
+            }
           },
           "default": {
             "description": "RFC 9457 problem details",

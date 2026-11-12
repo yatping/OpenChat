@@ -200,11 +200,56 @@ function NewWorkspace({ onCreated }: { onCreated: (id: string) => void }) {
   );
 }
 
+const RETENTION_CHOICES = [30, 90, 180, 365, 730];
+
+/** How long the workspace keeps closed conversations. See docs/architecture/data-model.md#retention. */
+function RetentionPanel({ workspaceId }: { workspaceId: string }) {
+  const client = useQueryClient();
+  const current = useQuery({ queryKey: ['retention', workspaceId], queryFn: () => api.getRetention(workspaceId) });
+  const [choice, setChoice] = useState<string | null>(null);
+  const save = useMutation({
+    mutationFn: (days: number | null) => api.setRetention(workspaceId, days),
+    onSuccess: (data) => {
+      client.setQueryData(['retention', workspaceId], data);
+      setChoice(null);
+    },
+  });
+  if (!current.data) return <Failure error={current.error} />;
+  const saved = current.data.retentionDays;
+  const value = choice ?? String(saved ?? '');
+  const days = value === '' ? null : Number(value);
+  const choices = saved === null || RETENTION_CHOICES.includes(saved) ? RETENTION_CHOICES : [...RETENTION_CHOICES, saved].sort((a, b) => a - b);
+  const shorter = days !== null && (saved === null || days < saved);
+  const submit = () => {
+    if (shorter && !window.confirm(`Delete closed conversations older than ${days} days, with their messages and files? This starts within the hour and cannot be undone.`)) return;
+    save.mutate(days);
+  };
+  return (
+    <section className="card space-y-2" aria-label="Retention">
+      <label className="block text-sm font-medium">
+        Keep closed conversations
+        <select className="field mt-1 font-normal" value={value} onChange={(e) => setChoice(e.target.value)}>
+          <option value="">Forever</option>
+          {choices.map((d) => <option key={d} value={String(d)}>{d % 365 === 0 ? `${d / 365} ${d === 365 ? 'year' : 'years'}` : `${d} days`} after the last message</option>)}
+        </select>
+      </label>
+      <p className="text-xs text-slate-600 dark:text-slate-400">
+        Resolved and archived conversations are deleted, with their messages and files, once their last message is this old. Contacts left with no conversations go too. Open conversations are kept. An hourly sweep does this, and the audit log records each run.
+      </p>
+      <button className="button-quiet" disabled={days === saved || save.isPending} onClick={submit}>
+        Save retention
+      </button>
+      <Failure error={save.error} />
+    </section>
+  );
+}
+
 function ManagedWorkspace({ workspace }: { workspace: { id: string; name: string } }) {
   const websites = useQuery({ queryKey: ['admin-websites', workspace.id], queryFn: () => api.listAdminWebsites(workspace.id) });
   return (
     <div className="space-y-4">
       <RenameWorkspace workspace={workspace} />
+      <RetentionPanel workspaceId={workspace.id} />
       <Failure error={websites.error} />
       {websites.data?.data.length === 0 && <p className="text-sm text-slate-600 dark:text-slate-400">No websites yet.</p>}
       <ul className="space-y-4">

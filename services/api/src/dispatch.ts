@@ -24,6 +24,7 @@ import type { Context } from 'hono';
 import type { AppEnv } from './context';
 import type { Env } from './env';
 import { sweepFollowUps } from './email/follow-ups';
+import { sweepRetention } from './retention';
 import { pushJobsFor } from './push/fanout';
 
 const SWEEP_AGE_MS = 60_000;
@@ -91,7 +92,8 @@ async function dispatchRow(env: Env, db: Database, row: OutboxRow): Promise<void
       await pushJobsFor(env, row);
       return;
     case 'contact.erased':
-      // The rows went with the erasure. Their files are named under each conversation, so a repeat finds fewer.
+    case 'conversations.expired':
+      // The rows went with the erasure, or the retention sweep. Their files are named under each conversation, so a repeat finds fewer.
       for (const conversationId of (JSON.parse(row.payloadJson) as { conversationIds: string[] }).conversationIds) {
         await deleteStoredFiles(env, `w/${row.workspaceId}/c/${conversationId}/`);
       }
@@ -162,6 +164,7 @@ export async function sweepOutbox(env: Env, scheduledTime: number): Promise<void
   if (new Date(scheduledTime).getUTCMinutes() === 0) {
     await purgeDispatchedOutbox(db, PURGE_AGE_MS, PURGE_LIMIT);
     await sweepAttachments(env, db);
+    await sweepRetention(db);
   }
 }
 
