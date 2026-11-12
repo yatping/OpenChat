@@ -208,6 +208,16 @@ describe('managing workspaces and websites', () => {
     expect((await call('POST', `${ADMIN_WORKSPACES}/work_1/websites`, tokens.boss, { name: 'x', allowedOrigins: [], settings: { script: '<x>' } })).status).toBe(400);
   });
 
+  it('sets the widget language, from the languages the widget speaks', async () => {
+    const updated = await call('PATCH', `${ADMIN_WORKSPACES}/work_1/websites/site_1`, tokens.boss, { settings: { language: 'zh-Hant' } });
+    expect([updated.status, ((await updated.json()) as { settings: { language?: string } }).settings.language]).toEqual([200, 'zh-Hant']);
+    const bootstrap = await call('GET', '/api/v1/widget/bootstrap?websiteKey=key_1', undefined, undefined, SITE);
+    expect(((await bootstrap.json()) as { settings: { language?: string } }).settings.language).toBe('zh-Hant');
+    for (const language of ['xx', 'zh', 'EN']) {
+      expect([language, (await call('PATCH', `${ADMIN_WORKSPACES}/work_1/websites/site_1`, tokens.boss, { settings: { language } })).status]).toEqual([language, 400]);
+    }
+  });
+
   it('has no routes left inside a workspace for what moved here', async () => {
     const W = '/api/v1/workspaces/work_1';
     for (const [method, path, body] of [

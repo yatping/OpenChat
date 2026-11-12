@@ -26,6 +26,7 @@ Suggested reading order for a new contributor is top to bottom.
 | [architecture/data-model.md](architecture/data-model.md) | D1 design, write patterns, migration strategy |
 | [`packages/database/src/schema`](../packages/database/src/schema/index.ts) | The schema, in Drizzle. Migrations are generated beside it |
 | [architecture/realtime.md](architecture/realtime.md) | Durable Objects and the WebSocket lifecycle |
+| [architecture/widget.md](architecture/widget.md) | Embedding the website widget, and its languages |
 | [architecture/background-jobs.md](architecture/background-jobs.md) | Queues, the outbox, and cron |
 | [architecture/security.md](architecture/security.md) | Authentication, tenant isolation, threat model |
 | [architecture/security-review-m1a.md](architecture/security-review-m1a.md) | Review of authentication and sessions, with accepted trade-offs and open decisions |
