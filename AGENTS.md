@@ -17,6 +17,7 @@ a replaceable notification relay, and email follow-ups.
 | Queues, cron, retries | [background jobs](docs/architecture/background-jobs.md) |
 | Auth, tenancy, secrets | [security](docs/architecture/security.md) |
 | HTTP or WebSocket API | [API conventions](docs/api/conventions.md) |
+| Website widget, its languages | [widget](docs/architecture/widget.md) |
 | Push | [relay protocol](docs/notification-relay/protocol.md) |
 | Expo, white labelling | [iOS build](docs/ios-build/expo-and-white-label.md) |
 

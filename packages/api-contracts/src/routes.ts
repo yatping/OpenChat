@@ -221,6 +221,10 @@ export const WidgetSettingsSchema = z
     collectEmail: z.enum(['never', 'optional', 'required']).optional(),
     requireTurnstile: z.boolean().optional(),
     showAgentNames: z.boolean().optional(),
+    language: z
+      .enum(['auto', 'en', 'es', 'fr', 'de', 'it', 'pt', 'nl', 'ja', 'ko', 'zh-Hans', 'zh-Hant'])
+      .optional()
+      .openapi({ description: "The widget's language. auto, the default, follows the page and then the visitor's browser. A page can still ask for another with data-locale." }),
   })
   .openapi('WidgetSettings');
 

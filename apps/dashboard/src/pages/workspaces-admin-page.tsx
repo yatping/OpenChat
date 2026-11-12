@@ -18,6 +18,21 @@ export function CopyableSnippet({ website }: { website: Website }) {
   return <pre className="overflow-x-auto rounded-md bg-slate-100 p-3 text-xs dark:bg-slate-800">{snippet}</pre>;
 }
 
+/** The widget's languages, each named in itself, as a visitor would look for it. */
+const WIDGET_LANGUAGES = [
+  ['en', 'English'],
+  ['es', 'Español'],
+  ['fr', 'Français'],
+  ['de', 'Deutsch'],
+  ['it', 'Italiano'],
+  ['pt', 'Português'],
+  ['nl', 'Nederlands'],
+  ['ja', '日本語'],
+  ['ko', '한국어'],
+  ['zh-Hans', '简体中文'],
+  ['zh-Hant', '繁體中文'],
+] as const;
+
 /** What a colour input must show when nothing has been chosen. Saved only if someone chooses it. */
 const DEFAULT_WIDGET_COLOR = '#2563eb';
 
@@ -29,10 +44,11 @@ function WidgetSettingsForm({ website, workspaceId }: { website: Website; worksp
   const [collectEmail, setCollectEmail] = useState(initial.collectEmail ?? 'never');
   const [showAgentNames, setShowNames] = useState(initial.showAgentNames ?? false);
   const [requireTurnstile, setTurnstile] = useState(initial.requireTurnstile ?? false);
+  const [language, setLanguage] = useState(initial.language ?? 'auto');
   const save = useMutation({
     mutationFn: () =>
       api.updateWebsite(workspaceId, website.id, {
-        settings: { ...initial, ...(primaryColor === DEFAULT_WIDGET_COLOR && !initial.primaryColor ? {} : { primaryColor }), collectEmail, showAgentNames, requireTurnstile, ...(welcomeMessage.trim() ? { welcomeMessage: welcomeMessage.trim() } : { welcomeMessage: undefined }) },
+        settings: { ...initial, ...(primaryColor === DEFAULT_WIDGET_COLOR && !initial.primaryColor ? {} : { primaryColor }), collectEmail, showAgentNames, requireTurnstile, language, ...(welcomeMessage.trim() ? { welcomeMessage: welcomeMessage.trim() } : { welcomeMessage: undefined }) },
       }),
     onSuccess: () => refreshWebsites(client, workspaceId),
   });
@@ -61,6 +77,14 @@ function WidgetSettingsForm({ website, workspaceId }: { website: Website; worksp
           <option value="required">Before the first message</option>
         </select>
       </label>
+      <label className="block text-sm font-medium">
+        Widget language
+        <select className="field mt-1 w-auto font-normal" value={language} onChange={(e) => setLanguage(e.target.value as typeof language)}>
+          <option value="auto">Automatic, from the page and the visitor's browser</option>
+          {WIDGET_LANGUAGES.map(([code, name]) => <option key={code} value={code} lang={code}>{name}</option>)}
+        </select>
+      </label>
+      <p className="text-xs text-slate-600 dark:text-slate-400">The welcome message is shown as you write it, in any language. A page can ask for its own language with <code>data-locale</code> on the script tag.</p>
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={showAgentNames} onChange={(e) => setShowNames(e.target.checked)} />
         Show agents' names to visitors

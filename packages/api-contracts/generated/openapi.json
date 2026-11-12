@@ -1904,6 +1904,24 @@
           },
           "showAgentNames": {
             "type": "boolean"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "en",
+              "es",
+              "fr",
+              "de",
+              "it",
+              "pt",
+              "nl",
+              "ja",
+              "ko",
+              "zh-Hans",
+              "zh-Hant"
+            ],
+            "description": "The widget's language. auto, the default, follows the page and then the visitor's browser. A page can still ask for another with data-locale."
           }
         },
         "additionalProperties": false

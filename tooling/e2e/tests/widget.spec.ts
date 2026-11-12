@@ -10,20 +10,22 @@ import { nextIp, signIn } from './helpers';
 const NONCE = 'test-nonce';
 const HOSTILE_CSS = 'button,div,p,textarea{display:none!important;color:red!important} *{font-size:99px!important}';
 
-function hostHtml(key: string, options: { consent?: boolean; csp?: boolean; latin1?: boolean } = {}) {
-  return `<!doctype html><html lang="en"><head><meta charset="${options.latin1 ? 'iso-8859-1' : 'utf-8'}"><title>Shop</title>
+type HostOptions = { consent?: boolean; csp?: boolean; latin1?: boolean; origin?: string; lang?: string; locale?: string };
+
+function hostHtml(key: string, options: HostOptions = {}) {
+  return `<!doctype html><html${options.lang === '' ? '' : ` lang="${options.lang ?? 'en'}"`}><head><meta charset="${options.latin1 ? 'iso-8859-1' : 'utf-8'}"><title>Shop</title>
     ${options.csp ? '' : `<style>${HOSTILE_CSS}</style>`}</head>
     <body><h1>A customer's shop</h1>
-    <script src="${BASE_URL}/widget/widget.js" data-website-key="${key}" ${options.consent ? 'data-consent="pending"' : ''} ${options.csp ? `nonce="${NONCE}"` : ''} async></script>
+    <script src="${BASE_URL}/widget/widget.js" data-website-key="${key}" ${options.locale ? `data-locale="${options.locale}"` : ''} ${options.consent ? 'data-consent="pending"' : ''} ${options.csp ? `nonce="${NONCE}"` : ''} async></script>
     </body></html>`;
 }
 
-async function visitorContext(browser: Browser, viewport?: { width: number; height: number }) {
-  const context = await browser.newContext({ ...(viewport ? { viewport } : {}), extraHTTPHeaders: { 'cf-connecting-ip': nextIp() } });
+async function visitorContext(browser: Browser, viewport?: { width: number; height: number }, locale?: string) {
+  const context = await browser.newContext({ ...(viewport ? { viewport } : {}), ...(locale ? { locale } : {}), extraHTTPHeaders: { 'cf-connecting-ip': nextIp() } });
   return context;
 }
 
-async function shop(context: BrowserContext, key = WEBSITE_KEY, options: { consent?: boolean; csp?: boolean; latin1?: boolean; origin?: string } = {}) {
+async function shop(context: BrowserContext, key = WEBSITE_KEY, options: HostOptions = {}) {
   const origin = options.origin ?? SITE_ORIGIN;
   await context.route(`${origin}/**`, (route) =>
     route.fulfill({
@@ -590,3 +592,36 @@ declare global {
     OpenChat?: { open(): void; close(): void; grantConsent(): void };
   }
 }
+
+test.describe('languages', () => {
+  test('the widget speaks the page’s language', async ({ browser }) => {
+    const context = await visitorContext(browser);
+    const page = await shop(context, WEBSITE_KEY, { lang: 'fr-CA' });
+    await expect(launcher(page)).toHaveAttribute('aria-label', 'Ouvrir le chat');
+    await launcher(page).click();
+    const dialog = page.getByRole('dialog', { name: 'Chat' });
+    await expect(dialog).toHaveAttribute('lang', 'fr');
+    await expect(page.getByRole('textbox', { name: 'Votre message' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Envoyer', exact: true })).toBeVisible();
+    await expect(launcher(page)).toHaveAttribute('aria-label', 'Fermer le chat');
+    await context.close();
+  });
+
+  test('a page can ask for a language, ahead of its own and the browser’s', async ({ browser }) => {
+    const context = await visitorContext(browser, undefined, 'de-DE');
+    const page = await shop(context, WEBSITE_KEY, { lang: 'en', locale: 'ja' });
+    await expect(launcher(page)).toHaveAttribute('aria-label', 'チャットを開く');
+    await launcher(page).click();
+    await expect(page.getByRole('dialog', { name: 'チャット' })).toHaveAttribute('lang', 'ja');
+    await context.close();
+  });
+
+  test('with no language on the page, the browser’s decides, in traditional script for Hong Kong', async ({ browser }) => {
+    const context = await visitorContext(browser, undefined, 'zh-HK');
+    const page = await shop(context, WEBSITE_KEY, { lang: '' });
+    await launcher(page).click();
+    await expect(page.getByRole('dialog', { name: '聊天' })).toHaveAttribute('lang', 'zh-Hant');
+    await expect(page.getByRole('button', { name: '傳送', exact: true })).toBeVisible();
+    await context.close();
+  });
+});

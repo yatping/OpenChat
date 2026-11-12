@@ -4,6 +4,7 @@ import { createApi, type Session } from './api';
 import { App } from './app';
 import { createController } from './controller';
 import { addStyles, applyColor, colorKey, type HandoffScript } from './handoff';
+import { pageLanguages } from './locale';
 import { createStorage } from './storage';
 import { createChallenge } from './turnstile';
 import { CHAT_CSS } from './styles';
@@ -42,7 +43,7 @@ if (handoff) {
     if (document.visibilityState === 'visible') controller.onVisible();
   });
 
-  render(<App controller={controller} button={handoff.button} challengeHost={challengeHost} />, root);
+  render(<App controller={controller} button={handoff.button} challengeHost={challengeHost} pageLocale={handoff.locale} pageLanguages={pageLanguages()} />, root);
   if (handoff.openOnStart) controller.setOpen(true);
 
   let color: string | undefined;

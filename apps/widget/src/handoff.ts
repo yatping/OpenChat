@@ -9,6 +9,8 @@ export interface Handoff {
   nonce?: string;
   /** Hold everything in session storage until the host page says otherwise. */
   consentPending: boolean;
+  /** The language the host page asked for, with data-locale or OpenChatConfig.locale. */
+  locale?: string;
   /** The visitor clicked before the bundle arrived, or the host page called open(). */
   openOnStart: boolean;
   /** Set by the chat bundle. */

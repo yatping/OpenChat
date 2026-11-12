@@ -1,8 +1,13 @@
 /** The panel. Message content is only ever a text node: nothing here renders HTML from anyone. */
-import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
+import { createContext } from 'preact';
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { ChatState, Controller } from './controller';
 import { hasOlder, unreadCount, type ChatMessage } from './state';
-import { STRINGS as S } from './strings';
+import { pickLocale, type Locale } from './locale';
+import { formatSize, TRANSLATIONS, type Strings } from './strings';
+
+/** The language every part of the panel speaks, chosen once in App. */
+const Language = createContext<{ locale: Locale; S: Strings }>({ locale: 'en', S: TRANSLATIONS.en });
 
 function useChat(controller: Controller): ChatState {
   const [state, setState] = useState(controller.getState());
@@ -15,13 +20,12 @@ function useChat(controller: Controller): ChatState {
 
 const PREVIEW_LIMIT_BYTES = 5 * 1024 * 1024;
 
-const formatSize = (bytes: number) => (bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`);
-
 /**
  * A page's CSP may refuse a blob: picture. Then the picture goes away and the download stays. The link is put in
  * the panel, so that the host page's listeners do not see the click.
  */
 function Attachment({ file, controller }: { file: ChatMessage['attachments'][number]; controller: Controller }) {
+  const { locale, S } = useContext(Language);
   const [preview, setPreview] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const self = useRef<HTMLDivElement>(null);
@@ -62,13 +66,14 @@ function Attachment({ file, controller }: { file: ChatMessage['attachments'][num
   return (
     <div class="oc-file" ref={self}>
       {preview && <img class="oc-image" src={preview} alt={file.filename} onError={() => setPreview(null)} />}
-      <button type="button" class="oc-link" onClick={download}>{S.download(file.filename, formatSize(file.size))}</button>
+      <button type="button" class="oc-link" onClick={download}>{S.download(file.filename, formatSize(file.size, locale, S))}</button>
       {failed && <span class="oc-state bad" role="alert"> {S.downloadFailed}</span>}
     </div>
   );
 }
 
 function Message({ message, state, onRetry, controller }: { message: ChatMessage; state: string | null; onRetry: () => void; controller: Controller }) {
+  const { S } = useContext(Language);
   const kind = message.system ? 'system' : message.mine ? 'mine' : 'theirs';
   return (
     <div class={`oc-msg ${kind} ${message.status}`}>
@@ -88,6 +93,7 @@ function Message({ message, state, onRetry, controller }: { message: ChatMessage
 }
 
 function ProfileForm({ controller, required }: { controller: Controller; required: boolean }) {
+  const { S } = useContext(Language);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [consent, setConsent] = useState(false);
@@ -129,6 +135,7 @@ function ProfileForm({ controller, required }: { controller: Controller; require
 }
 
 function Composer({ controller, canAttach, maxChars }: { controller: Controller; canAttach: boolean; maxChars: number }) {
+  const { S } = useContext(Language);
   const [text, setText] = useState('');
   const picker = useRef<HTMLInputElement>(null);
   const submit = () => {
@@ -186,8 +193,30 @@ function Composer({ controller, canAttach, maxChars }: { controller: Controller;
   );
 }
 
-export function App({ controller, button, challengeHost }: { controller: Controller; button: HTMLButtonElement; challengeHost: HTMLElement }) {
+/**
+ * `pageLocale` is what the host page asked for, and wins. Then the website's setting, then the page's and the
+ * browser's languages. See docs/architecture/widget.md#languages.
+ */
+export function App({
+  controller,
+  button,
+  challengeHost,
+  pageLocale,
+  pageLanguages,
+}: {
+  controller: Controller;
+  button: HTMLButtonElement;
+  challengeHost: HTMLElement;
+  pageLocale?: string | undefined;
+  pageLanguages: readonly string[];
+}) {
   const state = useChat(controller);
+  const chosen = state.settings?.language;
+  const language = useMemo(() => {
+    const locale = pickLocale([pageLocale, chosen === 'auto' ? undefined : chosen, ...pageLanguages]);
+    return { locale, S: TRANSLATIONS[locale] };
+  }, [pageLocale, chosen, pageLanguages]);
+  const { locale, S } = language;
   const panel = useRef<HTMLDivElement>(null);
   const log = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
@@ -197,12 +226,13 @@ export function App({ controller, button, challengeHost }: { controller: Control
   useEffect(() => {
     button.setAttribute('aria-expanded', String(state.open));
     button.setAttribute('aria-label', state.open ? S.close : unread > 0 ? S.unread(unread) : S.open);
+    button.lang = locale;
     const badge = button.querySelector<HTMLElement>('.oc-badge');
     if (badge) {
       badge.hidden = unread === 0;
       badge.textContent = unread > 9 ? '9+' : String(unread);
     }
-  }, [button, state.open, unread]);
+  }, [button, state.open, unread, S, locale]);
 
   useEffect(() => {
     if (state.open) panel.current?.querySelector<HTMLElement>('input, textarea')?.focus();
@@ -226,8 +256,10 @@ export function App({ controller, button, challengeHost }: { controller: Control
   const welcome = state.settings?.welcomeMessage;
 
   return (
+    <Language.Provider value={language}>
     <div
       ref={panel}
+      lang={locale}
       class="oc-panel"
       role="dialog"
       aria-label={S.title}
@@ -288,5 +320,6 @@ export function App({ controller, button, challengeHost }: { controller: Control
       {state.profile === 'offered' && state.messages.some((m) => m.mine) && <ProfileForm controller={controller} required={false} />}
       {state.profile === 'required' ? <ProfileForm controller={controller} required /> : <Composer controller={controller} maxChars={state.messageMaxChars} canAttach={state.conversation !== null} />}
     </div>
+    </Language.Provider>
   );
 }
