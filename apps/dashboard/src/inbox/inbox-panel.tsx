@@ -662,7 +662,8 @@ function Thread(props: { workspaceId: string; conversationId: string; members: M
         }}
       >
         {rows.length > 0 && (rows[0]?.seq ?? 1) > 1 && !noMoreHistory && <button className="button-quiet mb-3" disabled={older.isPending} onClick={() => older.mutate()}>Load earlier messages</button>}
-        <ol className="space-y-2" aria-label="Messages">
+        {/* Polite, so a screen reader reads a new message once it finishes what it is saying, as the widget does. */}
+        <ol className="space-y-2" aria-label="Messages" aria-live="polite">
           {rows.map((message) => <MessageBubble key={message.id} message={message} />)}
         </ol>
       </div>

@@ -105,36 +105,41 @@ export function WorkspaceApp() {
             {memberships.map((m) => <option key={m.workspace.id} value={m.workspace.id}>{m.workspace.name}</option>)}
           </select>
         )}
-        {isAdmin &&
-          ([['people', 'People'], ['workspaces', 'Workspaces'], ['jobs', 'Failed jobs'], ['audit', 'Audit log']] as const).map(([page, label]) => (
-            <button key={page} className={adminPage === page ? 'button' : 'button-quiet'} aria-current={adminPage === page ? 'page' : undefined} onClick={() => setAdminPage(adminPage === page ? null : page)}>
-              {label}
-            </button>
-          ))}
-        <span className="text-sm text-slate-600 dark:text-slate-400">{me.data?.name}</span>
-        <button className="button-quiet" onClick={() => void signOut()}>Sign out</button>
-      </header>
-      <Failure error={me.error} />
-      {isAdmin && adminPage === 'people' && <PeoplePage myId={me.data?.id} />}
-      {isAdmin && adminPage === 'workspaces' && <WorkspacesAdminPage />}
-      {isAdmin && adminPage === 'jobs' && <FailedJobsPage />}
-      {isAdmin && adminPage === 'audit' && <AuditLogPage />}
-      {me.data && !current && !adminPage && (
-        <p className="card text-sm">{isAdmin ? 'You are not in a workspace. To read its conversations, add yourself on the People page.' : 'You are not in a workspace yet. Ask your administrator to add you.'}</p>
-      )}
-      {current && !adminPage && (
-        // The key gives each workspace fresh component state, so nothing typed in one appears in another.
-        <div key={current.workspace.id} className="space-y-6">
-          <nav className="flex flex-wrap gap-2" aria-label="Sections">
-            {(['inbox', 'websites', 'members', 'email'] as const).map((name) => (
-              <button key={name} className={tab === name ? 'button capitalize' : 'button-quiet capitalize'} aria-current={tab === name ? 'page' : undefined} onClick={() => setTab(name)}>
-                {name}
+        {isAdmin && (
+          <nav className="flex flex-wrap gap-2" aria-label="Administration">
+            {([['people', 'People'], ['workspaces', 'Workspaces'], ['jobs', 'Failed jobs'], ['audit', 'Audit log']] as const).map(([page, label]) => (
+              <button key={page} className={adminPage === page ? 'button' : 'button-quiet'} aria-current={adminPage === page ? 'page' : undefined} onClick={() => setAdminPage(adminPage === page ? null : page)}>
+                {label}
               </button>
             ))}
           </nav>
-          {tab === 'inbox' ? <InboxWithMembers membership={current} /> : tab === 'websites' ? <WebsitesPanel membership={current} /> : tab === 'email' ? <EmailPanels workspaceId={current.workspace.id} isSupervisor={current.role === 'supervisor'} /> : <MembersPanel membership={current} />}
-        </div>
-      )}
+        )}
+        <span className="text-sm text-slate-600 dark:text-slate-400">{me.data?.name}</span>
+        <button className="button-quiet" onClick={() => void signOut()}>Sign out</button>
+      </header>
+      <main className="space-y-6">
+        <Failure error={me.error} />
+        {isAdmin && adminPage === 'people' && <PeoplePage myId={me.data?.id} />}
+        {isAdmin && adminPage === 'workspaces' && <WorkspacesAdminPage />}
+        {isAdmin && adminPage === 'jobs' && <FailedJobsPage />}
+        {isAdmin && adminPage === 'audit' && <AuditLogPage />}
+        {me.data && !current && !adminPage && (
+          <p className="card text-sm">{isAdmin ? 'You are not in a workspace. To read its conversations, add yourself on the People page.' : 'You are not in a workspace yet. Ask your administrator to add you.'}</p>
+        )}
+        {current && !adminPage && (
+          // The key gives each workspace fresh component state, so nothing typed in one appears in another.
+          <div key={current.workspace.id} className="space-y-6">
+            <nav className="flex flex-wrap gap-2" aria-label="Sections">
+              {(['inbox', 'websites', 'members', 'email'] as const).map((name) => (
+                <button key={name} className={tab === name ? 'button capitalize' : 'button-quiet capitalize'} aria-current={tab === name ? 'page' : undefined} onClick={() => setTab(name)}>
+                  {name}
+                </button>
+              ))}
+            </nav>
+            {tab === 'inbox' ? <InboxWithMembers membership={current} /> : tab === 'websites' ? <WebsitesPanel membership={current} /> : tab === 'email' ? <EmailPanels workspaceId={current.workspace.id} isSupervisor={current.role === 'supervisor'} /> : <MembersPanel membership={current} />}
+          </div>
+        )}
+      </main>
     </div>
   );
 }
