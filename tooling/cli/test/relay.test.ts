@@ -249,3 +249,11 @@ describe('oc relay', () => {
   });
 
 });
+
+describe('relay security.txt settings', () => {
+  it('render as Worker variables', () => {
+    const rendered = renderRelayConfig(template, { ...base, security: { contact: 'mailto:s@example.com' } }, '.') as unknown as { vars: Record<string, string> };
+    expect(rendered.vars.SECURITY_CONTACT).toBe('mailto:s@example.com');
+    expect((renderRelayConfig(template, base, '.') as unknown as { vars: Record<string, string> }).vars.SECURITY_CONTACT).toBeUndefined();
+  });
+});

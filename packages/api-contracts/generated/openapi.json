@@ -6341,6 +6341,31 @@
         }
       }
     },
+    "/.well-known/security.txt": {
+      "get": {
+        "tags": [
+          "discovery"
+        ],
+        "security": [],
+        "operationId": "getSecurityTxt",
+        "summary": "The operator's contact for security reports, per RFC 9116. 404 until the operator sets one",
+        "responses": {
+          "200": {
+            "description": "security.txt",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The operator has not set a security contact"
+          }
+        }
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "tags": [

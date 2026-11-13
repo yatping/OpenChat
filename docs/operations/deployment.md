@@ -78,6 +78,8 @@ pnpm oc deploy --env acme --cloudflare-email --email-from no-reply@mail.example.
 TURNSTILE_SECRET_KEY=... pnpm oc deploy --env acme --turnstile-site-key <site key>
 ```
 
+To publish `/.well-known/security.txt`, give a contact for security reports: `--security-contact mailto:security@example.com`, or an `https://` form, and optionally `--security-policy https://example.com/disclosure`. Both are remembered for later deploys; `--security-contact none` removes the file. See [disclosure](../architecture/security.md#disclosure).
+
 Metrics are optional: enable Analytics Engine once in the Cloudflare dashboard, then add `--analytics`. To use your own domain, attach it to the Worker, then pass `--public-url https://chat.example.com`, because links in emails are built from that URL.
 
 **The first installation admin** is the owner set up here. They manage people from then on ([ADR-0015](../architecture/decisions/0015-installation-admin-and-reversible-removal.md)). Upgrading an existing installation makes its first active owner the admin. Upgrading to migration `0004` makes every workspace owner and admin a supervisor, so only installation admins can then change settings and people ([ADR-0016](../architecture/decisions/0016-installation-admin-replaces-workspace-managers.md)).
@@ -150,6 +152,7 @@ Community forks can run all but the last. Nothing else depends on project-held c
 Orango Labs runs it at `https://openchat-relay.orangolabs.com`, with the relay ID `managed`, on the same Cloudflare account as its other projects. That was the owner's choice on 2026-11-05, in place of a separate account, so everyone with access to that account can reach the APNs key.
 
 - **Open mode, since 2026-11-12, by the owner's decision.** Any installation that proves control of its domain can register, within the [limits](../notification-relay/protocol.md#rate-limits). Legal review of the terms and privacy policy ([Q5](../architecture/open-questions.md)) is still outstanding.
+- **Security contact:** `SECURITY_CONTACT` in its `vars` is the project's advisory page, `https://github.com/yatping/OpenChat/security/advisories/new`, so `/.well-known/security.txt` on the relay points there.
 - **Limits** are Worker variables, listed in [Rate limits](../notification-relay/protocol.md#rate-limits). Set them in `vars` in the managed relay's configuration, and give one installation more with `RELAY_LIMIT_OVERRIDES`. Before opening the relay, also set a Cloudflare billing alert.
 - **Production APNs only**, because the key is production only. A relay serves one environment.
 - **Configuration** is in the operator's `.openchat/managed-relay/`, which Git ignores. Worker secrets cannot be read back, so `RELAY_TOKEN_KEY` and the operator token are kept with the signing keys. Losing `RELAY_TOKEN_KEY` means every device has to register again.
@@ -180,7 +183,7 @@ pnpm oc relay allow --env production --installation inst_01JC...
 | `relay stats` | Counts only: installations, devices, and the last day's notifications by outcome, with the busiest installations |
 | `relay check` | Asks Apple about the key again |
 
-Options for `relay deploy`: `--relay-id` (default: the environment name; it cannot change later, because installations hold it), `--environment production|sandbox` (default `production`; a relay serves one), and `--location`.
+Options for `relay deploy`: `--relay-id` (default: the environment name; it cannot change later, because installations hold it), `--environment production|sandbox` (default `production`; a relay serves one), `--location`, and `--security-contact` and `--security-policy`, as for `oc deploy`.
 
 The relay's resource names do not clash with an installation's, so one environment name can hold both. What the CLI knows is in `.openchat/<env>/relay.json`, which Git ignores. The operator token is in `.openchat/<env>/relay-operator-token`, readable only by you. Worker secrets cannot be read back, and redeploys keep them.
 

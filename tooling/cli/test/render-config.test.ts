@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { mergeLimitFlags, parseTemplate, renderConfig } from '../src/render-config';
+import { mergeLimitFlags, mergeSecurityFlags, parseTemplate, renderConfig } from '../src/render-config';
 
 const source = readFileSync(new URL('../../../services/api/wrangler.template.jsonc', import.meta.url), 'utf8');
 const state = { name: 'acme-prod', d1DatabaseId: '00000000-0000-0000-0000-000000000000' };
@@ -75,5 +75,28 @@ describe('renderConfig', () => {
 
   it('rejects an invalid template', () => {
     expect(() => parseTemplate('{ nope')).toThrow();
+  });
+});
+
+describe('security.txt settings', () => {
+  it('render as Worker variables, and are absent by default', () => {
+    const vars = (s: Parameters<typeof renderConfig>[1]) => renderConfig(source, s, '.').vars as Record<string, string> | undefined;
+    expect(vars(state)?.SECURITY_CONTACT).toBeUndefined();
+    expect(vars({ ...state, security: { contact: 'mailto:s@example.com', policy: 'https://example.com/p' } })).toMatchObject({ SECURITY_CONTACT: 'mailto:s@example.com', SECURITY_POLICY: 'https://example.com/p' });
+  });
+
+  it('are remembered, changed, and removed with none', () => {
+    const set = mergeSecurityFlags(undefined, 'mailto:s@example.com', 'https://example.com/p');
+    expect(set).toEqual({ contact: 'mailto:s@example.com', policy: 'https://example.com/p' });
+    expect(mergeSecurityFlags(set, undefined, undefined)).toEqual(set);
+    expect(mergeSecurityFlags(set, 'https://example.com/report', undefined)).toEqual({ contact: 'https://example.com/report', policy: 'https://example.com/p' });
+    expect(mergeSecurityFlags({ ...set! }, undefined, 'none')).toEqual({ contact: 'mailto:s@example.com' });
+    expect(mergeSecurityFlags(set, 'none', undefined)).toBeUndefined();
+  });
+
+  it('refuse what is not a contact or an https policy', () => {
+    expect(() => mergeSecurityFlags(undefined, 'security@example.com', undefined)).toThrow(/mailto: addresses or https:\/\/ URLs/);
+    expect(() => mergeSecurityFlags(undefined, 'mailto:s@example.com', 'http://example.com')).toThrow(/https:\/\/ URL/);
+    expect(() => mergeSecurityFlags(undefined, undefined, 'https://example.com/p')).toThrow(/needs --security-contact/);
   });
 });

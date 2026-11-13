@@ -10,7 +10,7 @@ import { randomBytes, randomInt } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { isId } from '@openchat/shared';
-import { parseTemplate } from './render-config';
+import { mergeSecurityFlags, parseTemplate, type SecuritySettings, securityVars } from './render-config';
 import { createResource, describeFailure, type RunWrangler, sleep, UUID, wranglerIn } from './wrangler';
 
 export interface RelayState {
@@ -29,6 +29,8 @@ export interface RelayState {
   operatorTokenSet?: boolean;
   deployed?: boolean;
   url?: string;
+  /** For /.well-known/security.txt. Without it, that answers 404. */
+  security?: SecuritySettings;
 }
 
 const NAME = /^[a-z][a-z0-9-]{0,40}$/;
@@ -87,6 +89,7 @@ export function renderRelayConfig(templateSource: string, state: RelayState & { 
     RELAY_ALLOWED_INSTALLATIONS: state.allowedInstallations.join(','),
     APNS_ENVIRONMENT: state.environment,
     ...(state.apns ? { APNS_TEAM_ID: state.apns.teamId, APNS_KEY_ID: state.apns.keyId, APNS_SELF_CHECK_TOPIC: state.apns.selfCheckTopic } : {}),
+    ...securityVars(state.security),
   };
   return t;
 }
@@ -280,7 +283,7 @@ export function createRelayDeployer(root: string, deps: RelayDeps = {}) {
   return {
     load,
 
-    async deploy(options: { name: string; relayId?: string | undefined; location?: string | undefined; environment?: string | undefined }) {
+    async deploy(options: { name: string; relayId?: string | undefined; location?: string | undefined; environment?: string | undefined; securityContact?: string | undefined; securityPolicy?: string | undefined }) {
       if (!NAME.test(options.name)) throw new Error('Environment names must be lowercase letters, numbers, and hyphens, starting with a letter, up to 41 characters');
       const existing = load(options.name);
       if (existing && options.relayId && options.relayId !== existing.relayId) throw new Error(`This relay's ID is ${existing.relayId}. Installations hold it, so it cannot change.`);
@@ -289,6 +292,9 @@ export function createRelayDeployer(root: string, deps: RelayDeps = {}) {
       if (options.environment && options.environment !== 'production' && options.environment !== 'sandbox') throw new Error('--environment is production or sandbox');
       const state: RelayState = existing ?? { name: options.name, relayId, environment: 'production', bundleIds: [], allowedInstallations: [] };
       if (options.environment) state.environment = options.environment as RelayState['environment'];
+      const security = mergeSecurityFlags(state.security, options.securityContact, options.securityPolicy);
+      if (security) state.security = security;
+      else delete state.security;
       // Large and random, so as not to share counters with any other Worker on the account.
       state.ratelimitNamespaces ??= [String(randomInt(100_000, 999_999_999)), String(randomInt(100_000, 999_999_999))];
       save(state);

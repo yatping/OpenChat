@@ -50,6 +50,19 @@ export const getDiscoveryRoute = createRoute({
   },
 });
 
+export const getSecurityTxtRoute = createRoute({
+  method: 'get',
+  path: '/.well-known/security.txt',
+  tags: ['discovery'],
+  security: [], // Deliberately public.
+  operationId: 'getSecurityTxt',
+  summary: "The operator's contact for security reports, per RFC 9116. 404 until the operator sets one",
+  responses: {
+    200: { description: 'security.txt', content: { 'text/plain': { schema: z.string() } } },
+    404: { description: 'The operator has not set a security contact' },
+  },
+});
+
 export const API_MINOR_VERSION = 0;
 
 // ---------- Authentication ----------

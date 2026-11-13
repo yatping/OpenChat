@@ -1,5 +1,5 @@
 import { type ApnsTransport, RELAY_PROTOCOL_VERSION } from '@openchat/notification-protocol';
-import { createLogger } from '@openchat/shared';
+import { createLogger, securityTxt } from '@openchat/shared';
 import { type Context, Hono } from 'hono';
 import { z } from 'zod';
 import { runApnsSelfCheck } from './apns/self-check';
@@ -29,6 +29,13 @@ export function createApp(transportFor: () => ApnsTransport = () => new WorkersF
   const notFound = { code: 'not_found', status: 404, title: 'Not found', protocolVersion: RELAY_PROTOCOL_VERSION };
 
   app.get('/health', (c) => c.json({ status: 'ok' as const }));
+
+  // RFC 9116. Only when the relay's operator has set a contact.
+  app.get('/.well-known/security.txt', (c) => {
+    const body = securityTxt({ contact: c.env.SECURITY_CONTACT, policy: c.env.SECURITY_POLICY, canonical: `${new URL(c.req.url).origin}/.well-known/security.txt`, now: new Date(), subject: 'relay' });
+    if (!body) return c.json(notFound, 404);
+    return c.text(body, 200, { 'cache-control': 'public, max-age=3600', 'x-content-type-options': 'nosniff' });
+  });
 
   // For the relay's operator. Answers 404 to everyone else, or if no operator token is set.
   const isOperator = async (c: Context<{ Bindings: Env }>) => {

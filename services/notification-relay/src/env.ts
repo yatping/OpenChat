@@ -43,4 +43,8 @@ export interface Env {
   RELAY_LIMIT_OVERRIDES?: string | Record<string, Partial<Record<string, number>>>;
   /** A Worker secret. The operator routes do not exist unless this is set. */
   RELAY_OPERATOR_TOKEN?: string;
+  /** For /.well-known/security.txt: the relay operator's mailto: or https: contacts, comma separated. Without one, it answers 404. */
+  SECURITY_CONTACT?: string;
+  /** For /.well-known/security.txt: an https: URL of the relay operator's disclosure policy. */
+  SECURITY_POLICY?: string;
 }

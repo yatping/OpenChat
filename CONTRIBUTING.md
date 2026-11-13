@@ -39,4 +39,4 @@ Your contribution takes the licence of the package you change: AGPL-3.0-or-later
 
 ## Security issues
 
-Do not open a public issue for a vulnerability. Until a formal policy is published, contact the maintainers privately.
+Do not open a public issue for a vulnerability. Report it privately, as [SECURITY.md](SECURITY.md) describes.

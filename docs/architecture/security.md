@@ -127,7 +127,23 @@ CI runs secret scanning. `.dev.vars.example` contains placeholders only, and `.d
 - All input validated with Zod. Request bodies have explicit limits.
 - Message content is plain text, rendered escaped on every client. There is no HTML message type. Links are detected on display and get `rel="noopener noreferrer"`.
 - Email templates escape interpolated values.
-- `security.txt` and a disclosure policy accompany the first public release.
+- `/.well-known/security.txt` names the operator, once one is set. See [Disclosure](#disclosure).
+
+## Disclosure
+
+Two parties receive reports, so there are two policies:
+
+- **The project**, for vulnerabilities in OpenChat's code and in the managed relay: [`SECURITY.md`](../../SECURITY.md). Reports go through GitHub's private vulnerability reporting, which is enabled on the repository.
+- **Each installation's operator**, for their deployment and their customers' data. An installation serves `/.well-known/security.txt` ([RFC 9116](https://www.rfc-editor.org/rfc/rfc9116)) once the operator sets a contact with `oc deploy --security-contact`. Without one it answers 404, because the file must name someone, and the project cannot answer for another operator's data. A relay does the same with `oc relay deploy --security-contact`.
+
+The file is built by `securityTxt` in `@openchat/shared`, for both Workers:
+
+- `Contact`: up to five `mailto:` addresses or `https:` URLs. Anything else, including a value with a line break, is refused by the CLI and ignored by the Worker, so a setting cannot add fields to the file.
+- `Expires`: 30 days ahead, at midnight UTC, written on each request, so the file never lapses while the setting stands. RFC 9116 asks for less than a year.
+- `Policy`, if set with `--security-policy`; `Preferred-Languages: en`; and `Canonical`, the address it was requested at.
+- A comment that names the operator as the contact for the service, and the project's security page for the software.
+
+The managed relay names the project's advisory page.
 
 ## Logging
 

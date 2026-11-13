@@ -3,7 +3,7 @@
  * IDs back into its config, which would dirty a checkout, so real IDs live in .openchat/<env>/ instead.
  * See docs/operations/deployment.md.
  */
-import { ABUSE_LIMITS, type AbuseLimitName, type AbuseLimits, parseAbuseLimit } from '@openchat/shared';
+import { ABUSE_LIMITS, type AbuseLimitName, type AbuseLimits, isHttpsUrl, parseAbuseLimit, parseSecurityContacts } from '@openchat/shared';
 import { parse, type ParseError } from 'jsonc-parser';
 
 export interface DeploymentState {
@@ -21,6 +21,8 @@ export interface DeploymentState {
   cloudflareEmailFrom?: string;
   /** Only what the operator chose. Anything left out takes its default in the Worker. */
   limits?: Partial<AbuseLimits> | undefined;
+  /** For /.well-known/security.txt. Without it, that answers 404. */
+  security?: SecuritySettings | undefined;
   /** Push is opt-in until a managed relay exists. Its signing key is a secret, set separately. */
   relay?: { url: string; id: string; bundleIds: string } | undefined;
 }
@@ -62,6 +64,39 @@ export function mergeLimitFlags(current: Partial<AbuseLimits> | undefined, flag:
   return merged;
 }
 
+export interface SecuritySettings {
+  /** mailto: or https: contacts, comma separated. */
+  contact: string;
+  /** An https: URL of a disclosure policy. */
+  policy?: string | undefined;
+}
+
+/**
+ * Applies --security-contact and --security-policy to what the deployment already has. `none` removes the
+ * contact, and with it the file. A contact must be mailto: or https:, so that a mistake is not published.
+ */
+export function mergeSecurityFlags(current: SecuritySettings | undefined, contact: string | undefined, policy: string | undefined): SecuritySettings | undefined {
+  if (contact === 'none') {
+    if (policy !== undefined) throw new Error('--security-policy needs a contact');
+    return undefined;
+  }
+  const next = contact === undefined ? current : { ...current, contact };
+  if (policy !== undefined) {
+    if (!next) throw new Error('--security-policy needs --security-contact too');
+    if (policy === 'none') delete next.policy;
+    else if (!isHttpsUrl(policy)) throw new Error('--security-policy must be an https:// URL');
+    else next.policy = policy;
+  }
+  if (next && !parseSecurityContacts(next.contact)) {
+    throw new Error('--security-contact takes up to five mailto: addresses or https:// URLs, separated by commas, such as mailto:security@example.com');
+  }
+  return next;
+}
+
+/** The Worker variables that /.well-known/security.txt reads. */
+export const securityVars = (security: SecuritySettings | undefined) =>
+  security ? { SECURITY_CONTACT: security.contact, ...(security.policy ? { SECURITY_POLICY: security.policy } : {}) } : {};
+
 export function parseTemplate(source: string): Template {
   const errors: ParseError[] = [];
   const template = parse(source, errors, { allowTrailingComma: true }) as Template;
@@ -100,6 +135,7 @@ export function renderConfig(templateSource: string, state: DeploymentState, rel
   const limits = Object.entries(state.limits ?? {}).map(([name, value]) => [ABUSE_LIMITS[name as AbuseLimitName].variable, String(value)]);
   if (limits.length > 0) t.vars = { ...(t.vars as object | undefined), ...Object.fromEntries(limits) };
   if (state.relay) t.vars = { ...(t.vars as object | undefined), RELAY_URL: state.relay.url, RELAY_ID: state.relay.id, RELAY_BUNDLE_IDS: state.relay.bundleIds };
+  if (state.security) t.vars = { ...(t.vars as object | undefined), ...securityVars(state.security) };
   if (state.cloudflareEmailFrom) t.send_email = [{ name: 'EMAIL', allowed_sender_addresses: [state.cloudflareEmailFrom] }];
   return t;
 }

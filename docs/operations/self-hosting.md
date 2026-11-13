@@ -103,6 +103,16 @@ pnpm oc deploy --env production --cloudflare-email --email-from no-reply@mail.co
 
 Enabling a domain sets its DMARC policy to `reject`, so use a subdomain if anything else sends mail from the main one.
 
+### Optional: a security contact
+
+So that someone who finds a problem with your installation knows where to report it, publish `/.well-known/security.txt`:
+
+```bash
+pnpm oc deploy --env production --security-contact mailto:security@company.com
+```
+
+Problems in OpenChat's own code go to the project, as [SECURITY.md](../../SECURITY.md) describes, and the file says so.
+
 ## 5. Put the chat widget on your website
 
 1. In the dashboard, open **Workspaces**. Under **Workspace to manage**, choose yours.
