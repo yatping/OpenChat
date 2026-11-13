@@ -20,3 +20,7 @@ minimumReleaseAgeExclude:
 allowBuilds:
   esbuild: true
   workerd: true
+# drizzle-orm offers expo-sqlite as an optional peer, and pnpm would install it and all of Expo.
+# Nothing here runs on a phone.
+overrides:
+  expo-sqlite: '-'
