@@ -33,6 +33,10 @@ export interface Env {
   SECURITY_CONTACT?: string;
   /** For /.well-known/security.txt: an https: URL of the operator's disclosure policy. */
   SECURITY_POLICY?: string;
+  /** Set by `oc deploy` to the release it deployed. Published in the discovery document. */
+  OPENCHAT_VERSION?: string;
+  /** Where users can get this installation's source, as the AGPL asks. Without it, the project's at OPENCHAT_VERSION. */
+  SOURCE_URL?: string;
   JOBS_QUEUE: Queue;
   /** Worker secret, with its pair. Without both, no website can require Turnstile. */
   TURNSTILE_SECRET_KEY?: string;

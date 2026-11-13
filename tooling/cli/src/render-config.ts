@@ -23,6 +23,8 @@ export interface DeploymentState {
   limits?: Partial<AbuseLimits> | undefined;
   /** For /.well-known/security.txt. Without it, that answers 404. */
   security?: SecuritySettings | undefined;
+  /** Where users can get this installation's source, for an operator who changed it. See docs/operations/licensing.md. */
+  sourceUrl?: string | undefined;
   /** Push is opt-in until a managed relay exists. Its signing key is a secret, set separately. */
   relay?: { url: string; id: string; bundleIds: string } | undefined;
 }
@@ -97,6 +99,17 @@ export function mergeSecurityFlags(current: SecuritySettings | undefined, contac
 export const securityVars = (security: SecuritySettings | undefined) =>
   security ? { SECURITY_CONTACT: security.contact, ...(security.policy ? { SECURITY_POLICY: security.policy } : {}) } : {};
 
+/**
+ * Applies --source-url. `none` goes back to the project's source at the deployed release, which is right only
+ * for an unchanged release. The AGPL asks that users of a changed one be offered its source.
+ */
+export function mergeSourceFlag(current: string | undefined, value: string | undefined): string | undefined {
+  if (value === undefined) return current;
+  if (value === 'none') return undefined;
+  if (!isHttpsUrl(value)) throw new Error('--source-url must be an https:// URL where your users can get the source you deploy');
+  return value;
+}
+
 export function parseTemplate(source: string): Template {
   const errors: ParseError[] = [];
   const template = parse(source, errors, { allowTrailingComma: true }) as Template;
@@ -106,8 +119,11 @@ export function parseTemplate(source: string): Template {
 
 const renameResource = (value: string, name: string) => value.replace(/^oc-local/, `oc-${name}`);
 
-/** `relativeRoot` is the path from the rendered file back to the Worker's directory. */
-export function renderConfig(templateSource: string, state: DeploymentState, relativeRoot: string): Template {
+/**
+ * `relativeRoot` is the path from the rendered file back to the Worker's directory. `release` is the version
+ * being deployed, which the discovery document publishes.
+ */
+export function renderConfig(templateSource: string, state: DeploymentState, relativeRoot: string, release?: string): Template {
   if (!NAME.test(state.name)) throw new Error('Deployment names must be lowercase letters, numbers, and hyphens');
   const t = structuredClone(parseTemplate(templateSource));
   const rebase = (path: string) => `${relativeRoot}/${path.replace(/^\.\//, '')}`;
@@ -136,6 +152,8 @@ export function renderConfig(templateSource: string, state: DeploymentState, rel
   if (limits.length > 0) t.vars = { ...(t.vars as object | undefined), ...Object.fromEntries(limits) };
   if (state.relay) t.vars = { ...(t.vars as object | undefined), RELAY_URL: state.relay.url, RELAY_ID: state.relay.id, RELAY_BUNDLE_IDS: state.relay.bundleIds };
   if (state.security) t.vars = { ...(t.vars as object | undefined), ...securityVars(state.security) };
+  if (release) t.vars = { ...(t.vars as object | undefined), OPENCHAT_VERSION: release };
+  if (state.sourceUrl) t.vars = { ...(t.vars as object | undefined), SOURCE_URL: state.sourceUrl };
   if (state.cloudflareEmailFrom) t.send_email = [{ name: 'EMAIL', allowed_sender_addresses: [state.cloudflareEmailFrom] }];
   return t;
 }

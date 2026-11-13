@@ -17,6 +17,8 @@ interface Options {
   /** The new Worker answers 500 to everything. */
   unhealthyAfterDeploy?: boolean;
   defaultLog?: boolean;
+  /** Whether the checkout is the tagged release, unchanged. */
+  releaseCheckout?: boolean;
 }
 
 function setup(options: Options = {}) {
@@ -49,9 +51,9 @@ function setup(options: Options = {}) {
   }) as typeof fetch;
   const lines: string[] = [];
   let builds = 0;
-  const deployer = createDeployer(root, { wrangler, fetch: fakeFetch, wait: async () => undefined, build: () => void builds++, ...(options.defaultLog ? {} : { log: (line: string) => void lines.push(line) }) });
+  const deployer = createDeployer(root, { wrangler, fetch: fakeFetch, wait: async () => undefined, build: () => void builds++, isReleaseCheckout: () => options.releaseCheckout ?? true, ...(options.defaultLog ? {} : { log: (line: string) => void lines.push(line) }) });
   const state = () => JSON.parse(readFileSync(join(root, '.openchat/acme/state.json'), 'utf8')) as State;
-  return { deployer, calls, lines, state, builds: () => builds };
+  return { deployer, calls, lines, state, root, builds: () => builds };
 }
 
 const steps = (calls: string[]) => calls.filter((c) => !/^(whoami|d1 list|r2 bucket list|queues list)/.test(c)).map((c) => c.split(' ').slice(0, 2).join(' '));
@@ -100,6 +102,24 @@ describe('oc upgrade', () => {
     const ancient = setup({ state: { version: '0.0.9' } });
     await expect(ancient.deployer.upgrade('acme')).rejects.toThrow(/Upgrade to 0.1.0 first/);
     expect(ancient.calls).toEqual([]);
+  });
+
+  it('deploys the release version, and asks for the source of a changed checkout', async () => {
+    const tagged = setup();
+    await tagged.deployer.upgrade('acme');
+    const rendered = JSON.parse(readFileSync(join(tagged.root, '.openchat/acme/api.wrangler.jsonc'), 'utf8')) as { vars: Record<string, string> };
+    expect(rendered.vars.OPENCHAT_VERSION).toBe('0.2.0');
+    expect(rendered.vars.SOURCE_URL).toBeUndefined();
+    expect(tagged.lines.join('\n')).not.toContain('--source-url');
+
+    const changed = setup({ releaseCheckout: false });
+    await changed.deployer.upgrade('acme');
+    expect(changed.lines.join('\n')).toMatch(/not release v0.2.0 unchanged[\s\S]*--source-url/);
+
+    const offered = setup({ releaseCheckout: false, state: { sourceUrl: 'https://git.example.com/ours' } });
+    await offered.deployer.upgrade('acme');
+    expect(offered.lines.join('\n')).not.toContain('--source-url');
+    expect((JSON.parse(readFileSync(join(offered.root, '.openchat/acme/api.wrangler.jsonc'), 'utf8')) as { vars: Record<string, string> }).vars.SOURCE_URL).toBe('https://git.example.com/ours');
   });
 
   it('needs an existing deployment', async () => {

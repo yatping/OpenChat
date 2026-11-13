@@ -34,6 +34,15 @@ export const DiscoverySchema = z
       .nullable()
       .openapi({ description: 'Compared by the app with its build-time allowlist, and read by the relay to prove domain control.' }),
     auth: z.object({ signup: z.enum(['invite_only', 'open']) }),
+    software: z
+      .object({
+        name: z.literal('OpenChat'),
+        version: z.string().nullable().openapi({ description: 'The release deployed with oc deploy. Null if unknown.' }),
+        license: z.literal('AGPL-3.0-or-later'),
+        source: z.string().openapi({ description: "Where users can get this installation's source code, as the AGPL asks. The operator's own, or the project's at this release." }),
+      })
+      .optional()
+      .openapi({ description: 'What this installation runs, and where its source is. Absent from installations older than 0.3.0. See docs/operations/licensing.md.' }),
   })
   .openapi('Discovery');
 

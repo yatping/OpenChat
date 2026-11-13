@@ -155,6 +155,13 @@ describe('discovery', () => {
     expect(text).not.toContain(key.privateKey);
   });
 
+  it('names the release and offers its source, or the source the operator set', async () => {
+    const atRelease = (await (await call('GET', '/.well-known/openchat.json', { env: { ...withRelay, OPENCHAT_VERSION: '0.3.0' } })).json()) as { software: unknown };
+    expect(atRelease.software).toEqual({ name: 'OpenChat', version: '0.3.0', license: 'AGPL-3.0-or-later', source: 'https://github.com/yatping/OpenChat/tree/v0.3.0' });
+    const own = (await (await call('GET', '/.well-known/openchat.json', { env: { ...withRelay, OPENCHAT_VERSION: '0.3.0', SOURCE_URL: 'https://git.example.com/our-openchat' } })).json()) as { software: { source: string } };
+    expect(own.software.source).toBe('https://git.example.com/our-openchat');
+  });
+
   it('treats an unreadable signing key as no relay, and still answers', async () => {
     const response = await call('GET', '/.well-known/openchat.json', { env: { ...withRelay, RELAY_SIGNING_KEY: 'not json' } });
     expect(response.status).toBe(200);

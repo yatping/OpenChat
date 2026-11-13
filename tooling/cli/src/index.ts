@@ -6,6 +6,7 @@ import { createDeployer } from './deploy';
 import { createVariantWriter } from './app-variant';
 import { createRelayDeployer } from './relay';
 import { renderConfig, type DeploymentState } from './render-config';
+import { releaseVersion } from './releases';
 import { ABUSE_LIMITS } from '@openchat/shared';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -16,6 +17,7 @@ function usage(): never {
   pnpm oc deploy --env <name> --owner-email <address> [--owner-name <name>] [--workspace <name>]
                  [--public-url <https origin>] [--location <hint>] [--analytics] [--cloudflare-email] [--email-from <address>]
                  [--security-contact <mailto:...|https://...>[,...] | none] [--security-policy <https://...>]
+                 [--source-url <https://...> | none]   where users get your source, if you changed the code
   pnpm oc upgrade --env <name>      after checking out a newer release
   pnpm oc rollback --env <name>     puts back the Worker from before the last upgrade
   pnpm oc recover --env <name> --email <address>
@@ -151,6 +153,7 @@ async function main(name: string) {
       noRelay: rest.includes('--no-relay'),
       securityContact: flag('security-contact'),
       securityPolicy: flag('security-policy'),
+      sourceUrl: flag('source-url'),
       cloudflareEmail: rest.includes('--cloudflare-email'),
     });
     return;
@@ -188,7 +191,7 @@ async function main(name: string) {
   const state = JSON.parse(readFileSync(join(dir, 'state.json'), 'utf8')) as DeploymentState;
   const serviceDir = join(root, 'services', service);
   const out = join(dir, `${service}.wrangler.jsonc`);
-  const rendered = renderConfig(readFileSync(join(serviceDir, 'wrangler.template.jsonc'), 'utf8'), state, relative(dirname(out), serviceDir));
+  const rendered = renderConfig(readFileSync(join(serviceDir, 'wrangler.template.jsonc'), 'utf8'), state, relative(dirname(out), serviceDir), service === 'api' ? releaseVersion(root) : undefined);
   mkdirSync(dir, { recursive: true });
   writeFileSync(out, `${JSON.stringify(rendered, null, 2)}\n`);
   console.log(`Rendered ${relative(root, out)}`);

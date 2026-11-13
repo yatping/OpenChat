@@ -8,6 +8,7 @@ import { AuditLogPage } from './audit-log-page';
 import { FailedJobsPage } from './failed-jobs-page';
 import { PeoplePage } from './people-page';
 import { CopyableSnippet, WorkspacesAdminPage } from './workspaces-admin-page';
+import { SoftwareFooter } from '../software-footer';
 
 type Membership = Me['memberships'][number];
 
@@ -140,6 +141,7 @@ export function WorkspaceApp() {
           </div>
         )}
       </main>
+      <SoftwareFooter />
     </div>
   );
 }

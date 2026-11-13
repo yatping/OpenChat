@@ -28,7 +28,7 @@ CI rejects pull requests containing commits with no sign-off. To fix earlier com
 
 ## Licences
 
-Your contribution takes the licence of the package you change: AGPL-3.0-or-later for server components, and Apache-2.0 for client components. See [LICENSE](LICENSE) and [ADR-0011](docs/architecture/decisions/0011-license-boundaries.md). Permissive packages cannot depend on AGPL ones, and CI checks this.
+Your contribution takes the licence of the package you change: AGPL-3.0-or-later for server components, and Apache-2.0 for client components. See [LICENSE](LICENSE) and [ADR-0011](docs/architecture/decisions/0011-license-boundaries.md). Permissive packages cannot depend on AGPL ones, and every component may ship only third-party code its licence allows. CI checks both; see [licensing](docs/operations/licensing.md#what-ci-checks) for the policy, and for how to propose an exception.
 
 ## Changes that need extra care
 

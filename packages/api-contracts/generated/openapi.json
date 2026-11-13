@@ -2477,6 +2477,41 @@
             "required": [
               "signup"
             ]
+          },
+          "software": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "enum": [
+                  "OpenChat"
+                ]
+              },
+              "version": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The release deployed with oc deploy. Null if unknown."
+              },
+              "license": {
+                "type": "string",
+                "enum": [
+                  "AGPL-3.0-or-later"
+                ]
+              },
+              "source": {
+                "type": "string",
+                "description": "Where users can get this installation's source code, as the AGPL asks. The operator's own, or the project's at this release."
+              }
+            },
+            "required": [
+              "name",
+              "version",
+              "license",
+              "source"
+            ],
+            "description": "What this installation runs, and where its source is. Absent from installations older than 0.3.0. See docs/operations/licensing.md."
           }
         },
         "required": [

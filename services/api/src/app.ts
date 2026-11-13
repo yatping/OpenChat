@@ -2,7 +2,7 @@ import { OpenAPIHono } from '@hono/zod-openapi';
 import { getDiscoveryRoute, getHealthRoute, getSecurityTxtRoute, API_MINOR_VERSION, REALTIME_PROTOCOL_VERSION } from '@openchat/api-contracts';
 import openapi from '@openchat/api-contracts/openapi.json';
 import { getInstallation, openDatabase } from '@openchat/database';
-import { AppError, createLogger, newId, securityTxt, toProblem } from '@openchat/shared';
+import { AppError, createLogger, newId, securityTxt, software, toProblem } from '@openchat/shared';
 import type { AppEnv } from './context';
 import { registerAuthRoutes } from './routes/auth';
 import { registerConversationRoutes } from './routes/conversations';
@@ -86,6 +86,7 @@ export function createApp() {
         relay: discoveryRelay(c.env, installation.relayDisconnectedId),
         // Accounts come only from an installation admin. See ADR-0016.
         auth: { signup: 'invite_only' as const },
+        software: software({ version: c.env.OPENCHAT_VERSION, sourceUrl: c.env.SOURCE_URL }),
       },
       200,
     );

@@ -7,6 +7,8 @@ const worker = 'http://localhost:8787';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // Read by tooling/scripts/check-licenses.mjs, and turned into the served notices by services/api/scripts/collect-assets.mjs.
+  build: { license: { fileName: '.vite/license.json' } },
   server: {
     port: 5173,
     proxy: {

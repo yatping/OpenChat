@@ -1,15 +1,20 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { api, errorMessage, session } from '../app-context';
+import { SoftwareFooter } from '../software-footer';
 
 const go = (path: string) => window.location.assign(path);
 
 function Frame({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <main className="mx-auto mt-16 max-w-sm px-4">
-      <h1 className="mb-1 text-xl font-semibold">OpenChat</h1>
-      <h2 className="mb-6 text-sm text-slate-600 dark:text-slate-400">{title}</h2>
-      <div className="card space-y-4">{children}</div>
-    </main>
+    // The footer is outside main, so that it is the page's contentinfo landmark.
+    <div className="mx-auto mt-16 max-w-sm px-4">
+      <main>
+        <h1 className="mb-1 text-xl font-semibold">OpenChat</h1>
+        <h2 className="mb-6 text-sm text-slate-600 dark:text-slate-400">{title}</h2>
+        <div className="card space-y-4">{children}</div>
+      </main>
+      <SoftwareFooter />
+    </div>
   );
 }
 

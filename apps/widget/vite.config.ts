@@ -28,6 +28,7 @@ export default defineConfig(({ mode }) => {
         ? { entry: 'src/chat.tsx', formats: ['iife'], name: 'OpenChatChat', fileName: () => 'chat.js' }
         : { entry: 'src/loader.ts', formats: ['iife'], name: 'OpenChatWidget', fileName: () => 'widget.js' },
       target: 'es2019',
+      license: { fileName: chat ? '.vite/license-chat.json' : '.vite/license-widget.json' },
       // The second build adds to the first.
       emptyOutDir: !chat,
     },
