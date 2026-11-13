@@ -1,0 +1,9 @@
+2026-11-13T09:55:18.537Z ok   [a] owner sets a password
+2026-11-13T09:55:20.201Z ok   [b] owner sets a password
+2026-11-13T09:55:41.685Z ok   [a] workspace "Acme Support" exists, owner is supervisor
+2026-11-13T09:55:41.837Z ok   [a] registered website, allowed origin https://oc-preview-exit-a.yatping0617.workers.dev (201)
+2026-11-13T09:55:42.225Z ok   [a] widget settings: ask for email after the first message (200)
+2026-11-13T09:55:42.332Z ok   [a] follow-up rule: 5 minutes (201)
+2026-11-13T09:55:43.917Z ok   [b] workspace "Beta Helpdesk" exists, owner is supervisor
+2026-11-13T09:55:44.059Z ok   [b] registered website, allowed origin https://oc-preview-exit-b.yatping0617.workers.dev (201)
+2026-11-13T09:55:44.328Z ok   [b] widget settings: ask for email after the first message (200)

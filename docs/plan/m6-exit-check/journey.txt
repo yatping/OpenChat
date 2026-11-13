@@ -1,0 +1,10 @@
+2026-11-13T10:01:21Z visitor sends
+2026-11-13T10:02:46Z agent inbox lists 'Visitor F3JDR7 1 unread' (arrived live; list shows no preview, so latency not timed)
+2026-11-13T10:02:54Z agent replies
+2026-11-13T10:02:54Z visitor's widget shows the reply live, about .366s after send (no reload)
+2026-11-13T10:03:06Z visitor gives email with follow-up consent, then leaves (widget closed)
+2026-11-13T10:03:38Z API: conversation has the visitor's email and name; last message 10:02:54Z, so the 5 minute rule is due 10:07:54Z
+2026-11-13T10:08:23Z D1 email_deliveries: template follow_up, status sent (claimed 10:08:22Z, about 28 s after due), via Cloudflare Email Service from no-reply@holfun.com
+2026-11-13T10:17:28Z [B] owner signed out of A and signed in to B in TestFlight build 2 (one installation at a time, ADR-0014); visitor on B sends
+2026-11-13T10:18:51Z [B] visitor's widget shows the reply sent from the iPhone app, live (no reload; polled every 0.5 s)
+2026-11-13T10:19:52Z [B] owner confirms the push for the 10:17:29Z message arrived on the iPhone and showed the message text (decrypted on the phone, ADR-0017)
