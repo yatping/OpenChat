@@ -1,5 +1,6 @@
 import { ApiError, createClient } from '@openchat/api-client';
 import { QueryClient } from '@tanstack/react-query';
+import { t } from './i18n';
 import { createSession } from './session';
 
 export const session = createSession({
@@ -22,7 +23,7 @@ export const queryClient = new QueryClient({
   },
 });
 
-export const errorMessage = (error: unknown) => (error instanceof ApiError ? error.message : 'Something went wrong. Try again.');
+export const errorMessage = (error: unknown) => (error instanceof ApiError ? error.message : t('somethingWrong'));
 
 /** Local preference only. Storage can be unavailable, and the app works without it. */
 export const preference = {

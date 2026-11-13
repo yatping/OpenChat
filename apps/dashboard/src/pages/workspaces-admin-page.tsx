@@ -2,6 +2,8 @@ import type { Website } from '@openchat/api-client';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api, errorMessage } from '../app-context';
+import { t, tn, tNode } from '../i18n';
+import { LANGUAGES } from '../i18n/locales';
 
 const parseOrigins = (text: string) => text.split(/[\s,]+/).filter(Boolean);
 
@@ -23,20 +25,8 @@ export function CopyableSnippet({ website }: { website: Website }) {
   );
 }
 
-/** The widget's languages, each named in itself, as a visitor would look for it. */
-const WIDGET_LANGUAGES = [
-  ['en', 'English'],
-  ['es', 'Español'],
-  ['fr', 'Français'],
-  ['de', 'Deutsch'],
-  ['it', 'Italiano'],
-  ['pt', 'Português'],
-  ['nl', 'Nederlands'],
-  ['ja', '日本語'],
-  ['ko', '한국어'],
-  ['zh-Hans', '简体中文'],
-  ['zh-Hant', '繁體中文'],
-] as const;
+/** The widget's languages are the dashboard's, each named in itself, as a visitor would look for it. */
+const WIDGET_LANGUAGES = LANGUAGES;
 
 /** What a colour input must show when nothing has been chosen. Saved only if someone chooses it. */
 const DEFAULT_WIDGET_COLOR = '#0a57f5';
@@ -65,42 +55,42 @@ function WidgetSettingsForm({ website, workspaceId }: { website: Website; worksp
         save.mutate();
       }}
     >
-      <h4 className="text-sm font-medium">Widget</h4>
+      <h4 className="text-sm font-medium">{t('widget')}</h4>
       <label className="block text-sm font-medium">
-        Welcome message
+        {t('welcomeMessage')}
         <textarea className="field mt-1 font-normal" rows={2} maxLength={500} value={welcomeMessage} onChange={(e) => setWelcome(e.target.value)} />
       </label>
       <label className="block text-sm font-medium">
-        Colour
+        {t('colour')}
         <input className="field mt-1 h-10 w-20 p-1" type="color" value={primaryColor} onChange={(e) => setColor(e.target.value)} />
       </label>
       <label className="block text-sm font-medium">
-        Ask for an email
+        {t('askEmail')}
         <select className="field mt-1 w-auto font-normal" value={collectEmail} onChange={(e) => setCollectEmail(e.target.value as typeof collectEmail)}>
-          <option value="never">Never</option>
-          <option value="optional">Offer it, after the first message</option>
-          <option value="required">Before the first message</option>
+          <option value="never">{t('askNever')}</option>
+          <option value="optional">{t('askOptional')}</option>
+          <option value="required">{t('askRequired')}</option>
         </select>
       </label>
       <label className="block text-sm font-medium">
-        Widget language
+        {t('widgetLanguage')}
         <select className="field mt-1 w-auto font-normal" value={language} onChange={(e) => setLanguage(e.target.value as typeof language)}>
-          <option value="auto">Automatic, from the page and the visitor's browser</option>
+          <option value="auto">{t('widgetLanguageAuto')}</option>
           {WIDGET_LANGUAGES.map(([code, name]) => <option key={code} value={code} lang={code}>{name}</option>)}
         </select>
       </label>
-      <p className="text-xs text-slate-600 dark:text-slate-400">The welcome message is shown as you write it, in any language. A page can ask for its own language with <code>data-locale</code> on the script tag.</p>
+      <p className="text-xs text-slate-600 dark:text-slate-400">{tNode('widgetLanguageHint', { attribute: <code>data-locale</code> })}</p>
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={showAgentNames} onChange={(e) => setShowNames(e.target.checked)} />
-        Show agents' names to visitors
+        {t('showAgentNames')}
       </label>
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={requireTurnstile} onChange={(e) => setTurnstile(e.target.checked)} />
-        Check that new visitors are people, with Cloudflare Turnstile
+        {t('turnstile')}
       </label>
       <Failure error={save.error} />
-      {save.isSuccess && <p className="notice" role="status">Saved. The widget picks this up within a minute.</p>}
-      <button className="button-quiet" disabled={save.isPending}>Save widget settings</button>
+      {save.isSuccess && <p className="notice" role="status">{t('widgetSaved')}</p>}
+      <button className="button-quiet" disabled={save.isPending}>{t('saveWidget')}</button>
     </form>
   );
 }
@@ -125,16 +115,16 @@ function WebsiteCard({ website, workspaceId }: { website: Website; workspaceId: 
           }}
         >
           <label className="block text-sm font-medium">
-            Name
+            {t('name')}
             <input className="field mt-1 font-normal" value={name} required maxLength={100} onChange={(e) => setName(e.target.value)} />
           </label>
           <label className="block text-sm font-medium">
-            Allowed origins, one per line
+            {t('allowedOrigins')}
             <textarea className="field mt-1 font-normal" rows={3} value={origins} onChange={(e) => setOrigins(e.target.value)} />
           </label>
           <Failure error={save.error} />
-          {save.isSuccess && <p className="notice" role="status">Saved.</p>}
-          <button className="button-quiet" disabled={save.isPending}>Save changes</button>
+          {save.isSuccess && <p className="notice" role="status">{t('saved')}</p>}
+          <button className="button-quiet" disabled={save.isPending}>{t('saveChanges')}</button>
       </form>
       <WidgetSettingsForm website={website} workspaceId={workspaceId} />
     </li>
@@ -161,17 +151,17 @@ function AddWebsite({ workspaceId }: { workspaceId: string }) {
         create.mutate();
       }}
     >
-      <h3 className="font-medium">Add a website</h3>
+      <h3 className="font-medium">{t('addWebsiteTitle')}</h3>
       <label className="block text-sm font-medium">
-        Name
+        {t('name')}
         <input className="field mt-1 font-normal" value={name} required maxLength={100} onChange={(e) => setName(e.target.value)} />
       </label>
       <label className="block text-sm font-medium">
-        Allowed origins, one per line
+        {t('allowedOrigins')}
         <textarea className="field mt-1 font-normal" rows={2} placeholder="https://www.example.com" value={origins} onChange={(e) => setOrigins(e.target.value)} />
       </label>
       <Failure error={create.error} />
-      <button className="button" disabled={create.isPending}>Add website</button>
+      <button className="button" disabled={create.isPending}>{t('addWebsite')}</button>
     </form>
   );
 }
@@ -194,10 +184,10 @@ function RenameWorkspace({ workspace }: { workspace: { id: string; name: string 
       }}
     >
       <label className="min-w-48 flex-1 text-sm font-medium">
-        Workspace name
+        {t('workspaceName')}
         <input className="field mt-1 font-normal" required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
       </label>
-      <button className="button-quiet" disabled={rename.isPending}>Rename</button>
+      <button className="button-quiet" disabled={rename.isPending}>{t('rename')}</button>
       <Failure error={rename.error} />
     </form>
   );
@@ -222,8 +212,8 @@ function NewWorkspace({ onCreated }: { onCreated: (id: string) => void }) {
         create.mutate();
       }}
     >
-      <input className="field w-48" aria-label="New workspace name" placeholder="New workspace" required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
-      <button className="button-quiet" disabled={create.isPending}>Create workspace</button>
+      <input className="field w-48" aria-label={t('newWorkspaceName')} placeholder={t('newWorkspace')} required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
+      <button className="button-quiet" disabled={create.isPending}>{t('createWorkspace')}</button>
       <Failure error={create.error} />
     </form>
   );
@@ -250,23 +240,23 @@ function RetentionPanel({ workspaceId }: { workspaceId: string }) {
   const choices = saved === null || RETENTION_CHOICES.includes(saved) ? RETENTION_CHOICES : [...RETENTION_CHOICES, saved].sort((a, b) => a - b);
   const shorter = days !== null && (saved === null || days < saved);
   const submit = () => {
-    if (shorter && !window.confirm(`Delete closed conversations older than ${days} days, with their messages and files? This starts within the hour and cannot be undone.`)) return;
+    if (shorter && !window.confirm(t('retentionConfirm', { days }))) return;
     save.mutate(days);
   };
   return (
-    <section className="card space-y-2" aria-label="Retention">
+    <section className="card space-y-2" aria-label={t('retention')}>
       <label className="block text-sm font-medium">
-        Keep closed conversations
+        {t('keepClosed')}
         <select className="field mt-1 font-normal" value={value} onChange={(e) => setChoice(e.target.value)}>
-          <option value="">Forever</option>
-          {choices.map((d) => <option key={d} value={String(d)}>{d % 365 === 0 ? `${d / 365} ${d === 365 ? 'year' : 'years'}` : `${d} days`} after the last message</option>)}
+          <option value="">{t('forever')}</option>
+          {choices.map((d) => <option key={d} value={String(d)}>{t('afterLastMessage', { period: d % 365 === 0 ? tn('years', d / 365) : t('days', { count: d }) })}</option>)}
         </select>
       </label>
       <p className="text-xs text-slate-600 dark:text-slate-400">
-        Resolved and archived conversations are deleted, with their messages and files, once their last message is this old. Contacts left with no conversations go too. Open conversations are kept. An hourly sweep does this, and the audit log records each run.
+        {t('retentionHelp')}
       </p>
       <button className="button-quiet" disabled={days === saved || save.isPending} onClick={submit}>
-        Save retention
+        {t('saveRetention')}
       </button>
       <Failure error={save.error} />
     </section>
@@ -280,11 +270,11 @@ function ManagedWorkspace({ workspace }: { workspace: { id: string; name: string
       <RenameWorkspace workspace={workspace} />
       <RetentionPanel workspaceId={workspace.id} />
       <Failure error={websites.error} />
-      {websites.data?.data.length === 0 && <p className="text-sm text-slate-600 dark:text-slate-400">No websites yet.</p>}
+      {websites.data?.data.length === 0 && <p className="text-sm text-slate-600 dark:text-slate-400">{t('noWebsites')}</p>}
       <ul className="space-y-4">
         {websites.data?.data.map((website) => <WebsiteCard key={website.id} website={website} workspaceId={workspace.id} />)}
       </ul>
-      <p className="text-xs text-slate-600 dark:text-slate-400">Add the snippet to your site, and list the site's address under allowed origins. Sites with a content security policy also need to allow this address for scripts and connections.</p>
+      <p className="text-xs text-slate-600 dark:text-slate-400">{t('snippetHelp')}</p>
       <AddWebsite workspaceId={workspace.id} />
     </div>
   );
@@ -304,36 +294,36 @@ function RelayPanel() {
   const relay = status.data;
   if (!relay) return <Failure error={status.error} />;
   return (
-    <section className="card space-y-2" aria-label="Push notifications">
-      <h2 className="font-medium">Push notifications</h2>
-      {relay.state === 'not_configured' && <p className="text-sm text-slate-600 dark:text-slate-400">This installation has no notification relay. Messages still reach the app while it is open.</p>}
+    <section className="card space-y-2" aria-label={t('push')}>
+      <h2 className="font-medium">{t('push')}</h2>
+      {relay.state === 'not_configured' && <p className="text-sm text-slate-600 dark:text-slate-400">{t('pushNone')}</p>}
       {relay.state === 'connected' && (
         <>
           <p className="text-sm">
-            Through {relay.relay?.url}. {relay.registered ? `${relay.subscriptions} ${relay.subscriptions === 1 ? 'phone is' : 'phones are'} registered.` : 'No phone has registered yet.'}
+            {t('pushThrough', { url: relay.relay?.url ?? '' })} {relay.registered ? tn('phones', relay.subscriptions) : t('noPhones')}
           </p>
           <p className="text-xs text-slate-600 dark:text-slate-400">
-            The relay holds this installation's address, its workspace names, and opaque IDs for each phone. Disconnecting asks it to erase all of that, and turns push off for everyone.
+            {t('relayHolds')}
           </p>
           <button
             className="button-quiet"
             disabled={disconnect.isPending}
-            onClick={() => window.confirm('Disconnect from the relay? Push stops for everyone, and the relay erases what it holds about this installation.') && disconnect.mutate()}
+            onClick={() => window.confirm(t('disconnectConfirm')) && disconnect.mutate()}
           >
-            Disconnect and erase
+            {t('disconnectErase')}
           </button>
         </>
       )}
       {relay.state === 'disconnected' && (
         <>
-          <p className="text-sm">Push is off. You disconnected from {relay.relay?.url}.</p>
+          <p className="text-sm">{t('pushOff', { url: relay.relay?.url ?? '' })}</p>
           <button className="button-quiet" disabled={reconnect.isPending} onClick={() => reconnect.mutate()}>
-            Reconnect
+            {t('reconnect')}
           </button>
-          {disconnect.isError && <p className="text-xs text-slate-600 dark:text-slate-400">The relay has not confirmed the erasure yet.</p>}
+          {disconnect.isError && <p className="text-xs text-slate-600 dark:text-slate-400">{t('erasureUnconfirmed')}</p>}
           {disconnect.isError && (
             <button className="button-quiet" disabled={disconnect.isPending} onClick={() => disconnect.mutate()}>
-              Try the erasure again
+              {t('retryErasure')}
             </button>
           )}
         </>
@@ -350,21 +340,21 @@ export function WorkspacesAdminPage() {
   const list = workspaces.data?.data ?? [];
   const workspace = list.find((w) => w.id === chosen) ?? list[0];
   return (
-    <section className="space-y-4" aria-label="Manage workspaces">
+    <section className="space-y-4" aria-label={t('manageWorkspaces')}>
       <RelayPanel />
       <Failure error={workspaces.error} />
       <NewWorkspace onCreated={setChosen} />
-      {workspaces.data?.nextCursor && <p className="notice">Only the first 100 are shown.</p>}
-      {list.length === 0 && workspaces.data && <p className="text-sm text-slate-600 dark:text-slate-400">No workspaces yet.</p>}
+      {workspaces.data?.nextCursor && <p className="notice">{t('firstHundred')}</p>}
+      {list.length === 0 && workspaces.data && <p className="text-sm text-slate-600 dark:text-slate-400">{t('noWorkspaces')}</p>}
       {workspace && (
         <>
           <label className="block text-sm font-medium">
-            Workspace to manage
+            {t('workspaceToManage')}
             <select className="field mt-1 font-normal" value={workspace.id} onChange={(e) => setChosen(e.target.value)}>
               {list.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
             </select>
           </label>
-          <p className="text-xs text-slate-600 dark:text-slate-400">Managing a workspace does not show you its conversations. To read them, add yourself on the People page, which is recorded in the audit log.</p>
+          <p className="text-xs text-slate-600 dark:text-slate-400">{t('manageHint')}</p>
           {/* The key gives each workspace fresh form state, so nothing typed in one is saved to another. */}
           <ManagedWorkspace key={workspace.id} workspace={workspace} />
         </>

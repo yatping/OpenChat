@@ -10,6 +10,8 @@ import { PeoplePage } from './people-page';
 import { CopyableSnippet, WorkspacesAdminPage } from './workspaces-admin-page';
 import { SoftwareFooter } from '../software-footer';
 import { Icon, Initials, type IconName } from '../icons';
+import { t, type MessageKey } from '../i18n';
+import { LanguagePicker } from '../language-picker';
 
 type Membership = Me['memberships'][number];
 
@@ -27,9 +29,9 @@ function Failure({ error }: { error: unknown }) {
 function WebsitesPanel({ membership }: { membership: Membership }) {
   const websites = useQuery({ queryKey: ['websites', membership.workspace.id], queryFn: () => api.listWebsites(membership.workspace.id) });
   return (
-    <section className="space-y-4" aria-label="Websites">
+    <section className="space-y-4" aria-label={t('sectionWebsites')}>
       <Failure error={websites.error} />
-      {websites.data?.data.length === 0 && <p className="text-sm text-slate-600 dark:text-slate-400">No websites yet. An installation admin adds them.</p>}
+      {websites.data?.data.length === 0 && <p className="text-sm text-slate-600 dark:text-slate-400">{t('noWebsitesMember')}</p>}
       <ul className="space-y-4">
         {websites.data?.data.map((website) => (
           <li key={website.id} className="card space-y-3">
@@ -51,7 +53,7 @@ function InboxWithMembers({ membership }: { membership: Membership }) {
 function MembersPanel({ membership }: { membership: Membership }) {
   const members = useQuery({ queryKey: ['members', membership.workspace.id], queryFn: () => api.listMembers(membership.workspace.id) });
   return (
-    <section className="space-y-4" aria-label="Members">
+    <section className="space-y-4" aria-label={t('sectionMembers')}>
       <Failure error={members.error} />
       <ul className="card divide-y divide-slate-200 dark:divide-slate-800">
         {members.data?.data.map((member) => (
@@ -61,19 +63,19 @@ function MembersPanel({ membership }: { membership: Membership }) {
               <div className="text-sm font-medium">{member.name}</div>
               <div className="text-xs break-all text-slate-600 dark:text-slate-400">{member.email}</div>
             </div>
-            {member.status === 'suspended' && <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Suspended</span>}
-            {member.status === 'removed' && <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Removed</span>}
-            <span className="text-sm capitalize">{member.role}</span>
+            {member.status === 'suspended' && <span className="text-xs font-medium text-amber-700 dark:text-amber-400">{t('suspended')}</span>}
+            {member.status === 'removed' && <span className="text-xs font-medium text-amber-700 dark:text-amber-400">{t('removed')}</span>}
+            <span className="text-sm">{t(member.role === 'supervisor' ? 'roleSupervisor' : 'roleAgent')}</span>
           </li>
         ))}
       </ul>
-      <p className="text-xs text-slate-600 dark:text-slate-400">An installation admin manages people, on the People page.</p>
+      <p className="text-xs text-slate-600 dark:text-slate-400">{t('membersManagedBy')}</p>
     </section>
   );
 }
 
 function EmailPanels({ workspaceId, isSupervisor }: { workspaceId: string; isSupervisor: boolean }) {
-  if (!isSupervisor) return <p className="card text-sm">A supervisor sets up follow-up emails to visitors.</p>;
+  if (!isSupervisor) return <p className="card text-sm">{t('supervisorEmail')}</p>;
   return (
     <div className="space-y-6">
       <FollowUpRulesPanel workspaceId={workspaceId} />
@@ -85,17 +87,17 @@ function EmailPanels({ workspaceId, isSupervisor }: { workspaceId: string; isSup
 const WORKSPACE_PREFERENCE = 'openchat.workspace';
 
 const SECTIONS = [
-  ['inbox', 'Inbox', 'inbox'],
-  ['websites', 'Websites', 'websites'],
-  ['members', 'Members', 'members'],
-  ['email', 'Email', 'email'],
-] as const;
+  ['inbox', 'sectionInbox', 'inbox'],
+  ['websites', 'sectionWebsites', 'websites'],
+  ['members', 'sectionMembers', 'members'],
+  ['email', 'sectionEmail', 'email'],
+] as const satisfies readonly (readonly [string, MessageKey, IconName])[];
 const ADMIN_PAGES = [
-  ['people', 'People', 'people'],
-  ['workspaces', 'Workspaces', 'workspaces'],
-  ['jobs', 'Failed jobs', 'jobs'],
-  ['audit', 'Audit log', 'audit'],
-] as const;
+  ['people', 'adminPeople', 'people'],
+  ['workspaces', 'adminWorkspaces', 'workspaces'],
+  ['jobs', 'adminJobs', 'jobs'],
+  ['audit', 'adminAudit', 'audit'],
+] as const satisfies readonly (readonly [string, MessageKey, IconName])[];
 
 type Section = (typeof SECTIONS)[number][0];
 type AdminPage = (typeof ADMIN_PAGES)[number][0];
@@ -124,7 +126,7 @@ export function WorkspaceApp() {
     preference.set(WORKSPACE_PREFERENCE, id);
     setSelectedId(id);
   };
-  const title = adminPage ? ADMIN_PAGES.find(([page]) => page === adminPage)![1] : current ? SECTIONS.find(([name]) => name === tab)![1] : 'OpenChat';
+  const title = adminPage ? t(ADMIN_PAGES.find(([page]) => page === adminPage)![1]) : current ? t(SECTIONS.find(([name]) => name === tab)![1]) : 'OpenChat';
   const wide = tab === 'inbox' && !adminPage;
 
   return (
@@ -133,16 +135,16 @@ export function WorkspaceApp() {
         <img className="size-9 shrink-0 md:mb-4 md:size-10" src="/brand/mark-96.png" width={40} height={40} alt="OpenChat" />
         <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto md:flex-col md:overflow-visible">
           {current && (
-            <nav className="flex shrink-0 gap-1 md:flex-col" aria-label="Sections">
+            <nav className="flex shrink-0 gap-1 md:flex-col" aria-label={t('navSections')}>
               {SECTIONS.map(([name, label, icon]) => (
-                <RailButton key={name} label={label} icon={icon} current={!adminPage && tab === name} onClick={() => { setTab(name); setAdminPage(null); }} />
+                <RailButton key={name} label={t(label)} icon={icon} current={!adminPage && tab === name} onClick={() => { setTab(name); setAdminPage(null); }} />
               ))}
             </nav>
           )}
           {isAdmin && (
-            <nav className="flex shrink-0 gap-1 md:mt-3 md:flex-col md:border-t md:border-white/10 md:pt-3" aria-label="Administration">
+            <nav className="flex shrink-0 gap-1 md:mt-3 md:flex-col md:border-t md:border-white/10 md:pt-3" aria-label={t('navAdministration')}>
               {ADMIN_PAGES.map(([page, label, icon]) => (
-                <RailButton key={page} label={label} icon={icon} current={adminPage === page} onClick={() => setAdminPage(adminPage === page ? null : page)} />
+                <RailButton key={page} label={t(label)} icon={icon} current={adminPage === page} onClick={() => setAdminPage(adminPage === page ? null : page)} />
               ))}
             </nav>
           )}
@@ -150,19 +152,20 @@ export function WorkspaceApp() {
         <span className="avatar hidden ring-2 ring-white/20 md:inline-flex" aria-hidden="true"><Initials name={me.data?.name} /></span>
         <button type="button" className="rail-item shrink-0" onClick={() => void signOut()}>
           <Icon name="signOut" />
-          <span className="sr-only">Sign out</span>
-          <span className="rail-tip" aria-hidden="true">Sign out</span>
+          <span className="sr-only">{t('signOut')}</span>
+          <span className="rail-tip" aria-hidden="true">{t('signOut')}</span>
         </button>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4 py-3 md:px-6 dark:border-slate-800 dark:bg-slate-900">
           <h1 className="flex-1 text-lg font-semibold tracking-tight">{title}</h1>
           {memberships.length > 0 && current && (
-            <select className="field w-auto max-w-56" aria-label="Workspace" value={current.workspace.id} onChange={(e) => select(e.target.value)}>
+            <select className="field w-auto max-w-56" aria-label={t('workspace')} value={current.workspace.id} onChange={(e) => select(e.target.value)}>
               {memberships.map((m) => <option key={m.workspace.id} value={m.workspace.id}>{m.workspace.name}</option>)}
             </select>
           )}
           <span className="hidden text-sm text-slate-600 sm:inline dark:text-slate-400">{me.data?.name}</span>
+          <LanguagePicker className="text-sm" />
         </header>
         <main className={`w-full flex-1 space-y-6 px-4 py-6 md:px-6 ${wide ? '' : 'mx-auto max-w-3xl'}`}>
           <Failure error={me.error} />
@@ -171,7 +174,7 @@ export function WorkspaceApp() {
           {isAdmin && adminPage === 'jobs' && <FailedJobsPage />}
           {isAdmin && adminPage === 'audit' && <AuditLogPage />}
           {me.data && !current && !adminPage && (
-            <p className="card text-sm">{isAdmin ? 'You are not in a workspace. To read its conversations, add yourself on the People page.' : 'You are not in a workspace yet. Ask your administrator to add you.'}</p>
+            <p className="card text-sm">{t(isAdmin ? 'notInWorkspaceAdmin' : 'notInWorkspace')}</p>
           )}
           {current && !adminPage && (
             // The key gives each workspace fresh component state, so nothing typed in one appears in another.

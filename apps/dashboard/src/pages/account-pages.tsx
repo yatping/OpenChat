@@ -1,6 +1,8 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { api, errorMessage, session } from '../app-context';
 import { SoftwareFooter } from '../software-footer';
+import { t } from '../i18n';
+import { LanguagePicker } from '../language-picker';
 
 const go = (path: string) => window.location.assign(path);
 
@@ -17,6 +19,9 @@ function Frame({ title, children }: { title: string; children: ReactNode }) {
           </div>
           <div className="card space-y-4 p-6 shadow-lg shadow-brand-900/5">{children}</div>
         </main>
+        <div className="mt-4 flex justify-center">
+          <LanguagePicker className="text-sm" />
+        </div>
         <SoftwareFooter />
       </div>
     </div>
@@ -65,7 +70,7 @@ export function SignInPage() {
   const [password, setPassword] = useState('');
   const { busy, error, run } = useSubmit();
   return (
-    <Frame title="Sign in to your team inbox">
+    <Frame title={t('signInTitle')}>
       <form
         className="space-y-4"
         onSubmit={run(async () => {
@@ -73,12 +78,12 @@ export function SignInPage() {
           session.signedIn(tokens.accessToken, tokens.accessTokenExpiresAt);
         })}
       >
-        <Field label="Email" type="email" value={email} onChange={setEmail} autoComplete="username" />
-        <Field label="Password" type="password" value={password} onChange={setPassword} autoComplete="current-password" maxLength={1024} />
+        <Field label={t('email')} type="email" value={email} onChange={setEmail} autoComplete="username" />
+        <Field label={t('password')} type="password" value={password} onChange={setPassword} autoComplete="current-password" maxLength={1024} />
         {error && <p className="error" role="alert">{error}</p>}
-        <button className="button w-full" disabled={busy}>Sign in</button>
+        <button className="button w-full" disabled={busy}>{t('signIn')}</button>
       </form>
-      <a className="block text-sm link" href="/forgot-password">Forgot your password?</a>
+      <a className="block text-sm link" href="/forgot-password">{t('forgotPassword')}</a>
     </Frame>
   );
 }
@@ -88,9 +93,9 @@ export function ForgotPasswordPage() {
   const [sent, setSent] = useState(false);
   const { busy, error, run } = useSubmit();
   return (
-    <Frame title="Reset your password">
+    <Frame title={t('resetTitle')}>
       {sent ? (
-        <p className="notice" role="status">If that address has an account, a reset link is on its way. It expires in one hour.</p>
+        <p className="notice" role="status">{t('resetSent')}</p>
       ) : (
         <form
           className="space-y-4"
@@ -99,12 +104,12 @@ export function ForgotPasswordPage() {
             setSent(true);
           })}
         >
-          <Field label="Email" type="email" value={email} onChange={setEmail} autoComplete="username" />
+          <Field label={t('email')} type="email" value={email} onChange={setEmail} autoComplete="username" />
           {error && <p className="error" role="alert">{error}</p>}
-          <button className="button w-full" disabled={busy}>Send reset link</button>
+          <button className="button w-full" disabled={busy}>{t('sendResetLink')}</button>
         </form>
       )}
-      <a className="block text-sm link" href="/">Back to sign in</a>
+      <a className="block text-sm link" href="/">{t('backToSignIn')}</a>
     </Frame>
   );
 }
@@ -115,18 +120,18 @@ export function ResetPasswordPage({ token }: { token: string | null }) {
   const { busy, error, run } = useSubmit();
   if (!token) {
     return (
-      <Frame title="Reset your password">
-        <p className="error" role="alert">This link is incomplete. Request a new one.</p>
-        <a className="block text-sm link" href="/forgot-password">Request a new link</a>
+      <Frame title={t('resetTitle')}>
+        <p className="error" role="alert">{t('linkIncomplete')}</p>
+        <a className="block text-sm link" href="/forgot-password">{t('requestNewLink')}</a>
       </Frame>
     );
   }
   return (
-    <Frame title="Choose a new password">
+    <Frame title={t('chooseNewPassword')}>
       {done ? (
         <>
-          <p className="notice" role="status">Your password has changed, and all your devices have been signed out.</p>
-          <button className="button w-full" onClick={() => go('/')}>Sign in</button>
+          <p className="notice" role="status">{t('passwordChanged')}</p>
+          <button className="button w-full" onClick={() => go('/')}>{t('signIn')}</button>
         </>
       ) : (
         <form
@@ -136,9 +141,9 @@ export function ResetPasswordPage({ token }: { token: string | null }) {
             setDone(true);
           })}
         >
-          <Field label="New password" type="password" value={password} onChange={setPassword} autoComplete="new-password" minLength={10} maxLength={1024} />
+          <Field label={t('newPassword')} type="password" value={password} onChange={setPassword} autoComplete="new-password" minLength={10} maxLength={1024} />
           {error && <p className="error" role="alert">{error}</p>}
-          <button className="button w-full" disabled={busy}>Change password</button>
+          <button className="button w-full" disabled={busy}>{t('changePassword')}</button>
         </form>
       )}
     </Frame>

@@ -36,7 +36,7 @@ A tag matches by its language, so `pt-BR` is Portuguese and `de-AT` German. Chin
 
 The button's label is chosen by the loader, before the website's setting is known, from steps 1, 3, and 4. The chat bundle corrects it once the setting arrives.
 
-**Not translated:** the welcome message, which is shown as the site owner wrote it, and agents' replies. Follow-up emails and the dashboard are in English.
+**Not translated:** the welcome message, which is shown as the site owner wrote it, and agents' replies. Follow-up emails are in English. The dashboard has [its own language choice](dashboard.md#languages).
 
 **Right-to-left languages,** such as Arabic and Hebrew, are not supported yet. They need the panel's layout mirrored as well as its strings.
 

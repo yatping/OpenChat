@@ -2,6 +2,7 @@ import type { AuditEntry } from '@openchat/api-client';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api, errorMessage } from '../app-context';
+import { intlLocale, t, tn, tNode, type MessageKey } from '../i18n';
 
 function Failure({ error }: { error: unknown }) {
   return error ? <p className="error" role="alert">{errorMessage(error)}</p> : null;
@@ -10,65 +11,74 @@ function Failure({ error }: { error: unknown }) {
 /** A name where the log has one, otherwise the kind of thing and its ID. A contact never has a name here. */
 function targetLabel(entry: AuditEntry): string {
   const target = entry.target;
-  if (!target) return 'something';
+  if (!target) return t('something');
   if (target.name) return target.name;
-  const kind: Record<string, string> = { contact: 'contact', relay: 'relay', failed_job: 'failed job', user: 'person', member: 'member', workspace: 'workspace', website: 'website' };
-  return `${kind[target.type] ?? target.type} ${target.id}`;
+  const kind: Record<string, MessageKey> = { contact: 'kindContact', relay: 'kindRelay', failed_job: 'kindFailedJob', user: 'kindUser', member: 'kindMember', workspace: 'kindWorkspace', website: 'kindWebsite' };
+  const known = kind[target.type];
+  return `${known ? t(known) : target.type} ${target.id}`;
 }
 
-const days = (value: unknown) => {
-  if (typeof value !== 'number') return 'forever';
-  if (value % 365 === 0) return value === 365 ? '1 year' : `${value / 365} years`;
-  return `${value} days`;
+const period = (value: unknown) => {
+  if (typeof value !== 'number') return t('foreverLower');
+  if (value % 365 === 0) return tn('years', value / 365);
+  return t('days', { count: value });
 };
 
-/** What happened, in words. An action this page does not know yet shows its name. */
-export function describeAudit(entry: AuditEntry): string {
+const roleName = (role: string) => (role === 'supervisor' ? t('roleSupervisor') : role === 'agent' ? t('roleAgent') : role).toLowerCase();
+
+/** What happened, in words, as the key of its sentence and the words that go in it, apart from who did it. */
+export function describeAudit(entry: AuditEntry): [MessageKey, Record<string, string>] {
   const target = targetLabel(entry);
   const m = entry.metadata;
+  const job = typeof m.jobType === 'string' ? ` (${m.jobType})` : '';
   switch (entry.action) {
     case 'person.created':
-      return `added ${target}`;
+      return ['auditPersonCreated', { target }];
     case 'person.admin_changed':
-      return m.isInstallationAdmin === 1 || m.isInstallationAdmin === true ? `made ${target} an installation admin` : `removed the admin role from ${target}`;
+      return [m.isInstallationAdmin === 1 || m.isInstallationAdmin === true ? 'auditMadeAdmin' : 'auditRemovedAdmin', { target }];
     case 'person.deactivated':
-      return `deactivated ${target}`;
+      return ['auditDeactivated', { target }];
     case 'person.reactivated':
-      return `reactivated ${target}`;
+      return ['auditReactivated', { target }];
     case 'person.assigned':
-      return typeof m.role === 'string' ? `gave ${target} the ${m.role} role` : `added ${target} to the workspace`;
+      return typeof m.role === 'string' ? ['auditGaveRole', { target, role: roleName(m.role) }] : ['auditAssigned', { target }];
     case 'person.unassigned':
-      return `removed ${target} from the workspace`;
+      return ['auditUnassigned', { target }];
     case 'workspace.created':
-      return `created workspace ${target}`;
+      return ['auditWorkspaceCreated', { target }];
     case 'workspace.updated':
-      return `changed the settings of ${target}`;
+      return ['auditWorkspaceUpdated', { target }];
     case 'workspace.retention_changed':
-      return `changed how long ${target} keeps closed conversations, from ${days(m.from)} to ${days(m.to)}`;
+      return ['auditRetention', { target, from: period(m.from), to: period(m.to) }];
     case 'website.created':
-      return `registered website ${target}`;
+      return ['auditWebsiteCreated', { target }];
     case 'website.updated':
-      return `changed website ${target}`;
+      return ['auditWebsiteUpdated', { target }];
     case 'relay.disconnected':
-      return 'disconnected push, and had the relay erase this installation';
+      return ['auditRelayDisconnected', {}];
     case 'relay.reconnected':
-      return 'reconnected push';
+      return ['auditRelayReconnected', {}];
     case 'failed_job.replayed':
-      return `replayed a failed job${typeof m.jobType === 'string' ? ` (${m.jobType})` : ''}`;
+      return ['auditJobReplayed', { job }];
     case 'failed_job.dismissed':
-      return `dismissed a failed job${typeof m.jobType === 'string' ? ` (${m.jobType})` : ''}`;
+      return ['auditJobDismissed', { job }];
     case 'contact.erased':
-      return `erased ${target}`;
+      return ['auditContactErased', { target }];
     case 'conversations.expired':
-      return `deleted ${String(m.conversations ?? 'some')} closed conversations past the retention of ${days(m.retentionDays)}`;
+      return ['auditConversationsExpired', { count: String(m.conversations ?? t('some')), period: period(m.retentionDays) }];
     case 'contacts.expired':
-      return `deleted ${String(m.contacts ?? 'some')} contacts with no conversations left`;
+      return ['auditContactsExpired', { count: String(m.contacts ?? t('some')) }];
     default:
-      return `${entry.action} on ${target}`;
+      return ['auditOther', { action: entry.action, target }];
   }
 }
 
-const actorName = (entry: AuditEntry) => (entry.actor.type === 'system' ? 'The system' : (entry.actor.name ?? 'A deleted account'));
+const actorName = (entry: AuditEntry) => (entry.actor.type === 'system' ? t('theSystem') : (entry.actor.name ?? t('deletedAccount')));
+
+function AuditSentence({ entry }: { entry: AuditEntry }) {
+  const [key, values] = describeAudit(entry);
+  return <>{tNode(key, { ...values, actor: <span className="font-medium">{actorName(entry)}</span> })}</>;
+}
 
 /**
  * What admins, members, and the system changed. Entries hold IDs and names of what changed, never message content,
@@ -85,32 +95,32 @@ export function AuditLogPage() {
   });
   const entries = log.data?.pages.flatMap((page) => page.data) ?? [];
   return (
-    <section className="space-y-4" aria-label="Audit log">
+    <section className="space-y-4" aria-label={t('adminAudit')}>
       <label className="block text-sm font-medium">
-        Show
+        {t('show')}
         <select className="field mt-1 font-normal" value={workspaceId} onChange={(e) => setWorkspaceId(e.target.value)}>
-          <option value="">Everything</option>
-          {workspaces.data?.data.map((w) => <option key={w.id} value={w.id}>Workspace {w.name}</option>)}
+          <option value="">{t('everything')}</option>
+          {workspaces.data?.data.map((w) => <option key={w.id} value={w.id}>{t('workspaceNamed', { name: w.name })}</option>)}
         </select>
       </label>
       <Failure error={log.error ?? workspaces.error} />
-      {log.data && entries.length === 0 && <p className="card text-sm">Nothing recorded yet.</p>}
+      {log.data && entries.length === 0 && <p className="card text-sm">{t('nothingRecorded')}</p>}
       <ol className="space-y-2">
         {entries.map((entry) => (
           <li key={entry.id} className="card space-y-1">
             <p className="text-sm">
-              <span className="font-medium">{actorName(entry)}</span> {describeAudit(entry)}
+              <AuditSentence entry={entry} />
             </p>
             <p className="text-xs text-slate-600 dark:text-slate-400">
-              <time dateTime={entry.createdAt}>{new Date(entry.createdAt).toLocaleString()}</time>
-              {entry.workspace && <> · Workspace {entry.workspace.name}</>} · <code>{entry.action}</code>
+              <time dateTime={entry.createdAt}>{new Date(entry.createdAt).toLocaleString(intlLocale())}</time>
+              {entry.workspace && <> · {t('workspaceNamed', { name: entry.workspace.name })}</>} · <code>{entry.action}</code>
             </p>
           </li>
         ))}
       </ol>
       {log.hasNextPage && (
         <button className="button-quiet" disabled={log.isFetchingNextPage} onClick={() => void log.fetchNextPage()}>
-          Show older
+          {t('showOlder')}
         </button>
       )}
     </section>

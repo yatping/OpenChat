@@ -26,7 +26,7 @@ To report a new problem, [open an issue](https://github.com/yatping/OpenChat/iss
 - **One conversation per visitor.** The widget shows one, though the API allows more.
 - **"We are online" counts open dashboards and app screens only.** An agent who answers from a notification shows as away until the app is open, and an open widget does not see the change until it loads again ([realtime](architecture/realtime.md)).
 - **"Before the first message" email is enforced only by the widget**, not by the API.
-- **Translations have not been reviewed by native speakers** ([languages](architecture/widget.md#languages)). Right-to-left languages, such as Arabic and Hebrew, are not supported.
+- **Translations have not been reviewed by native speakers** in the widget, the dashboard or the app ([widget](architecture/widget.md#languages), [dashboard](architecture/dashboard.md#languages)). Right-to-left languages, such as Arabic and Hebrew, are not supported.
 - **No screen-reader user has reviewed it.** It passes automated checks and was checked by hand ([accessibility](architecture/accessibility.md)).
 - **Its focus ring uses the website's colour**, so a very light colour can make it hard to see on a light page.
 - **Tested in Chromium only** on real Cloudflare.
@@ -35,7 +35,7 @@ To report a new problem, [open an issue](https://github.com/yatping/OpenChat/iss
 
 - **No contact list, and no merging of contacts.** A visitor who writes from two browsers is two contacts.
 - **No search.** Planned with M7.
-- **The dashboard is in English.**
+- **Server messages stay in English** in the dashboard, such as errors, though its own words are in eleven languages ([languages](architecture/dashboard.md#languages)).
 - **A visitor's read position is not shown**, though it is recorded.
 - **No canned responses.**
 
