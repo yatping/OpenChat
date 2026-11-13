@@ -56,14 +56,12 @@ Files named `*.draft.*` are design artifacts. Phase 0 moves them into `packages/
 | Document | Purpose |
 |---|---|
 | [development/local-dev.md](development/local-dev.md) | Local development workflow, including what cannot run locally |
-| [operations/self-hosting.md](operations/self-hosting.md) | **Step by step:** your own backend, with the official app or your own |
-| [operations/deployment.md](operations/deployment.md) | Production deployment and upgrades, managed and independent |
+| [operations/self-hosting.md](operations/self-hosting.md) | **Step by step:** your own backend, with the official app |
+| [operations/deployment.md](operations/deployment.md) | Production deployment and upgrades, and push through the managed relay |
 | [operations/monitoring.md](operations/monitoring.md) | Health checks, what to alert on, and what to do when one fails |
 | [operations/backup-and-restore.md](operations/backup-and-restore.md) | Backups, Time Travel, restoring, and what a restore does not put back |
 | [operations/licensing.md](operations/licensing.md) | Licences, the DCO, what CI checks, the notices, and the source offer for an installation you changed |
 | [operations/abuse-limits.md](operations/abuse-limits.md) | Every abuse limit, what people see, and how to change the four that are settings |
-| [ios-build/expo-and-white-label.md](ios-build/expo-and-white-label.md) | Expo configuration, build profiles, and white-label builds |
-| [ios-build/app-store-submission.md](ios-build/app-store-submission.md) | Submitting the official app: listing, review notes, privacy answers, the demo installation, and what the owner decides |
 
 ## How facts in these documents were checked
 

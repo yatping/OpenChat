@@ -3,7 +3,7 @@
 ## System in one picture
 
 ```text
- Visitor browser              Agent browser              iOS app (official or white-label)
+ Visitor browser              Agent browser              OpenChat iOS app (not open source)
  widget.js (Shadow DOM)       React dashboard            Expo, one Connection per installation
       |  HTTPS + WSS               |  HTTPS + WSS              |  HTTPS + WSS         | APNs token
       v                            v                           v                      |
@@ -25,7 +25,7 @@
                                   |                Email provider                    |
                                   v                                                  v
                        +------------------------------------------------------------------+
-                       | Notification relay: managed by the project, or customer-deployed |
+                       | Notification relay, run by the project (not open source)         |
                        | Worker + D1 + RelayGuard DO + Queue. Only per-phone ciphertext.  |
                        +------------------------------------------------------------------+
                                   |
@@ -35,12 +35,12 @@
 
 ## Deployables
 
-There are exactly two Workers. See [ADR-0001](decisions/0001-worker-topology.md).
+There are exactly two Workers. See [ADR-0001](decisions/0001-worker-topology.md). Only the Installation Worker is in this repository: the relay and the iOS app are not open source ([ADR-0019](decisions/0019-app-and-relay-leave-open-source.md)).
 
 | Deployable | Contains | Owner |
 |---|---|---|
 | **Installation Worker** (`services/api`) | HTTP API, `WorkspaceHub` and `ConversationRoom` Durable Objects, queue consumers, cron, dashboard and widget assets | Customer |
-| **Notification relay** (`services/notification-relay`) | Relay API, `RelayGuard` and `ApnsCredential` Durable Objects, delivery consumer | Project (managed) or customer (independent) |
+| **Notification relay** (private repository) | Relay API, `RelayGuard` and `ApnsCredential` Durable Objects, delivery consumer | Project, as the managed relay |
 
 The two share only `packages/notification-protocol`. Neither imports the other, and the relay has no credential that can read an installation.
 

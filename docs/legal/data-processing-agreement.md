@@ -69,7 +69,7 @@ The processor will notify the controller without undue delay, and in any case wi
 
 ## 9. Deletion at the end
 
-The controller ends processing with **Disconnect and erase** in its dashboard. The relay then deletes, at once, the installation, its key, workspaces, subscriptions and notification records, and every device left with no subscription. The processor can do the same on request, with `oc relay erase`. Deleted data remains in the hosting provider's point-in-time recovery history for up to 30 days, and is then gone. The processor keeps no other copy. **[CHECK]**
+The controller ends processing with **Disconnect and erase** in its dashboard. The relay then deletes, at once, the installation, its key, workspaces, subscriptions and notification records, and every device left with no subscription. The processor can do the same on request, with its relay operator tooling. Deleted data remains in the hosting provider's point-in-time recovery history for up to 30 days, and is then gone. The processor keeps no other copy. **[CHECK]**
 
 ## 10. Audits
 

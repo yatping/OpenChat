@@ -39,7 +39,8 @@ export const boundaries = [
     rules: { 'no-restricted-imports': restrict(routePaths) },
   },
   {
-    // After the routes block, so that relay routes get the stricter list.
+    // After the routes block, so that relay routes get the stricter list. The relay is not in this repository: it is
+    // in the private one, which lints with this configuration, so that it stays apart from installation code.
     files: ['services/notification-relay/**/*.ts'],
     rules: { 'no-restricted-imports': restrict(relayPaths, relayPatterns) },
   },

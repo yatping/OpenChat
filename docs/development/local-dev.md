@@ -69,18 +69,9 @@ Local development cannot prove these: APNs delivery, D1 performance and concurre
 
 `.dev.vars` is used by Wrangler locally and ignored by Git. `.dev.vars.example` has placeholders only. No secrets are read yet; from M1a, `pnpm dev:setup` generates development keys. Never reuse production keys locally.
 
-## Mobile *(M2)*
+## The iOS app
 
-Push does not work in a simulator without care, and Expo Go is unsuitable, so use a **development build**:
-
-```bash
-pnpm --filter @openchat/mobile prebuild
-(cd apps/mobile/ios && pod install)
-# then build ios/OpenChat.xcworkspace in Xcode, and run:
-pnpm --filter @openchat/mobile start
-```
-
-iOS requires HTTPS for ordinary connections. To reach a local Worker, use a Cloudflare Tunnel (`cloudflared tunnel --url http://localhost:8787`) rather than weakening App Transport Security. This also matches production. Push testing uses a physical device, a development build (sandbox environment), and a deployed preview relay.
+The app and the notification relay are not in this repository ([ADR-0019](../architecture/decisions/0019-app-and-relay-leave-open-source.md)). The server's side of push runs and is tested here without them: its tests use a fake relay.
 
 ## Troubleshooting
 

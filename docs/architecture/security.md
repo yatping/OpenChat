@@ -101,7 +101,7 @@ Uploads stream through the Worker to R2 ([ADR-0008](decisions/0008-attachment-tr
 | Bucket | Private. No public access or custom domain on it |
 | Malware scanning | Future integration through a hook in `attachment.process` |
 
-The iOS app removes metadata, including location, from photos before upload, and sends documents unchanged. See [files in the iOS app](../ios-build/expo-and-white-label.md#files).
+The iOS app, which is not in this repository, removes metadata, including location, from photos before upload, and sends documents unchanged. The server does not rely on it: it treats every upload as untrusted.
 
 ## Secrets
 
@@ -135,7 +135,7 @@ CI runs secret scanning. `.dev.vars.example` contains placeholders only, and `.d
 Two parties receive reports, so there are two policies:
 
 - **The project**, for vulnerabilities in OpenChat's code and in the managed relay: [`SECURITY.md`](../../SECURITY.md). Reports go through GitHub's private vulnerability reporting, which is enabled on the repository.
-- **Each installation's operator**, for their deployment and their customers' data. An installation serves `/.well-known/security.txt` ([RFC 9116](https://www.rfc-editor.org/rfc/rfc9116)) once the operator sets a contact with `oc deploy --security-contact`. Without one it answers 404, because the file must name someone, and the project cannot answer for another operator's data. A relay does the same with `oc relay deploy --security-contact`.
+- **Each installation's operator**, for their deployment and their customers' data. An installation serves `/.well-known/security.txt` ([RFC 9116](https://www.rfc-editor.org/rfc/rfc9116)) once the operator sets a contact with `oc deploy --security-contact`. Without one it answers 404, because the file must name someone, and the project cannot answer for another operator's data. The managed relay serves one too.
 
 The file is built by `securityTxt` in `@openchat/shared`, for both Workers:
 

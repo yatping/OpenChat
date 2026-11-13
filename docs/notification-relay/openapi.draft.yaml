@@ -260,7 +260,7 @@ paths:
   /v1/operator/erase:
     post:
       summary: Erase an installation, for a request that reached the relay's operator directly
-      description: 'Takes `Authorization: Bearer` with RELAY_OPERATOR_TOKEN. The same erasure as /v1/installations/unregister. `oc relay erase` calls it.'
+      description: 'Takes `Authorization: Bearer` with RELAY_OPERATOR_TOKEN. The same erasure as /v1/installations/unregister. The operator CLI, `ocp relay erase` in the private repository, calls it.'
       security: []
       requestBody:
         required: true

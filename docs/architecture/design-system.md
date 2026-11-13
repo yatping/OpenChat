@@ -8,8 +8,7 @@ OpenChat has one look across the dashboard, the website widget, the iPhone app a
 |---|---|
 | [`docs/assets/brand/openchat-mark-512.png`](../assets/brand/openchat-mark-512.png) | The mark on a transparent background, for documents and the README |
 | `apps/dashboard/public/brand/` | The mark at 96, 128 and 256 pixels, the favicon, and the home-screen icon |
-| `apps/mobile/variants/official/assets/icon.png` | The App Store icon: the mark on a light blue gradient, 1024 pixels, no transparency |
-| `apps/mobile/variants/official/assets/splash.png` | The mark alone. The splash background is `#eef3ff`, set as `branding.primaryColor` in `variant.json` |
+| The iPhone app's icon and splash | In the private repository with the app. The icon is the mark on a light blue gradient, and the splash background is `#eef3ff` |
 
 The source is a 1254-pixel render. Its edges were cleaned up into a solid mask before any size was made from it. To make new sizes, scale `openchat-mark-512.png` down, never up.
 
@@ -36,7 +35,7 @@ Every pair of text and background in this table meets WCAG AA, 4.5:1, in the the
 
 Internal notes stay amber in every surface, so that nobody mistakes one for a reply.
 
-The dashboard replaces Tailwind's `slate` scale with greys tinted toward the navy, and adds a `brand` scale, in [`apps/dashboard/src/styles.css`](../../apps/dashboard/src/styles.css). The widget's values are in [`apps/widget/src/styles.ts`](../../apps/widget/src/styles.ts) and its loader, and the app's in [`apps/mobile/src/ui/kit.tsx`](../../apps/mobile/src/ui/kit.tsx). They are copies, not one shared package, because the dashboard is under the AGPL and the widget and app are under Apache-2.0. Change all of them together, and this table.
+The dashboard replaces Tailwind's `slate` scale with greys tinted toward the navy, and adds a `brand` scale, in [`apps/dashboard/src/styles.css`](../../apps/dashboard/src/styles.css). The widget's values are in [`apps/widget/src/styles.ts`](../../apps/widget/src/styles.ts) and its loader, and the app's in its `src/ui/kit.tsx`, in the private repository. They are copies, not one shared package, because the dashboard is under the AGPL, the widget under Apache-2.0, and the app is not open source. Change all of them together, and this table.
 
 ### The widget's colour
 

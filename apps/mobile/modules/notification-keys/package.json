@@ -1,7 +1,0 @@
-{
-  "name": "notification-keys",
-  "version": "1.0.0",
-  "private": true,
-  "license": "Apache-2.0",
-  "main": "src/index.ts"
-}

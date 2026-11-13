@@ -1,8 +1,10 @@
 # Project context for developers and AI agents
 
 OpenChat is an open-source,
-Cloudflare-native customer messaging platform: a website widget, a team inbox, an iOS app,
-a replaceable notification relay, and email follow-ups.
+Cloudflare-native customer messaging platform: a website widget, a team inbox, and email follow-ups.
+The server also sends push notifications to the iPhone app through a notification relay. The app and the relay
+are not in this repository ([ADR-0019](docs/architecture/decisions/0019-app-and-relay-leave-open-source.md)), but the
+server's side of push, and the protocol it speaks to the relay, are.
 
 **Current state:** Milestone 1a is built and verified on real Cloudflare, with [items only the owner can close](docs/plan/milestones.md#m1a-status). Milestone 1b's exit criteria are met, with [limits and owner decisions listed](docs/plan/milestones.md#m1b-exit-check). Milestone 2's exit criteria, for the iOS app, are met, with [limits listed](docs/plan/milestones.md#m2-exit-check). Milestone 3's exit criteria, for relay and push, are met except for a second Apple identity, with [limits listed](docs/plan/milestones.md#m3-exit-check). Milestone 4's exit criteria, for follow-up email, are met, with [limits listed](docs/plan/milestones.md#m4-exit-check). Milestone 5, for self-hosting, was [accepted by the owner without the exit check being run](docs/plan/milestones.md#m5-exit-check). Milestone 6's first acceptance journey was [demonstrated on real Cloudflare and a real iPhone](docs/plan/milestones.md#m6-exit-check); the second, independence, was not.
 
@@ -19,8 +21,7 @@ a replaceable notification relay, and email follow-ups.
 | HTTP or WebSocket API | [API conventions](docs/api/conventions.md) |
 | Website widget, its languages | [widget](docs/architecture/widget.md) |
 | Colours, the icon, layout | [design system](docs/architecture/design-system.md) |
-| Push | [relay protocol](docs/notification-relay/protocol.md) |
-| Expo, white labelling | [iOS build](docs/ios-build/expo-and-white-label.md) |
+| Push, the relay protocol | [relay protocol](docs/notification-relay/protocol.md) |
 
 ## Precedence when documents disagree
 

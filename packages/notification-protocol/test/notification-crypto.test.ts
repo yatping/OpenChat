@@ -105,7 +105,7 @@ describe('sealed notifications', () => {
 });
 
 describe('the shared vector', () => {
-  // The iOS extension opens the same file, in apps/mobile/scripts/check-notification-crypto.sh.
+  // The iOS extension opens the same file, in the private repository's apps/mobile/scripts/check-notification-crypto.sh.
   it('opens to its content', async () => {
     const phone = { privateKey: fromBase64Url(vector.privateKeyRaw), publicKey: fromBase64Url(vector.publicKey) };
     expect(await openNotification(phone, vector.sealed, vector.binding)).toEqual(vector.content);

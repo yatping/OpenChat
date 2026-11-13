@@ -10,7 +10,7 @@ Last reviewed: `[EFFECTIVE DATE]`
 
 | | Managed notification relay |
 |---|---|
-| Controllers | Each organisation operating an OpenChat installation admitted to the relay. The list is the relay's `installations` table, and `pnpm oc relay stats` gives the count |
+| Controllers | Each organisation operating an OpenChat installation admitted to the relay. The list is the relay's `installations` table, and `pnpm ocp relay stats` gives the count |
 | Categories of processing | Storing device registrations and subscriptions; delivering notifications through Apple's push service; recording delivery outcomes; erasing on request |
 | Data | See [data processing agreement](data-processing-agreement.md#2-data-subjects-and-data) |
 | Transfers | Cloudflare (global network, including the United States), Apple (United States). Mechanism: `[TRANSFER MECHANISM]` |
@@ -33,7 +33,7 @@ Last reviewed: `[EFFECTIVE DATE]`
 
 | Request | Action |
 |---|---|
-| An installation leaves | Its admin uses **Disconnect and erase**, or we run `pnpm oc relay erase --env <env> --installation <id>`. Both erase at once |
+| An installation leaves | Its admin uses **Disconnect and erase**, or we run `pnpm ocp relay erase --env <env> --installation <id>`. Both erase at once |
 | One person, through their organisation | The organisation removes them in OpenChat, and the installation deletes their subscriptions at the relay |
 | One person, directly to us | We ask for their organisation's installation and identify the pseudonymous ID with that organisation, then erase their subscriptions. **[CHECK]** |
 | Backups | Cloudflare D1 point-in-time history keeps erased rows for up to 30 days, then drops them. We do not restore erased data |

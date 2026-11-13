@@ -12,13 +12,13 @@ To report a new problem, [open an issue](https://github.com/yatping/OpenChat/iss
 
 ## The iPhone app and push
 
+- **The app and the relay are not open source** ([ADR-0019](architecture/decisions/0019-app-and-relay-leave-open-source.md)). A self-hoster uses the official app with the project's relay, and can no longer build a branded app or run their own relay from this repository.
 - **The official app is not on the App Store.** Until it is, teams use the dashboard, and get no push notifications. Builds go to TestFlight for testing.
 - **The project's relay is open to any installation that proves control of its domain**, within [limits](notification-relay/protocol.md#rate-limits). Its terms and privacy policy are drafts awaiting legal review ([drafts](legal/README.md)).
 - **Tested on one iPhone.** Several devices, a token change, and signing out while offline were not tried on real phones ([M2](plan/milestones.md#m2-exit-check), [M3](plan/milestones.md#m3-exit-check)).
 - **Push text is in English.** There are no notifications for a transfer as such (it arrives as an assignment), or for other changes to a conversation.
 - **A phone stays subscribed while any of its sessions lasts**, so ending one session does not stop that phone's notifications.
 - **Not built:** rotating an installation's relay signing key, and alerts on failed deliveries.
-- **A branded app under a second Apple account** has not been built end to end.
 - **The app holds one installation at a time** ([ADR-0014](architecture/decisions/0014-one-installation-in-the-app.md)). To use a second installation, you sign out of the first, and notifications from the first stop. The original brief asked for both at once ([M6 exit check](plan/milestones.md#m6-exit-check)).
 
 ## The widget

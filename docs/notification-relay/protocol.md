@@ -124,7 +124,7 @@ It answers 204. Afterwards the installation is a stranger: repeating the request
 
 An installation admin starts this from the dashboard (**Workspaces**, **Push notifications**, **Disconnect and erase**). The installation turns push off first and remembers that it disconnected from that relay (`installation.relay_disconnected_id`), so that a phone asking for a grant cannot register it again. It then deletes its own `push_subscriptions` rows. If the relay cannot be reached, push stays off and the admin repeats the action. **Reconnect** turns push on again, and phones register the next time the app starts.
 
-For a request that reaches the relay's operator some other way, such as by email, `POST /v1/operator/erase` does the same erasure, with the operator token, and answers what it deleted. `pnpm oc relay erase --env <name> --installation <id>` calls it, after taking the installation off the admitted list so that it cannot register again in between.
+For a request that reaches the relay's operator some other way, such as by email, `POST /v1/operator/erase` does the same erasure, with the operator token, and answers what it deleted. The relay's operator tooling calls it, after taking the installation off the admitted list so that it cannot register again in between.
 
 An installation erased by the operator does not know it. It keeps signing grants, which the relay refuses before storing anything, until its next request to the relay is answered 401 and it forgets the registration.
 
@@ -230,7 +230,7 @@ The relay writes no text. Each phone receives only its own ciphertext, which its
 | `apns-collapse-id` | Hash of installation, conversation, and event, at most 64 bytes, so a burst collapses to one |
 | `apns-id` | Derived from `notificationId` |
 
-`loc-key` is `OC_` and the event in capitals. If the extension cannot decrypt in time, iOS shows the app's own phrase for it, in the phone's language, with no workspace name. The phrases are in the app's [config plugin](../../apps/mobile/plugins/notification-service/index.ts). The payload is about 1 KB, whatever the number of phones. There is no badge number, because no single server knows the total across installations. The app computes it locally.
+`loc-key` is `OC_` and the event in capitals. If the extension cannot decrypt in time, iOS shows the app's own phrase for it, in the phone's language, with no workspace name. The phrases are in the app, which is in the project's private repository. The payload is about 1 KB, whatever the number of phones. There is no badge number, because no single server knows the total across installations. The app computes it locally.
 
 ### Delivery pipeline
 
@@ -281,7 +281,7 @@ A self-check reveals a platform behaviour change. Once a day, or on `POST /v1/op
 
 ## Encrypted notification format
 
-[ADR-0017](../architecture/decisions/0017-encrypted-notifications.md): the installation encrypts each notification for each phone. This section defines the format, implemented in [`notification-crypto.ts`](../../packages/notification-protocol/src/notification-crypto.ts) and, for the phone, in the extension's [`NotificationCrypto.swift`](../../apps/mobile/plugins/notification-service/ios/NotificationCrypto.swift).
+[ADR-0017](../architecture/decisions/0017-encrypted-notifications.md): the installation encrypts each notification for each phone. This section defines the format, implemented in [`notification-crypto.ts`](../../packages/notification-protocol/src/notification-crypto.ts) and, for the phone, in the app's notification extension, in the project's private repository. A change to the format changes both.
 
 - **Key.** Each subscription has an X25519 key pair made on the phone. The public key, 32 bytes as base64url (`previewKey`), goes to the installation only.
 - **Cipher.** HPKE (RFC 9180), base mode, single shot: DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, AES-128-GCM. `info` is `OpenChat notification v1`.
@@ -329,7 +329,7 @@ APNs tokens are encrypted at rest with AES-256-GCM under a key derived from the 
 
 ## Rate limits
 
-Every limit is a Worker variable, so an operator sets them without a code change. A missing or invalid value takes the default, and `0` turns that limit off. The defaults are the owner's choice for the managed relay, on 2026-11-11, in `services/notification-relay/src/limits.ts`.
+Every limit is a Worker variable, so an operator sets them without a code change. A missing or invalid value takes the default, and `0` turns that limit off. The defaults are the owner's choice for the managed relay, on 2026-11-11, in the relay's code.
 
 | Limit | Variable | Default | Enforced |
 |---|---|---|---|
@@ -351,7 +351,7 @@ Every limit is a Worker variable, so an operator sets them without a code change
 
 | | Managed | Independent |
 |---|---|---|
-| Code | `services/notification-relay` | Same |
+| Code | The relay, in the project's private repository ([ADR-0019](../architecture/decisions/0019-app-and-relay-leave-open-source.md)) | Same |
 | `RELAY_MODE` | `open` | `private` |
 | Registration | Proof of domain control; quotas | Allowlist of installation IDs |
 | APNs key | Project's, in the operator's secrets. **Never distributed.** | Customer's |
