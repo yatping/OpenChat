@@ -178,6 +178,8 @@ Every notification is encrypted for one phone, and an extension on that phone de
 
 ## App Store
 
+For the official app, the listing, review notes, privacy answers and demo installation are in [App Store submission](app-store-submission.md).
+
 | Item | Approach |
 |---|---|
 | Guideline 2.1 | Demo installation and credentials in the review notes ([Q8](../architecture/open-questions.md)) |
