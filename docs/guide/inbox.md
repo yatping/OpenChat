@@ -51,7 +51,7 @@ An installation admin who is a member of the workspace also sees **Export data**
 
 ## On iPhone
 
-The official iPhone app, named **OpenLiveChat**, does the same work: the inbox, replies and notes, files and photos, status and assignment, the contact card and tags.
+The official OpenChat iPhone app does the same work: the inbox, replies and notes, files and photos, status and assignment, the contact card and tags.
 
 **The official app is not on the App Store yet.** Until it is, your team uses the dashboard. A company that builds its own branded app distributes it itself.
 

@@ -70,7 +70,7 @@ To build for a registered device, with the JavaScript inside the app so that it 
 cd apps/mobile
 cp fastlane/.env.example fastlane/.env    # Fill it in. Git ignores it
 fastlane ios refresh_profile              # Registers the bundle ID if missing. Run again after adding a device
-fastlane ios device                       # Writes build/ios/OpenLiveChat-adhoc.ipa
+fastlane ios device                       # Writes build/ios/OpenChat-adhoc.ipa
 fastlane ios install                      # Needs the phone unlocked and connected by cable
 ```
 
