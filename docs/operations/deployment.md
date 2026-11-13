@@ -128,7 +128,7 @@ pnpm oc upgrade --env production
 | Migration fails | Stop. The old Worker keeps running. Behaviour of a partly applied file is still to be confirmed (S4) |
 | New Worker is unhealthy | Rolled back by `oc upgrade`. The schema stays, which is safe under expand/contract |
 | A problem found later | `pnpm oc rollback --env <name>` puts back the Worker from before the last upgrade. The schema stays |
-| Data corruption | Time Travel restore to the recorded bookmark. **Destructive, and it discards every later write.** Last resort, so the CLI only prints the command |
+| Data corruption | Time Travel restore to the recorded bookmark, which `oc upgrade` prints: `pnpm oc restore --env <name> --bookmark <bookmark> --confirm <name>`. **It discards every later write**, so it is a last resort. See [backup and restore](backup-and-restore.md) |
 
 A Worker version with a Durable Object migration that the old version lacks may not be possible to roll back to. No release has one yet.
 
@@ -205,8 +205,8 @@ The second acceptance journey in spec §20 is then tested in CI as far as is pra
 | Set retention | In the dashboard, **Workspaces**, choose the workspace, then **Keep closed conversations**. Deletion starts within the hour and cannot be undone, except from D1 Time Travel within 30 days |
 | Inspect failed jobs | In the dashboard, **Failed jobs**, for an installation admin. Fix the cause, then **Replay**, or **Dismiss** what is no longer needed. A job past the time it had to run by cannot be replayed. Both actions are in the audit log |
 | Disable push | In the dashboard, **Workspaces**, **Push notifications**, **Disconnect and erase**: push stops, and the relay erases what it holds about this installation. Then, to take the relay out of the deployment, `pnpm oc deploy --env <name> --no-relay`. Messaging is unaffected |
-| Backup | Time Travel covers 30 days. For longer, `oc backup` uses `wrangler d1 export` to R2 or local disk. An export may block other queries, so schedule it off-peak, and read the current documentation first |
-| Restore | See Upgrades. Practise this before relying on it |
+| Backup | Time Travel covers 30 days by itself. For longer, `pnpm oc backup --env <name>` exports the database to this computer and checks that the export loads. The database answers nothing else while it runs. See [backup and restore](backup-and-restore.md) |
+| Restore | `pnpm oc restore --env <name> --confirm <name>`, with `--timestamp` or `--bookmark` for Time Travel in place, or `--from <backup.sql>` into a new database, keeping the old one. See [backup and restore](backup-and-restore.md) |
 
 ## Health checks
 

@@ -10,6 +10,8 @@ export interface DeploymentState {
   /** Short deployment name, used as a prefix for every resource. */
   name: string;
   d1DatabaseId: string;
+  /** Set only after `oc restore` moved the deployment to a new database. Otherwise oc-<name>. */
+  d1DatabaseName?: string | undefined;
   /**
    * Analytics Engine must be enabled once per account in the Cloudflare dashboard, and a deploy that
    * binds it fails until then. So it is opt-in, and the Worker treats the binding as optional.
@@ -80,7 +82,7 @@ export function renderConfig(templateSource: string, state: DeploymentState, rel
   delete t.$schema;
   if (t.assets) t.assets.directory = rebase(t.assets.directory);
   for (const db of t.d1_databases ?? []) {
-    db.database_name = renameResource(db.database_name, state.name);
+    db.database_name = state.d1DatabaseName ?? renameResource(db.database_name, state.name);
     db.database_id = state.d1DatabaseId;
     if (db.migrations_dir) db.migrations_dir = rebase(db.migrations_dir);
   }

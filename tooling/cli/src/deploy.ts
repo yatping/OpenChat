@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { generateOpaqueToken, generateSerializedKey, hashOpaqueToken } from '@openchat/auth';
+import { createBackups, databaseName, type RestoreRecord } from './backup';
 import { assertEmail, assertPublicUrl, bootstrapSql, recoverySql, resetLink } from './bootstrap';
 import { formatChecks, hasFailure, isMissingWorkersDev, runPreflight, WORKERS_DEV_HELP } from './preflight';
 import { renderConfig, type DeploymentState, mergeLimitFlags } from './render-config';
@@ -28,6 +29,8 @@ export interface State extends Omit<DeploymentState, 'd1DatabaseId'> {
   version?: string;
   /** What `oc rollback` needs, recorded before the upgrade changed anything. */
   lastUpgrade?: { from: string; to: string; at: string; previousVersionId: string; bookmark: string; rolledBackAt?: string };
+  /** The last `oc restore`, and what undoes it. */
+  lastRestore?: RestoreRecord;
 }
 
 export interface DeployerDeps {
@@ -37,6 +40,8 @@ export interface DeployerDeps {
   /** Builds the dashboard and widget, and collects them as the Worker's assets. */
   build?: () => void;
   log?: (line: string) => void;
+  /** For names and records that carry the time, such as a backup's. */
+  now?: () => Date;
 }
 
 export interface DeployOptions {
@@ -128,7 +133,7 @@ export function createDeployer(root: string, deps: DeployerDeps = {}) {
 
   function migrate(state: State) {
     log('Applying migrations');
-    wrangler(['d1', 'migrations', 'apply', `oc-${state.name}`, '--remote', '-c', configPath(state.name)], { ci: true });
+    wrangler(['d1', 'migrations', 'apply', databaseName(state), '--remote', '-c', configPath(state.name)], { ci: true });
   }
 
   function deployWorker(state: State) {
@@ -206,7 +211,7 @@ export function createDeployer(root: string, deps: DeployerDeps = {}) {
       ownerTokenHash: await hashOpaqueToken(token),
     });
     log('Creating the first owner');
-    wrangler(['d1', 'execute', `oc-${state.name}`, '--remote', '--yes', '-c', configPath(state.name), '--command', sql], { ci: true });
+    wrangler(['d1', 'execute', databaseName(state), '--remote', '--yes', '-c', configPath(state.name), '--command', sql], { ci: true });
     state.initialized = true;
     save(state);
     return resetLink(state.publicBaseUrl!, token);
@@ -271,15 +276,19 @@ export function createDeployer(root: string, deps: DeployerDeps = {}) {
   };
 
   const restoreHelp = (state: State, bookmark: string) =>
-    `Only if data is damaged, restore the database to how it was before the upgrade. This discards every write since then, and cannot be undone:\n  pnpm --filter @openchat/api exec wrangler d1 time-travel restore oc-${state.name} --bookmark ${bookmark} -c ${configPath(state.name)}`;
+    `Only if data is damaged, restore the database to how it was before the upgrade. This sets aside every write since then, and prints how to undo it:\n  pnpm oc restore --env ${state.name} --bookmark ${bookmark} --confirm ${state.name}`;
 
   async function rollBackWorker(state: State, versionId: string, message: string) {
     wrangler(['rollback', versionId, '--name', `oc-${state.name}`, '--message', message, '--yes'], { ci: true });
     await verify(state);
   }
 
+  const backups = createBackups<State>({ wrangler, log, load, save, render, migrate, deployWorker, verify, configPath, dirOf, release, ...(deps.now ? { now: deps.now } : {}) });
+
   return {
     preflight,
+    backup: backups.backup,
+    restore: backups.restore,
 
     /**
      * Upgrades a deployment to this checkout. The old Worker runs against the new schema until the new
@@ -297,7 +306,7 @@ export function createDeployer(root: string, deps: DeployerDeps = {}) {
       build();
       render(state);
       const previousVersionId = currentVersionId(state);
-      const bookmark = (JSON.parse(wrangler(['d1', 'time-travel', 'info', `oc-${name}`, '--json', '-c', configPath(name)], { ci: true })) as { bookmark?: string }).bookmark;
+      const bookmark = (JSON.parse(wrangler(['d1', 'time-travel', 'info', databaseName(state), '--json', '-c', configPath(name)], { ci: true })) as { bookmark?: string }).bookmark;
       if (!bookmark) throw new Error('Could not record a Time Travel bookmark, so nothing was changed');
       state.lastUpgrade = { from, to: release, at: new Date().toISOString(), previousVersionId, bookmark };
       save(state);
@@ -386,7 +395,6 @@ export function createDeployer(root: string, deps: DeployerDeps = {}) {
       }
     },
 
-    /** Works with no email provider. Holding Cloudflare access is the proof of authority. */
     /** Reads the four operator health checks. True unless one of them fails. */
     async health(name: string): Promise<boolean> {
       const state = load(name);
@@ -418,13 +426,14 @@ export function createDeployer(root: string, deps: DeployerDeps = {}) {
       return healthy;
     },
 
+    /** Works with no email provider. Holding Cloudflare access is the proof of authority. */
     async recover(name: string, email: string) {
       assertEmail(email);
       const state = load(name);
       if (!state.initialized || !state.publicBaseUrl) throw new Error(`No initialised deployment named ${name} in .openchat`);
       render(state);
       const token = generateOpaqueToken();
-      const output = wrangler(['d1', 'execute', `oc-${name}`, '--remote', '--yes', '--json', '-c', configPath(name), '--command', recoverySql(email, await hashOpaqueToken(token))], { ci: true });
+      const output = wrangler(['d1', 'execute', databaseName(state), '--remote', '--yes', '--json', '-c', configPath(name), '--command', recoverySql(email, await hashOpaqueToken(token))], { ci: true });
       const changes = (JSON.parse(output) as { meta?: { changes?: number } }[])[0]?.meta?.changes ?? 0;
       if (changes !== 1) throw new Error(`No active account for ${email}`);
       log(`Set a new password within one hour. Using this link signs the account out everywhere:\n${resetLink(state.publicBaseUrl, token)}`);

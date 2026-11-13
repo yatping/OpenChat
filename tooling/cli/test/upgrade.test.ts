@@ -78,7 +78,7 @@ describe('oc upgrade', () => {
 
   it('stops before changing anything if a migration fails, and the old Worker keeps running', async () => {
     const { deployer, calls, state } = setup({ failMigration: true });
-    await expect(deployer.upgrade('acme')).rejects.toThrow(/A migration failed. The old Worker is still running[\s\S]*time-travel restore oc-acme --bookmark/);
+    await expect(deployer.upgrade('acme')).rejects.toThrow(/A migration failed. The old Worker is still running[\s\S]*oc restore --env acme --bookmark/);
     expect(steps(calls)).not.toContain('deploy');
     expect(state().version).toBeUndefined();
   });
