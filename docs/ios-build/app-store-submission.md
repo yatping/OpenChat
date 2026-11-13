@@ -22,7 +22,7 @@ What is ready for submitting the official OpenChat app (`com.orangolabs.openchat
 
 | Field | Draft |
 |---|---|
-| Name | OpenChat. Several other projects use this name, and no trademark search has been done ([Q1](../architecture/open-questions.md)). If App Store Connect refuses it as taken, choose a variant there |
+| Name | The App Store Connect record is named "OpenChat: Your Chat Your Cloud". The app's name on the home screen stays OpenChat. Several other projects use this name, and no trademark search has been done ([Q1](../architecture/open-questions.md)) |
 | Subtitle | Team inbox for website chat |
 | Category | Business. Secondary: Productivity |
 | Price | Free. No in-app purchases |

@@ -327,6 +327,29 @@ Configurable relay limits, so that the managed relay can open to everyone, [buil
 
 **Exit:** both acceptance journeys in spec §20 are demonstrated end to end on production infrastructure, with recordings or logs. Known issues published.
 
+<a id="m6-exit-check"></a>
+**Exit check, 2026-11-13.** Journey 1 was run end to end on real Cloudflare, with OpenChat 0.2.1 and TestFlight build 2 on the owner's iPhone. Journey 2 was **not demonstrated**, as the owner decided, for the reasons in the [M5 exit check](#m5-exit-check). Known issues are [published](../known-issues.md).
+
+Two installations were deployed with `oc deploy`, each with its own Worker, D1, queues and R2. Installation A, "Acme Support", used Cloudflare Email Service from `no-reply@holfun.com`, the managed relay, and a 5 minute follow-up rule. Installation B, "Beta Helpdesk", was a separate deploy. The visitor and the agent used real Chromium. The evidence is in [m6-exit-check/](m6-exit-check/): [setup.log](m6-exit-check/setup.log), [journey.log](m6-exit-check/journey.log), and screenshots.
+
+| Journey 1 step | Result | Evidence |
+|---|---|---|
+| 1. A developer deploys | **Done.** `oc deploy` of A, from 09:33 UTC | `setup.log` |
+| 2. Workspace and website | **Done.** The deploy created each workspace. The website was registered through the admin API, with an allowed origin | `setup.log` |
+| 3. Embed the widget | **Done,** with the `widget.js` script tag added to a page on the website's allowed origin. That page was the installation's own, not a separate customer site | [screenshot](m6-exit-check/1-visitor-sends.png) |
+| 4. A visitor starts a conversation | **Done,** 10:01:21 | `journey.log` |
+| 5. The agent sees it in the dashboard | **Done.** It appeared live in the inbox as one unread conversation. The delay was not timed, because the list shows no message text to wait for | [screenshot](m6-exit-check/2-agent-replies.png) |
+| 6, 7. The agent replies, and the visitor sees it live | **Done.** The reply was in the widget about 0.4 s after it was sent, with no reload | [screenshot](m6-exit-check/3-visitor-sees-reply.png) |
+| 8. Push on iOS | **Done** on B. A notification for a visitor's message reached the iPhone through the managed relay, showing the message text, decrypted on the phone ([ADR-0017](../architecture/decisions/0017-encrypted-notifications.md)). The owner reported it; its delay was not timed | `journey.log` |
+| 9. Reply from the app | **Done** on B. The visitor's widget showed the reply live about 80 s after the visitor's message, which includes the owner's time to read and type | [screenshot](m6-exit-check/4-visitor-on-b-sees-iphone-reply.png) |
+| 10. Email follow-up | **Done.** The visitor left an email with consent and closed the widget. One follow-up was sent at 10:08:22, about 28 s after it was due, and reached the owner's Gmail inbox | `journey.log` |
+| 11. A second, independent installation | **Done.** B is a separate deploy, with nothing shared with A but the managed relay | `setup.log` |
+| 12. The official app connects to both | **Done one at a time.** The owner signed in to A, then signed out and signed in to B. The app holds one installation at a time, by the owner's decision in [ADR-0014](../architecture/decisions/0014-one-installation-in-the-app.md), so the brief's wording is met only in that sense | `journey.log` |
+
+Also seen: while the owner replied from the phone, B's widget said "We are away", because no dashboard was open when the widget loaded. This follows the [realtime design](../architecture/realtime.md) and is listed in [known issues](../known-issues.md#the-widget). Not covered by this check: other browsers than Chromium, a phone on a slow network, and a second iPhone.
+
+**M6 status.** Journey 1 is demonstrated and journey 2 is not. Still open, for the owner: an external security review, App Store submission, legal review of the drafts, and someone other than the author following the self-hosting guide.
+
 ## M7+: Advanced features
 
 Spec Phase 6 list, plus search (FTS5), webhooks, inbound email, and signed visitor identity. A Notification Service Extension, once listed here, shipped early with [ADR-0017](../architecture/decisions/0017-encrypted-notifications.md). Prioritise from user feedback.

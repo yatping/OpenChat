@@ -19,10 +19,12 @@ To report a new problem, [open an issue](https://github.com/yatping/OpenChat/iss
 - **A phone stays subscribed while any of its sessions lasts**, so ending one session does not stop that phone's notifications.
 - **Not built:** rotating an installation's relay signing key, and alerts on failed deliveries.
 - **A branded app under a second Apple account** has not been built end to end.
+- **The app holds one installation at a time** ([ADR-0014](architecture/decisions/0014-one-installation-in-the-app.md)). To use a second installation, you sign out of the first, and notifications from the first stop. The original brief asked for both at once ([M6 exit check](plan/milestones.md#m6-exit-check)).
 
 ## The widget
 
 - **One conversation per visitor.** The widget shows one, though the API allows more.
+- **"We are online" counts open dashboards and app screens only.** An agent who answers from a notification shows as away until the app is open, and an open widget does not see the change until it loads again ([realtime](architecture/realtime.md)).
 - **"Before the first message" email is enforced only by the widget**, not by the API.
 - **Translations have not been reviewed by native speakers** ([languages](architecture/widget.md#languages)). Right-to-left languages, such as Arabic and Hebrew, are not supported.
 - **No screen-reader user has reviewed it.** It passes automated checks and was checked by hand ([accessibility](architecture/accessibility.md)).
