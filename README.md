@@ -1,6 +1,35 @@
-# OpenChat
+<p align="center">
+  <img src="docs/assets/brand/openchat-mark-512.png" width="128" height="128" alt="The OpenChat icon, a blue cube with two eyes">
+</p>
 
-Open-source customer chat that runs entirely in your own Cloudflare account: a chat button for your website, a team inbox on the web and on iPhone, and follow-up emails to visitors who go quiet. Each company runs its own installation, so its conversations stay in its own account.
+<h1 align="center">OpenChat</h1>
+
+<p align="center">
+  <strong>Your chat. Your cloud.</strong><br>
+  Open-source customer chat that runs entirely in your own Cloudflare account.
+</p>
+
+<p align="center">
+  <a href="https://openchat.run">Website</a> ·
+  <a href="docs/operations/self-hosting.md">Self-host</a> ·
+  <a href="docs/guide/README.md">User guide</a> ·
+  <a href="docs/known-issues.md">Known issues</a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/status-before%201.0-0a57f5" alt="Status: before 1.0">
+  <img src="https://img.shields.io/badge/server-AGPL--3.0-15296e" alt="Server licence: AGPL-3.0-or-later">
+  <img src="https://img.shields.io/badge/widget%20%26%20app-Apache--2.0-15296e" alt="Widget and app licence: Apache-2.0">
+  <img src="https://img.shields.io/badge/runs%20on-Cloudflare%20Workers-18a0fb" alt="Runs on Cloudflare Workers">
+</p>
+
+<p align="center">
+  <img src="docs/assets/screenshots/inbox.png" width="72%" alt="The team inbox: a navy side rail, the list of conversations, an open conversation, and the visitor's details">
+  &nbsp;
+  <img src="docs/assets/screenshots/widget.png" width="24%" alt="The website widget, open, with a visitor's question and the team's answer">
+</p>
+
+A chat button for your website, a team inbox on the web and on iPhone, and follow-up emails to visitors who go quiet. Each company runs its own installation, so its conversations stay in its own account.
 
 - **Website widget.** About 2 KB to load, in eleven languages, with optional consent mode and Cloudflare Turnstile.
 - **Team inbox.** Live replies, internal notes, files, statuses, priorities, assignment and tags, across several workspaces.
@@ -18,6 +47,7 @@ Open-source customer chat that runs entirely in your own Cloudflare account: a c
 | Use it: answer chats, administer it, add the widget | [User guide](docs/guide/README.md) |
 | Know what is not done yet | [Known issues](docs/known-issues.md) |
 | Understand how it works, or contribute | [Documentation index](docs/README.md), [CONTRIBUTING.md](CONTRIBUTING.md), [AGENTS.md](AGENTS.md) |
+| Use the icon, or match the colours | [Design system](docs/architecture/design-system.md) |
 | Report a vulnerability | [SECURITY.md](SECURITY.md), privately |
 
 ## Licence

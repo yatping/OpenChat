@@ -1,6 +1,6 @@
 # Administration
 
-For installation admins. The first admin is the person `oc deploy` set up. Admin pages are in the dashboard's top bar: **People**, **Workspaces**, **Failed jobs** and **Audit log**.
+For installation admins. The first admin is the person `oc deploy` set up. Admin pages are in the dashboard's side rail, below a line, after the workspace's own sections: **People**, **Workspaces**, **Failed jobs** and **Audit log**. Point at an icon to see its name. On a phone the rail is a bar along the top.
 
 Being an admin lets you change settings, not read conversations. To read a workspace's conversations, add yourself to it on the People page, which the audit log records.
 
@@ -34,7 +34,7 @@ Each website's card has the snippet to paste into the site. See [the website wid
 | Setting | Choices |
 |---|---|
 | Welcome message | Up to 500 characters, shown as written, in any language |
-| Colour | The chat button and the panel's accents |
+| Colour | The chat button, the panel's header, and the visitor's messages. Without one, OpenChat's blue, `#0a57f5` |
 | Ask for an email | **Never**, **Offer it, after the first message**, or **Before the first message** |
 | Widget language | **Automatic**, or one of eleven languages |
 | Show agents' names to visitors | Off by default, so visitors see "Support", in their language |

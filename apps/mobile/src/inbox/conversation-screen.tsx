@@ -57,7 +57,7 @@ function Bubble({ message, memberId }: { message: Message; memberId: string }) {
   const member = message.sender.type === 'member';
   const sender = `${message.sender.displayName || (member ? 'A teammate' : 'Visitor')}${message.sender.removed ? ' (Removed)' : ''}`;
   return (
-    <View style={[styles.bubble, { alignSelf: member ? 'flex-end' : 'flex-start', backgroundColor: note ? '#fef3c7' : mine ? theme.primary : theme.surface }]}>
+    <View style={[styles.bubble, member ? styles.right : styles.left, { backgroundColor: note ? '#fef3c7' : mine ? theme.primary : member ? theme.soft : theme.raised }]}>
       <Text style={{ fontSize: 13, fontWeight: '600', color: note ? '#78350f' : mine ? theme.onPrimary : theme.muted }}>
         {note ? `Note, ${sender}` : sender} · {shortTime(message.createdAt)}
       </Text>
@@ -146,7 +146,7 @@ function Composer({ conversationId }: { conversationId: string }) {
             live.realtime.current?.send('typing.set', { conversationId, isTyping: true, internal: note });
           }
         }}
-        style={[styles.input, { color: note ? '#451a03' : theme.text, borderColor: theme.border }]}
+        style={[styles.input, { color: note ? '#451a03' : theme.text, borderColor: note ? '#f5c451' : theme.border, backgroundColor: note ? '#ffffff' : theme.surface }]}
       />
       <Button title={note ? 'Save note' : 'Send reply'} busy={send.isPending} disabled={(!draft.trim() && files.length === 0) || uploading > 0} onPress={submit} />
     </View>
@@ -244,14 +244,14 @@ export function ConversationScreen() {
   }
 
   return (
-    <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={headerHeight} style={{ flex: 1, backgroundColor: theme.background }}>
+    <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={headerHeight} style={{ flex: 1, backgroundColor: theme.surface }}>
       <ConnectionNotice />
       {data && (
-        <View style={[styles.actions, { borderBottomColor: theme.border }]}>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Status: ${data.status}`} disabled={update.isPending} onPress={() => choose('Status', STATUSES, (index) => update.mutate({ status: STATUSES[index]! }))} style={[styles.action, { backgroundColor: theme.surface }]}>
+        <View style={[styles.actions, { borderBottomColor: theme.border, backgroundColor: theme.background }]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Status: ${data.status}`} disabled={update.isPending} onPress={() => choose('Status', STATUSES, (index) => update.mutate({ status: STATUSES[index]! }))} style={[styles.action, { backgroundColor: theme.soft }]}>
             <Text numberOfLines={1} style={{ color: theme.text }}>{data.status}</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Priority: ${data.priority}`} disabled={update.isPending} onPress={() => choose('Priority', PRIORITIES, (index) => update.mutate({ priority: PRIORITIES[index]! }))} style={[styles.action, { backgroundColor: theme.surface }]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Priority: ${data.priority}`} disabled={update.isPending} onPress={() => choose('Priority', PRIORITIES, (index) => update.mutate({ priority: PRIORITIES[index]! }))} style={[styles.action, { backgroundColor: theme.soft }]}>
             <Text numberOfLines={1} style={{ color: theme.text }}>{data.priority}</Text>
           </Pressable>
           <Pressable
@@ -259,7 +259,7 @@ export function ConversationScreen() {
             accessibilityLabel={`Assigned to: ${data.assignedMemberId ? memberName(data.assignedMemberId) : 'nobody'}`}
             disabled={update.isPending}
             onPress={() => choose('Assign to', ['Unassigned', ...assignable.map((member) => (member.id === memberId ? `${member.name} (you)` : member.name))], (index) => update.mutate({ assignedMemberId: index === 0 ? null : assignable[index - 1]!.id }))}
-            style={[styles.action, { flex: 1, backgroundColor: theme.surface }]}
+            style={[styles.action, { flex: 1, backgroundColor: theme.soft }]}
           >
             <Text numberOfLines={1} style={{ color: theme.text }}>{data.assignedMemberId ? memberName(data.assignedMemberId) : 'Unassigned'}</Text>
           </Pressable>
@@ -291,12 +291,14 @@ export function ConversationScreen() {
 
 const styles = StyleSheet.create({
   system: { textAlign: 'center', fontSize: 13 },
-  bubble: { maxWidth: '85%', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8, gap: 2 },
+  bubble: { maxWidth: '85%', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 9, gap: 2 },
+  left: { alignSelf: 'flex-start', borderBottomLeftRadius: 6 },
+  right: { alignSelf: 'flex-end', borderBottomRightRadius: 6 },
   composer: { padding: 10, gap: 8, borderTopWidth: StyleSheet.hairlineWidth },
   modes: { flexDirection: 'row', gap: 8 },
   picked: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 32 },
   preview: { width: 220, height: 160, borderRadius: 8 },
-  input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 10, minHeight: 44, maxHeight: 140, fontSize: 16 },
+  input: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 10, minHeight: 44, maxHeight: 140, fontSize: 16 },
   actions: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth },
   action: { minHeight: 36, borderRadius: 18, paddingHorizontal: 14, justifyContent: 'center' },
 });

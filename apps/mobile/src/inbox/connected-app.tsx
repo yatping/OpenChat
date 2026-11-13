@@ -12,7 +12,7 @@ import type { ConnectionView } from '../connections/manager';
 import { connections } from '../connections/native';
 import { destination } from '../push/destination';
 import { pushRegistrar } from '../push/native';
-import { Body, Button, Problem, Screen, Title } from '../ui/kit';
+import { Body, Button, navigationTheme, Problem, Screen, Title, useTheme } from '../ui/kit';
 import { createInboxCache, type InboxCache } from './cache';
 import { ConversationScreen } from './conversation-screen';
 import { InboxScreen } from './inbox-screen';
@@ -52,6 +52,7 @@ export function useWorkspace(): WorkspaceScope {
 
 function Workspace({ connection, workspaceId, me, api, client }: { connection: ConnectionView; workspaceId: string; me: Me; api: ApiClient; client: QueryClient }) {
   const scheme = useColorScheme();
+  const theme = useTheme();
   const cache = useMemo(() => createInboxCache(client, api, workspaceId), [api, client, workspaceId]);
   const openConversation = useRef<string | null>(null);
   const live = useLive(api, workspaceId, cache, openConversation);
@@ -83,7 +84,7 @@ function Workspace({ connection, workspaceId, me, api, client }: { connection: C
   return (
     <Scope.Provider value={scope}>
       <NavigationIndependentTree>
-        <NavigationContainer ref={navigation} onReady={() => setNavigationReady(true)} theme={scheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <NavigationContainer ref={navigation} onReady={() => setNavigationReady(true)} theme={navigationTheme(scheme === 'dark' ? DarkTheme : DefaultTheme, theme)}>
           <Stack.Navigator>
             <Stack.Screen name="Inbox" component={InboxScreen} options={{ title: membership.workspace.name }} />
             <Stack.Screen name="Conversation" component={ConversationScreen} options={{ title: '' }} />

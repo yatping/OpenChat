@@ -2,6 +2,8 @@
 
 For agents and supervisors. The inbox is the same on the web dashboard and in the iPhone app, though the app has fewer settings.
 
+In the dashboard, the navy rail on the left holds the workspace's sections, **Inbox**, **Websites**, **Members** and **Email**, and **Sign out** at the bottom. Point at an icon to see its name. The inbox has three columns: the list of conversations, the open conversation, and the visitor's contact details and tags.
+
 ## Signing in
 
 Open your installation's address, such as `https://chat.company.com`, and sign in with your email address and password. Your first password comes from the link your administrator's account email sent you. It lasts seven days. If it has run out, ask for a new one.
@@ -25,7 +27,7 @@ A message from the visitor puts a conversation back to **open**, whatever its st
 
 New messages appear as they arrive. If live updates are blocked, for example by a company network, the dashboard says so and checks every 30 seconds instead. Sending still works.
 
-If you belong to more than one workspace, choose it at the top of the page. Each workspace's conversations stay in that workspace.
+If you belong to more than one workspace, choose it at the top right of the page. Each workspace's conversations stay in that workspace.
 
 ## Answering
 

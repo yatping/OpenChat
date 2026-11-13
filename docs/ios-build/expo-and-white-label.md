@@ -49,7 +49,7 @@ pnpm oc app variant --id acme --name "Acme Support" --bundle-id com.acme.support
 | `--relay-env` | Where you ran `oc relay deploy`. Its URL and relay ID become the only relay the app sends a token to. Or give `--relay-url` and `--relay-id`, or `--no-push` |
 | `--icon` | PNG, 1024 by 1024, with no transparency, which the App Store refuses. Optional: without it, the variant has the OpenChat icon until you replace `assets/icon.png` |
 | `--splash` | PNG. Optional, as for the icon |
-| `--color` | The splash background. Default `#2563eb` |
+| `--color` | The splash background. Default `#eef3ff`, the light blue behind the OpenChat icon |
 
 It writes `apps/mobile/variants/<id>/variant.json` and copies the images. It refuses an existing directory, so edit `variant.json` to change one. Relative paths are taken from the repository root, where `pnpm oc` runs. In a fork, commit the variant: nothing in it is secret.
 

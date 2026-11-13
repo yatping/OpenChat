@@ -5,6 +5,6 @@
   "urlScheme": "openchat",
   "bundleIdentifier": "com.orangolabs.openchat",
   "push": { "enabled": true, "allowedRelays": [{ "id": "managed", "url": "https://openchat-relay.orangolabs.com" }] },
-  "branding": { "primaryColor": "#2563eb" },
+  "branding": { "primaryColor": "#eef3ff" },
   "assets": { "icon": "assets/icon.png", "splash": "assets/splash.png" }
 }

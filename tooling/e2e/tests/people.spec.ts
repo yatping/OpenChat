@@ -61,10 +61,10 @@ test.describe('People', () => {
     await expect(person.getByLabel(`Role for ${AGENT.name} in E2E`)).toBeHidden();
 
     await page.getByRole('button', { name: 'People', exact: true }).click();
-    await page.getByRole('button', { name: 'members' }).click();
+    await page.getByRole('button', { name: 'Members', exact: true }).click();
     await expect(page.getByRole('listitem').filter({ hasText: AGENT.email }).getByText('Removed', { exact: true })).toBeVisible();
 
-    await page.getByRole('button', { name: 'inbox' }).click();
+    await page.getByRole('button', { name: 'Inbox', exact: true }).click();
     // Newest first, and this one has just had a message.
     await page.getByRole('region', { name: 'Conversations' }).getByRole('listitem').first().getByRole('button').click();
     await expect(page.getByText(question)).toBeVisible();
@@ -102,10 +102,10 @@ test.describe('People', () => {
     await signIn(page, AGENT);
     await expect(page.getByRole('button', { name: 'People', exact: true })).toBeHidden();
     await expect(page.getByRole('button', { name: 'Workspaces', exact: true })).toBeHidden();
-    await page.getByRole('button', { name: 'members' }).click();
+    await page.getByRole('button', { name: 'Members', exact: true }).click();
     await expect(page.getByRole('listitem').filter({ hasText: OWNER.email })).toBeVisible();
     await expect(page.getByRole('combobox', { name: /Role for/ })).toHaveCount(0);
-    await page.getByRole('button', { name: 'websites', exact: true }).click();
+    await page.getByRole('button', { name: 'Websites', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Shop' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(0);
   });

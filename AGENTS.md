@@ -18,6 +18,7 @@ a replaceable notification relay, and email follow-ups.
 | Auth, tenancy, secrets | [security](docs/architecture/security.md) |
 | HTTP or WebSocket API | [API conventions](docs/api/conventions.md) |
 | Website widget, its languages | [widget](docs/architecture/widget.md) |
+| Colours, the icon, layout | [design system](docs/architecture/design-system.md) |
 | Push | [relay protocol](docs/notification-relay/protocol.md) |
 | Expo, white labelling | [iOS build](docs/ios-build/expo-and-white-label.md) |
 

@@ -2,17 +2,51 @@ import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, useColorScheme, View, type TextInputProps } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+/**
+ * The OpenChat theme, from its icon: electric blue, navy, and a lavender-white. The same values are in
+ * docs/architecture/design-system.md, and in the dashboard and the widget.
+ */
 const palettes = {
-  light: { background: '#ffffff', surface: '#f3f4f6', text: '#111827', muted: '#4b5563', border: '#d1d5db', primary: '#1d4ed8', onPrimary: '#ffffff', danger: '#b91c1c' },
-  dark: { background: '#0b0f17', surface: '#1a2130', text: '#f3f4f6', muted: '#a3acbb', border: '#3a4557', primary: '#60a5fa', onPrimary: '#0b0f17', danger: '#fca5a5' },
+  light: { background: '#ffffff', surface: '#f5f7fc', raised: '#ffffff', soft: '#eef4ff', text: '#0b1437', muted: '#4d5a80', border: '#dee4f0', primary: '#0a57f5', onPrimary: '#ffffff', accent: '#18a0fb', danger: '#b42318', online: '#12b76a' },
+  dark: { background: '#0a1233', surface: '#0f1a45', raised: '#1e2a55', soft: '#1e2a55', text: '#eef2ff', muted: '#a3aed0', border: '#26315f', primary: '#5b9bff', onPrimary: '#0a1233', accent: '#18a0fb', danger: '#fda29b', online: '#32d583' },
 };
 
-export const useTheme = () => palettes[useColorScheme() === 'dark' ? 'dark' : 'light'];
+export type Theme = (typeof palettes)['light'];
+
+export const useTheme = (): Theme => palettes[useColorScheme() === 'dark' ? 'dark' : 'light'];
+
+/** For React Navigation, so that headers and backgrounds match the rest of the app. */
+export function navigationTheme<T extends { dark: boolean; colors: Record<string, string> }>(base: T, theme: Theme): T {
+  return { ...base, colors: { ...base.colors, primary: theme.primary, background: theme.surface, card: theme.background, text: theme.text, border: theme.border, notification: theme.primary } };
+}
+
+/** Up to two initials, or nothing for someone with no name. */
+export function initials(name: string | null | undefined): string {
+  const words = (name ?? '').trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '';
+  const first = [...words[0]!][0] ?? '';
+  const last = words.length > 1 ? ([...words[words.length - 1]!][0] ?? '') : '';
+  return (first + last).toUpperCase();
+}
+
+/** Initials in a blue circle, with a green dot when the person is online. Decorative: the row says who it is. */
+export function Avatar({ name, size = 44, online }: { name: string | null | undefined; size?: number; online?: boolean }) {
+  const theme = useTheme();
+  const letters = initials(name);
+  return (
+    <View accessible={false} importantForAccessibility="no-hide-descendants" style={{ width: size, height: size }}>
+      <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: letters ? theme.primary : theme.soft, alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ color: letters ? '#ffffff' : theme.primary, fontWeight: '700', fontSize: size * (letters ? 0.36 : 0.45) }}>{letters || '?'}</Text>
+      </View>
+      {online && <View style={[styles.presence, { backgroundColor: theme.online, borderColor: theme.background }]} />}
+    </View>
+  );
+}
 
 export function Screen({ children }: { children: ReactNode }) {
   const theme = useTheme();
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.surface }}>
       <ScrollView contentContainerStyle={styles.screen} keyboardShouldPersistTaps="handled">
         {children}
       </ScrollView>
@@ -38,7 +72,7 @@ export function Field({ label, ...input }: { label: string } & TextInputProps) {
   return (
     <View style={styles.field}>
       <Text style={[styles.label, { color: theme.text }]}>{label}</Text>
-      <TextInput accessibilityLabel={label} placeholderTextColor={theme.muted} autoCapitalize="none" autoCorrect={false} style={[styles.input, { color: theme.text, borderColor: theme.border }]} {...input} />
+      <TextInput accessibilityLabel={label} placeholderTextColor={theme.muted} autoCapitalize="none" autoCorrect={false} style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.raised }]} {...input} />
     </View>
   );
 }
@@ -67,7 +101,8 @@ const styles = StyleSheet.create({
   body: { fontSize: 16, lineHeight: 22 },
   field: { gap: 6 },
   label: { fontSize: 15, fontWeight: '600' },
-  input: { fontSize: 16, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, minHeight: 48 },
-  button: { minHeight: 48, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+  input: { fontSize: 16, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, minHeight: 50 },
+  button: { minHeight: 50, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
   buttonText: { fontSize: 16, fontWeight: '600' },
+  presence: { position: 'absolute', right: 0, bottom: 0, width: 13, height: 13, borderRadius: 7, borderWidth: 2 },
 });

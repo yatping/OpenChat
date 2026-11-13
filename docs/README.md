@@ -29,6 +29,7 @@ Suggested reading order for a new contributor is top to bottom.
 | [`packages/database/src/schema`](../packages/database/src/schema/index.ts) | The schema, in Drizzle. Migrations are generated beside it |
 | [architecture/realtime.md](architecture/realtime.md) | Durable Objects and the WebSocket lifecycle |
 | [architecture/widget.md](architecture/widget.md) | Embedding the website widget, and its languages |
+| [architecture/design-system.md](architecture/design-system.md) | The icon, colours and layouts shared by the dashboard, widget, app and website |
 | [architecture/accessibility.md](architecture/accessibility.md) | What the widget and dashboard do for accessibility, and how it is checked |
 | [architecture/background-jobs.md](architecture/background-jobs.md) | Queues, the outbox, and cron |
 | [architecture/security.md](architecture/security.md) | Authentication, tenant isolation, threat model |
