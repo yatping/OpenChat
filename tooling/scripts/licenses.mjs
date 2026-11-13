@@ -10,7 +10,7 @@ export const PERMISSIVE_PACKAGES = new Set(['@openchat/widget', '@openchat/mobil
 export const CONFIG_PACKAGES = new Set(['@openchat/tsconfig', '@openchat/eslint-config']);
 
 /** Licences any component may ship: they ask only for notices, which the build publishes. */
-const PERMISSIVE = ['MIT', 'MIT-0', 'ISC', 'BSD-2-Clause', 'BSD-3-Clause', 'Apache-2.0', '0BSD', 'Unlicense', 'CC0-1.0', 'BlueOak-1.0.0', 'Zlib', 'Python-2.0', 'CC-BY-4.0'];
+const PERMISSIVE = ['MIT', 'MIT-0', 'ISC', 'BSD-2-Clause', 'BSD-3-Clause', 'Apache-2.0', '0BSD', 'Unlicense', 'CC0-1.0', 'BlueOak-1.0.0', 'Zlib', 'Python-2.0', 'CC-BY-4.0', 'BSL-1.0'];
 
 /** Copyleft licences that AGPL-3.0-or-later code can include. GPL-2.0-only cannot be, so it is absent. */
 const AGPL_COMPATIBLE = ['MPL-2.0', 'LGPL-2.1-or-later', 'LGPL-3.0-only', 'LGPL-3.0-or-later', 'GPL-3.0-only', 'GPL-3.0-or-later', 'AGPL-3.0-only', 'AGPL-3.0-or-later'];
@@ -24,12 +24,10 @@ export const POLICIES = {
  * Third-party packages allowed outside their policy, each with the reason. Each one is a human decision: add
  * one only with a reason a reviewer can check.
  */
-export const EXCEPTIONS = {
-  lightningcss: 'MPL-2.0. A CSS compiler that Expo depends on at build time. It does not ship in the app.',
-};
+export const EXCEPTIONS = {};
 
 /** The exception that covers a package, if any. Platform builds such as lightningcss-linux-x64-gnu share their package's. */
-export const exceptionFor = (name) => Object.keys(EXCEPTIONS).find((base) => name === base || name.startsWith(`${base}-`));
+export const exceptionFor = (name, exceptions = EXCEPTIONS) => Object.keys(exceptions).find((base) => name === base || name.startsWith(`${base}-`));
 
 /**
  * Whether an SPDX expression is allowed by a policy. `A OR B` needs one side allowed, since the licensee
@@ -78,12 +76,12 @@ export function workspaceClosure(name, packages) {
  * Problems with third-party packages shipped by a component under `license`. `entries` are { name, version,
  * license }. Returns readable lines.
  */
-export function thirdPartyProblems(component, license, entries) {
+export function thirdPartyProblems(component, license, entries, exceptions = EXCEPTIONS) {
   const policy = POLICIES[license];
   const problems = [];
   for (const entry of entries) {
     if (entry.name.startsWith('@openchat/')) continue;
-    if (allowedBy(entry.license, policy) || exceptionFor(entry.name)) continue;
+    if (allowedBy(entry.license, policy) || exceptionFor(entry.name, exceptions)) continue;
     problems.push(`${component} (${license}) ships ${entry.name}@${entry.version}, licensed ${entry.license}`);
   }
   return problems;

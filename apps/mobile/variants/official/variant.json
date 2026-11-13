@@ -1,6 +1,6 @@
 {
   "id": "official",
-  "appName": "OpenChat",
+  "appName": "OpenLiveChat",
   "slug": "openchat",
   "urlScheme": "openchat",
   "bundleIdentifier": "com.orangolabs.openchat",

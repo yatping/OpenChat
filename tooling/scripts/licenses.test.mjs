@@ -46,7 +46,9 @@ test('names what a component may not ship, and honours an exception', () => {
     { name: 'copyleft-lib', version: '1.0.0', license: 'GPL-3.0-only' },
     { name: 'lightningcss-linux-x64-gnu', version: '1.0.0', license: 'MPL-2.0' },
   ];
-  assert.deepEqual(thirdPartyProblems('@openchat/mobile', APACHE, entries), ['@openchat/mobile (Apache-2.0) ships copyleft-lib@1.0.0, licensed GPL-3.0-only']);
-  assert.equal(exceptionFor('lightningcss-linux-x64-gnu'), 'lightningcss');
-  assert.equal(exceptionFor('lightningcssish'), undefined);
+  const exceptions = { lightningcss: 'A build tool' };
+  assert.deepEqual(thirdPartyProblems('@openchat/mobile', APACHE, entries, exceptions), ['@openchat/mobile (Apache-2.0) ships copyleft-lib@1.0.0, licensed GPL-3.0-only']);
+  assert.equal(thirdPartyProblems('@openchat/mobile', APACHE, entries).length, 2, 'without the exception, both are named');
+  assert.equal(exceptionFor('lightningcss-linux-x64-gnu', exceptions), 'lightningcss');
+  assert.equal(exceptionFor('lightningcssish', exceptions), undefined);
 });

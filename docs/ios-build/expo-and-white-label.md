@@ -70,7 +70,7 @@ To build for a registered device, with the JavaScript inside the app so that it 
 cd apps/mobile
 cp fastlane/.env.example fastlane/.env    # Fill it in. Git ignores it
 fastlane ios refresh_profile              # Registers the bundle ID if missing. Run again after adding a device
-fastlane ios device                       # Writes build/ios/OpenChat-adhoc.ipa
+fastlane ios device                       # Writes build/ios/OpenLiveChat-adhoc.ipa
 fastlane ios install                      # Needs the phone unlocked and connected by cable
 ```
 
@@ -82,7 +82,7 @@ fastlane ios install                      # Needs the phone unlocked and connect
 | Ad hoc | `fastlane ios refresh_profile`, then `fastlane ios device` | production | Registered devices |
 | App Store | `fastlane ios refresh_profile type:appstore`, then `fastlane ios release` | production | **TestFlight uses production**, as does the App Store |
 
-`fastlane ios release upload:true` also sends the build to TestFlight. That needs the app made once in App Store Connect (Apps, then +), which an API key cannot do. TestFlight refuses a build number it has had before, so set `APP_BUILD_NUMBER` higher for each upload. It defaults to 1.
+`fastlane ios release upload:true` also sends the build to TestFlight. That needs the app made once in App Store Connect (Apps, then +), which an API key cannot do. TestFlight refuses a build number it has had before, so with `upload:true` the lane asks App Store Connect for the latest and uses the next, unless `APP_BUILD_NUMBER` is set. Both lanes refuse to build if the app's licences list is out of date; see [the app's notices](../operations/licensing.md#the-apps-notices).
 
 Set `APP_PROFILE` to anything other than `development` for a release build. Getting this wrong produces `BadDeviceToken` from APNs, and the relay's metric on that reason exists to catch it. The app reports the environment explicitly, because the build sets the entitlement.
 

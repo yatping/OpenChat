@@ -51,7 +51,7 @@ An installation admin who is a member of the workspace also sees **Export data**
 
 ## On iPhone
 
-The OpenChat iPhone app does the same work: the inbox, replies and notes, files and photos, status and assignment, the contact card and tags.
+The official iPhone app, named **OpenLiveChat**, does the same work: the inbox, replies and notes, files and photos, status and assignment, the contact card and tags.
 
 **The official app is not on the App Store yet.** Until it is, your team uses the dashboard. A company that builds its own branded app distributes it itself.
 
@@ -59,6 +59,8 @@ The OpenChat iPhone app does the same work: the inbox, replies and notes, files 
 2. Sign in with the same email and password as the dashboard.
 
 Photos have their location and other details removed before they are sent. Documents are sent as they are.
+
+**About and licences**, under Settings, shows the app's version, the open-source licences it includes, and where to get the source of the app and of your installation.
 
 **Notifications.** Under **Settings**, choose which to receive: **New conversations**, **New messages**, or only those **Assigned to you**, for each workspace. They need your installation to be connected to a notification relay, and iOS to allow notifications for the app. Notifications are end-to-end encrypted to your phone: the relay that carries them cannot read them. If push is not available, the app says why, and messages still arrive while it is open.
 

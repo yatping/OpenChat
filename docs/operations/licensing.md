@@ -32,15 +32,11 @@ Each commit carries a `Signed-off-by` line whose address matches the commit's au
 | Widget | The packages in its two bundles, as Vite's `build.license` lists them | Permissive licences |
 | Dashboard | The packages in its bundle, the same way | Permissive, and copyleft that AGPL code can include |
 | API Worker, relay | The packages esbuild bundled, from the metafile `wrangler deploy --dry-run --metafile` writes | The same as the dashboard |
-| Mobile app | Its production dependencies, as `pnpm licenses list --prod` gives them. This includes Expo's build tools, so it is more than ships | Permissive licences |
+| Mobile app | What is built into it, from the list its licences screen shows. See [the app's notices](#the-apps-notices) | Permissive licences |
 
-Permissive means MIT, MIT-0, ISC, BSD-2-Clause, BSD-3-Clause, Apache-2.0, 0BSD, Unlicense, CC0-1.0, BlueOak-1.0.0, Zlib, Python-2.0 and CC-BY-4.0. The copyleft an AGPL component may include is MPL-2.0, LGPL, GPL-3.0 and AGPL-3.0. GPL-2.0-only is not included, because it cannot be combined with AGPL-3.0. In an expression such as `(BSD-3-Clause OR GPL-2.0)`, one allowed choice is enough. In `A AND B`, both must be allowed. A package that states no licence fails.
+Permissive means MIT, MIT-0, ISC, BSD-2-Clause, BSD-3-Clause, Apache-2.0, 0BSD, Unlicense, CC0-1.0, BlueOak-1.0.0, Zlib, Python-2.0, CC-BY-4.0 and BSL-1.0. The copyleft an AGPL component may include is MPL-2.0, LGPL, GPL-3.0 and AGPL-3.0. GPL-2.0-only is not included, because it cannot be combined with AGPL-3.0. In an expression such as `(BSD-3-Clause OR GPL-2.0)`, one allowed choice is enough. In `A AND B`, both must be allowed. A package that states no licence fails.
 
-An exception needs a reason a reviewer can check, in [`licenses.mjs`](../../tooling/scripts/licenses.mjs). There is one:
-
-| Package | Licence | Why it is allowed |
-|---|---|---|
-| `lightningcss` | MPL-2.0 | A CSS compiler that Expo uses at build time. It does not ship in the app |
+An exception needs a reason a reviewer can check, in `EXCEPTIONS` in [`licenses.mjs`](../../tooling/scripts/licenses.mjs). There are none.
 
 The policy has its own tests, in `licenses.test.mjs`, which run first.
 
@@ -57,7 +53,17 @@ MIT, BSD and Apache-2.0 ask that their notices go with copies of the code. The d
 
 The Workers' code is not distributed: it runs on Cloudflare for the operator. Its notices go with the source, through each package's own `node_modules` copy.
 
-**The mobile app has no notices screen yet.** An App Store build distributes its bundled packages, so it needs one before submission. This is part of the App Store submission work in [Milestone 6](../plan/milestones.md#m6-hardening-and-release-m).
+### The app's notices
+
+The app shows its notices under **Settings**, **About and licences**, with its own licence, a link to its source, and the server's source offer from discovery. The list is [`third-party-licenses.json`](../../apps/mobile/src/about/third-party-licenses.json), written by [`scripts/licenses.mjs`](../../apps/mobile/scripts/licenses.mjs) from three sources:
+
+| Source | Covers |
+|---|---|
+| The Metro bundle's source map, from `expo export` | The JavaScript packages in the app, and nothing that only builds it |
+| `ios/Podfile.lock`, each pod traced to its npm package | Native modules, such as Expo's, and React Native |
+| [`licenses/vendored/`](../../apps/mobile/licenses/vendored), copied from upstream at the versions React Native pins | Libraries React Native compiles in that are in no npm package: folly, boost, glog, fmt, double-conversion, fast_float and SocketRocket. Hermes's licence comes from its pod |
+
+Run `pnpm --filter @openchat/mobile licenses` after `expo prebuild`, on a Mac, whenever the app's dependencies or React Native change, and commit the result. `fastlane ios release` and `device` refuse to build when it is out of date. When React Native is upgraded, check the versions in the script's `VENDORED` table against its podspecs.
 
 ## The source offer
 
@@ -83,11 +89,11 @@ The relay is AGPL too, but has no users who browse it: installations call it. Th
 ## For the owner's legal review
 
 - **Visitors.** People chatting through the widget also use the AGPL server over a network. The offer is in the dashboard and the discovery document, not in the widget, because a link inside a customer's website is a product decision. Decide whether that is enough.
-- **The app and the App Store.** The app is Apache-2.0 so that it can be on the App Store (ADR-0011). Its notices screen is still to come, as above.
+- **The app and the App Store.** The app is Apache-2.0 so that it can be on the App Store (ADR-0011). It shows its notices, and the server's source offer, on its About screen.
 - **The DCO without a CLA.** Accepted in ADR-0011, with its consequence: no relicensing without every contributor's consent.
 
 ## Limits
 
-- Only npm packages are checked. CocoaPods and native code that Expo adds at prebuild are not, nor is Xcode's own toolchain.
-- The app's check is wider than what ships, so it can fail on a build tool. That is why the one exception exists.
+- The web bundles and Workers are checked from npm packages. The app's native libraries are covered by its list, but Apple's own frameworks and Xcode's toolchain are not listed, since Apple's terms cover them.
+- The app's list is written on a Mac and checked by the release build, not by CI, which cannot prebuild iOS. CI checks the committed list against the policy.
 - Licence fields are taken as each package states them. A package that misstates its licence is not caught.

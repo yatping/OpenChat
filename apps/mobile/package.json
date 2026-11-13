@@ -10,6 +10,7 @@
     "test": "vitest run --passWithNoTests",
     "start": "expo start --dev-client",
     "prebuild": "expo prebuild --platform ios --no-install",
+    "licenses": "node scripts/licenses.mjs",
     "ios": "expo run:ios"
   },
   "dependencies": {

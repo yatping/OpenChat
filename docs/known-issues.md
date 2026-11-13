@@ -12,7 +12,7 @@ To report a new problem, [open an issue](https://github.com/yatping/OpenChat/iss
 
 ## The iPhone app and push
 
-- **The official app is not on the App Store.** Until it is, teams use the dashboard, and get no push notifications. It still needs a screen listing the open-source licences it includes.
+- **The official app is not on the App Store.** Until it is, teams use the dashboard, and get no push notifications. Builds go to TestFlight for testing.
 - **The project's relay admits installations one at a time**, by request, until its terms are published ([self-hosting](operations/self-hosting.md#6-push-through-the-official-app)).
 - **Tested on one iPhone.** Several devices, a token change, and signing out while offline were not tried on real phones ([M2](plan/milestones.md#m2-exit-check), [M3](plan/milestones.md#m3-exit-check)).
 - **Push text is in English.** There are no notifications for a transfer as such (it arrives as an assignment), or for other changes to a conversation.
