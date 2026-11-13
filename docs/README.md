@@ -6,10 +6,12 @@ Suggested reading order for a new contributor is top to bottom.
 
 | Document | Purpose |
 |---|---|
+| [guide/](guide/README.md) | **For people who use OpenChat:** the inbox, administration, the website widget, and privacy |
+| [known-issues.md](known-issues.md) | What does not work yet, what is untested, and what awaits a decision |
 | [architecture/overview.md](architecture/overview.md) | The system, its deployables, and the main flows |
 | [architecture/open-questions.md](architecture/open-questions.md) | Decisions the project owner still has to make |
 | [plan/milestones.md](plan/milestones.md) | Milestone-by-milestone plan |
-| [plan/phase-0.md](plan/phase-0.md) | The next body of work, as concrete tasks |
+| [plan/phase-0.md](plan/phase-0.md) | The foundation's tasks, now done, kept for reference |
 
 ## Review of the brief
 
