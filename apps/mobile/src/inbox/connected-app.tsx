@@ -19,12 +19,14 @@ import { InboxScreen } from './inbox-screen';
 import { useLive } from './live';
 import { DetailsScreen } from './details-screen';
 import { SettingsScreen } from './settings-screen';
+import { AboutScreen } from '../about/about-screen';
 
 export type Routes = {
   Inbox: undefined;
   Conversation: { conversationId: string };
   Details: { conversationId: string };
   Settings: undefined;
+  About: undefined;
 };
 
 const Stack = createNativeStackNavigator<Routes>();
@@ -87,6 +89,7 @@ function Workspace({ connection, workspaceId, me, api, client }: { connection: C
             <Stack.Screen name="Conversation" component={ConversationScreen} options={{ title: '' }} />
             <Stack.Screen name="Details" component={DetailsScreen} />
             <Stack.Screen name="Settings" component={SettingsScreen} />
+            <Stack.Screen name="About" component={AboutScreen} options={{ title: 'About' }} />
           </Stack.Navigator>
         </NavigationContainer>
       </NavigationIndependentTree>

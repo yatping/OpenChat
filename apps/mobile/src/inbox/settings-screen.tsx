@@ -1,12 +1,14 @@
 import type { NotificationPreferences } from '@openchat/api-client';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSyncExternalStore } from 'react';
 import { Linking, Switch, Text, View } from 'react-native';
 import { connections } from '../connections/native';
 import { pushRegistrar } from '../push/native';
 import type { PushStatus } from '../push/registrar';
 import { Body, Button, Problem, Screen, Title, useTheme } from '../ui/kit';
-import { useWorkspace } from './connected-app';
+import { type Routes, useWorkspace } from './connected-app';
 
 /** Only events that something sends. The rest join here when they do. */
 const CHOICES = [
@@ -68,6 +70,7 @@ function NotificationSettings() {
 
 export function SettingsScreen() {
   const { connection, me, workspaceId } = useWorkspace();
+  const navigation = useNavigation<NativeStackNavigationProp<Routes>>();
   return (
     <Screen>
       <Title>{connection.installationName}</Title>
@@ -79,6 +82,7 @@ export function SettingsScreen() {
           <Button key={workspace.id} title={`${workspace.name}${workspace.id === workspaceId ? ' (selected)' : ''}`} kind="plain" onPress={() => void connections.selectWorkspace(connection.id, workspace.id)} />
         ))}
       <NotificationSettings />
+      <Button title="About and licences" kind="plain" onPress={() => navigation.navigate('About')} />
       <Button title="Sign out" kind="danger" onPress={() => void connections.signOut(connection.id)} />
     </Screen>
   );

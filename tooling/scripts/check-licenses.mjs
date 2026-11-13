@@ -2,8 +2,7 @@
 //   1. Each workspace package has the licence ADR-0011 gives it, and the licence texts are present.
 //   2. A permissive package depends on no AGPL package, directly or through another workspace package.
 //   3. What each component ships from third parties is allowed by its licence: the widget and dashboard
-//      bundles as Vite lists them, the Workers as esbuild bundled them, and the app's production dependencies.
-import { execFileSync } from 'node:child_process';
+//      bundles as Vite lists them, the Workers as esbuild bundled them, and the app as its licences screen lists it.
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { AGPL, APACHE, CONFIG_PACKAGES, EXCEPTIONS, licenseOf, packageOfPath, PERMISSIVE_PACKAGES, thirdPartyProblems, workspaceClosure } from './licenses.mjs';
@@ -62,10 +61,12 @@ function workerBundle(serviceDir) {
   return [...found.values()];
 }
 
-/** The app's production dependencies, as pnpm lists them. More than ships, since it includes Expo's build tools. */
-function appDependencies() {
-  const listed = JSON.parse(execFileSync('pnpm', ['--filter', '@openchat/mobile', 'licenses', 'list', '--prod', '--json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] }));
-  return Object.entries(listed).flatMap(([license, list]) => list.flatMap((p) => p.versions.map((version) => ({ name: p.name, version, license }))));
+/**
+ * What is built into the app, from the list its licences screen shows. apps/mobile/scripts/licenses.mjs writes
+ * it on a Mac, from the bundle and the pods, and the release build refuses to run if it is out of date.
+ */
+function appPackages() {
+  return readJson('apps/mobile/src/about/third-party-licenses.json').map((e) => ({ name: e.name, version: e.version, license: e.license }));
 }
 
 const components = [
@@ -73,7 +74,7 @@ const components = [
   ['@openchat/dashboard', AGPL, viteBundle('apps/dashboard/dist/.vite/license.json')],
   ['@openchat/api', AGPL, workerBundle('services/api')],
   ['@openchat/notification-relay', AGPL, workerBundle('services/notification-relay')],
-  ['@openchat/mobile', APACHE, appDependencies()],
+  ['@openchat/mobile', APACHE, appPackages()],
 ];
 let shipped = 0;
 for (const [component, license, entries] of components) {

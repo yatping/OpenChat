@@ -4,7 +4,7 @@
 #   fastlane ios refresh_profile type:appstore Regenerate the App Store profile instead
 #   fastlane ios device                        Build a signed ad-hoc IPA, with the JavaScript inside it
 #   fastlane ios install                       Install that IPA on DEVICE_UDID
-#   fastlane ios release [upload:true]         Build an App Store IPA, and with upload, send it to TestFlight
+#   fastlane ios release [upload:true]         Build an App Store IPA, and with upload, send it to TestFlight with the next build number
 #
 # APP_VARIANT chooses the white-label variant, as for everything else. Nothing secret belongs in this file:
 # keys and passwords come from fastlane/.env, which Git ignores.
@@ -90,6 +90,8 @@ def build_ipa(kind)
   UI.user_error!("No #{kind} profile for the notification extension. Run: fastlane ios refresh_profile type:#{kind}") if PUSH_ENABLED && !File.exist?(settings[:extension_profile])
   sh("cd #{MOBILE_ROOT.shellescape} && CI=1 APP_VARIANT=#{VARIANT_ID.shellescape} APP_PROFILE=production pnpm exec expo prebuild --platform ios --clean")
   ENV['APP_PROFILE'] = 'production'
+  # The licences screen lists what is built in. It must match this build, which is now prebuilt.
+  sh("cd #{MOBILE_ROOT.shellescape} && APP_VARIANT=#{VARIANT_ID.shellescape} node scripts/licenses.mjs --check")
 
   begin
     delete_temporary_keychain
@@ -140,6 +142,12 @@ platform :ios do
 
   desc 'Build an App Store IPA. With upload:true, send it to TestFlight, which needs the app made first in App Store Connect.'
   lane :release do |options|
+    if options[:upload] && ENV['APP_BUILD_NUMBER'].to_s.strip.empty?
+      # TestFlight refuses a build number it has had for this version, so take the next one.
+      latest = latest_testflight_build_number(api_key: api_key, app_identifier: BUNDLE_ID, initial_build_number: 0)
+      ENV['APP_BUILD_NUMBER'] = (latest.to_i + 1).to_s
+      UI.message("Build number #{ENV['APP_BUILD_NUMBER']}")
+    end
     ipa = build_ipa('appstore')
     next unless options[:upload]
 
