@@ -21,7 +21,7 @@
     "@openchat/notification-protocol": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20261103.1",
+    "@cloudflare/workers-types": "^5.20261110.1",
     "@openchat/tsconfig": "workspace:*",
     "typescript": "~6.0.3",
     "vitest": "^5.1.0",
