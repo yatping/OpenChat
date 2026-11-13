@@ -14,7 +14,7 @@ The relay is offered free of charge, as is, with no service level. Notifications
 
 ## 2. Access
 
-For now, we admit installations one at a time, on request. We may refuse a request, or end access, at our discretion. Where we can, we will give notice and a reason. **[CHECK]**
+Any installation that proves control of its domain may register, within the limits we publish. We may refuse or end access at our discretion. Where we can, we will give notice and a reason. **[CHECK]**
 
 ## 3. Your responsibilities
 

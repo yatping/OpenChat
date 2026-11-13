@@ -20,7 +20,7 @@ Run `pnpm oc preflight` to check them. It only reads, and `oc deploy` runs the s
 | Analytics Engine | With `--analytics` | Enable once in the dashboard | Confirm yourself |
 | Custom domain | With `--public-url` | A zone on Cloudflare, attached to the Worker. A domain is recommended, but `workers.dev` also works | Confirm yourself |
 | Email | To deliver new account links and resets | Cloudflare Email Sending (a domain on Cloudflare DNS in this account, onboarded with `wrangler email sending enable <domain>`, and a login with `email_sending:write`). Without it, use `oc recover` | The domain is listed as onboarded |
-| Push | With `--relay-url`, `--relay-id`, and `--relay-bundle-ids`, all three together. The [managed relay](#managed-relay-project-operators) admits installations one at a time for now | Nothing for the managed relay, or an Apple Developer account for independent mode | Not checked yet |
+| Push | With `--relay-url`, `--relay-id`, and `--relay-bundle-ids`, all three together. The [managed relay](#managed-relay-project-operators) is open to any installation that proves control of its domain | Nothing for the managed relay, or an Apple Developer account for independent mode | Not checked yet |
 
 A brand-new account has not been tried yet, so this list comes from Cloudflare's documentation and Wrangler's source, and may be incomplete.
 

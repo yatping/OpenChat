@@ -1,6 +1,6 @@
 # Legal documents for the managed relay
 
-> **DRAFT. Not legal advice. Not in force.** A lawyer must review these before anything is published or the managed relay is opened beyond installations admitted one at a time. Nothing here makes OpenChat or Orango Labs Ltd GDPR-compliant on its own.
+> **DRAFT. Not legal advice. Not in force.** A lawyer must review these before anything is published. The managed relay has been open to every installation since 2026-11-12, by the owner's decision, so this review is overdue. Nothing here makes OpenChat or Orango Labs Ltd GDPR-compliant on its own.
 
 These cover the **managed relay** (`openchat-relay.orangolabs.com`) and the **official iOS app**, both run by Orango Labs Ltd. They do not cover a self-hosted installation. Whoever runs an installation is the controller of everything in it, and needs their own privacy notice for their visitors and team.
 
