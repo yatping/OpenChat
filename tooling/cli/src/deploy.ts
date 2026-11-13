@@ -10,8 +10,8 @@ import { generateOpaqueToken, generateSerializedKey, hashOpaqueToken } from '@op
 import { createBackups, databaseName, type RestoreRecord } from './backup';
 import { assertEmail, assertPublicUrl, bootstrapSql, recoverySql, resetLink } from './bootstrap';
 import { formatChecks, hasFailure, isMissingWorkersDev, runPreflight, WORKERS_DEV_HELP } from './preflight';
-import { renderConfig, type DeploymentState, mergeLimitFlags, mergeSecurityFlags } from './render-config';
-import { compareVersions, releaseVersion, UNRECORDED_VERSION, UPGRADE_FROM_AT_LEAST } from './releases';
+import { renderConfig, type DeploymentState, mergeLimitFlags, mergeSecurityFlags, mergeSourceFlag } from './render-config';
+import { compareVersions, releaseCheckout, releaseVersion, UNRECORDED_VERSION, UPGRADE_FROM_AT_LEAST } from './releases';
 import { createResource, describeFailure, type RunWrangler, sleep, UUID, wranglerIn } from './wrangler';
 
 export interface State extends Omit<DeploymentState, 'd1DatabaseId'> {
@@ -42,6 +42,8 @@ export interface DeployerDeps {
   log?: (line: string) => void;
   /** For names and records that carry the time, such as a backup's. */
   now?: () => Date;
+  /** Whether the checkout is the tagged release, unchanged. Without git, it is taken not to be. */
+  isReleaseCheckout?: (release: string) => boolean;
 }
 
 export interface DeployOptions {
@@ -62,6 +64,8 @@ export interface DeployOptions {
   /** For /.well-known/security.txt. Remembered for later deploys; `none` removes it. */
   securityContact?: string | undefined;
   securityPolicy?: string | undefined;
+  /** Where users can get the source, for a changed release. Remembered; `none` goes back to the project's. */
+  sourceUrl?: string | undefined;
   /** Takes the relay out of the deployment. Disconnect in the dashboard first, so that the relay erases its records. */
   noRelay?: boolean;
 }
@@ -77,6 +81,7 @@ export function createDeployer(root: string, deps: DeployerDeps = {}) {
       execFileSync('node', ['scripts/collect-assets.mjs'], { cwd: join(root, 'services/api'), stdio: 'inherit' });
     });
   const release = releaseVersion(root);
+  const isReleaseCheckout = deps.isReleaseCheckout ?? ((version: string) => releaseCheckout(root, version));
   const dirOf = (name: string) => join(root, '.openchat', name);
   const statePath = (name: string) => join(dirOf(name), 'state.json');
   const operatorTokenPath = (name: string) => join(dirOf(name), 'operator-token');
@@ -90,13 +95,20 @@ export function createDeployer(root: string, deps: DeployerDeps = {}) {
     writeFileSync(statePath(state.name), `${JSON.stringify(state, null, 2)}\n`);
   };
 
+  /** The AGPL asks that users of a changed version be offered its source. A hint, because only the operator knows where it is. */
+  function sourceHint(state: State) {
+    if (state.sourceUrl || isReleaseCheckout(release)) return;
+    log(`\nThis checkout is not release v${release} unchanged, but the installation offers its users the source of v${release}.`);
+    log('If you changed the code, the AGPL asks that they be offered the source you deployed: publish it, then deploy with --source-url <https://...>. See docs/operations/licensing.md.');
+  }
+
   const create = (label: string, args: string[]) => createResource(wrangler, label, args, wait);
 
   function render(state: State) {
     if (!state.d1DatabaseId) throw new Error('The database has not been created yet');
     const serviceDir = join(root, 'services/api');
     const out = join(dirOf(state.name), 'api.wrangler.jsonc');
-    const rendered = renderConfig(readFileSync(join(serviceDir, 'wrangler.template.jsonc'), 'utf8'), { ...state, d1DatabaseId: state.d1DatabaseId }, relative(dirname(out), serviceDir));
+    const rendered = renderConfig(readFileSync(join(serviceDir, 'wrangler.template.jsonc'), 'utf8'), { ...state, d1DatabaseId: state.d1DatabaseId }, relative(dirname(out), serviceDir), release);
     writeFileSync(out, `${JSON.stringify(rendered, null, 2)}\n`);
   }
 
@@ -333,6 +345,7 @@ export function createDeployer(root: string, deps: DeployerDeps = {}) {
       state.version = release;
       save(state);
       log(`\nUpgraded ${name} to ${release}: ${state.publicBaseUrl}`);
+      sourceHint(state);
       log(`To undo it: pnpm oc rollback --env ${name}`);
     },
 
@@ -359,6 +372,8 @@ export function createDeployer(root: string, deps: DeployerDeps = {}) {
       if (options.limitFlag) state.limits = mergeLimitFlags(state.limits, options.limitFlag);
       state.security = mergeSecurityFlags(state.security, options.securityContact, options.securityPolicy);
       if (!state.security) delete state.security;
+      state.sourceUrl = mergeSourceFlag(state.sourceUrl, options.sourceUrl);
+      if (!state.sourceUrl) delete state.sourceUrl;
       if (!state.initialized && !options.ownerEmail) throw new Error('A first deploy needs --owner-email');
       if (options.analytics) state.analyticsEngine = true;
       if (options.noRelay) {
@@ -394,6 +409,7 @@ export function createDeployer(root: string, deps: DeployerDeps = {}) {
       if (ownerLink) {
         log(`\nSet the owner's password within one hour. This link is shown only once:\n${ownerLink}`);
       }
+      sourceHint(state);
       if (!state.security) log(`\nNo security contact is set, so /.well-known/security.txt answers 404. To publish one: --security-contact mailto:security@example.com`);
       if (!process.env.RESEND_API_KEY && !state.cloudflareEmailFrom) {
         log('\nNo email provider was set in this run. Without one, resets and new account links are not delivered.');

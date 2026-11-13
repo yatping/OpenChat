@@ -25,7 +25,7 @@
     "contracts:generate": "pnpm --filter @openchat/api-contracts generate",
     "check:contracts": "pnpm --filter @openchat/api-contracts check",
     "check:migrations": "pnpm --filter @openchat/database check:migrations",
-    "check:licenses": "node tooling/scripts/check-licenses.mjs",
+    "check:licenses": "node --test tooling/scripts/licenses.test.mjs && node tooling/scripts/check-licenses.mjs",
     "check:budget": "node tooling/scripts/check-budget.mjs",
     "check:secrets": "node tooling/scripts/check-secrets.mjs",
     "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm check:contracts && pnpm check:migrations && pnpm check:licenses && pnpm check:budget && pnpm check:secrets"

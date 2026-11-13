@@ -80,6 +80,8 @@ TURNSTILE_SECRET_KEY=... pnpm oc deploy --env acme --turnstile-site-key <site ke
 
 To publish `/.well-known/security.txt`, give a contact for security reports: `--security-contact mailto:security@example.com`, or an `https://` form, and optionally `--security-policy https://example.com/disclosure`. Both are remembered for later deploys; `--security-contact none` removes the file. See [disclosure](../architecture/security.md#disclosure).
 
+The dashboard and the discovery document offer users the source of the release you deployed, as the AGPL asks. If you changed the code, publish it and pass `--source-url https://...`, also remembered; `none` goes back to the release's. `oc deploy` and `oc upgrade` remind you when the checkout is not the release tag unchanged. See [licensing](licensing.md#the-source-offer).
+
 Metrics are optional: enable Analytics Engine once in the Cloudflare dashboard, then add `--analytics`. To use your own domain, attach it to the Worker, then pass `--public-url https://chat.example.com`, because links in emails are built from that URL.
 
 **The first installation admin** is the owner set up here. They manage people from then on ([ADR-0015](../architecture/decisions/0015-installation-admin-and-reversible-removal.md)). Upgrading an existing installation makes its first active owner the admin. Upgrading to migration `0004` makes every workspace owner and admin a supervisor, so only installation admins can then change settings and people ([ADR-0016](../architecture/decisions/0016-installation-admin-replaces-workspace-managers.md)).
@@ -140,7 +142,7 @@ A Worker version with a Durable Object migration that the old version lacks may 
 
 | Workflow | Trigger | Does |
 |---|---|---|
-| `ci.yml` | PR | Lint, typecheck, test, build, contract and migration drift, secret scan, bundle budget, licence check |
+| `ci.yml` | PR | Lint, typecheck, test, build, contract and migration drift, secret scan, bundle budget, [licence checks](licensing.md#what-ci-checks), and the DCO sign-off |
 | `preview.yml` | On demand | Deploy a preview installation with a test account |
 | `release.yml` | Tag | Build artifacts and release notes, with compatibility statement |
 | `managed-relay.yml` (managed only) | Tag, manual approval | Deploy the managed relay. Uses protected environment secrets |

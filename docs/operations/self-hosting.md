@@ -113,6 +113,16 @@ pnpm oc deploy --env production --security-contact mailto:security@company.com
 
 Problems in OpenChat's own code go to the project, as [SECURITY.md](../../SECURITY.md) describes, and the file says so.
 
+### If you changed the code
+
+OpenChat's server is under the AGPL, which asks that the people using a changed version be offered its source. Your dashboard's footer links to the source of the release you deployed. If you deploy changes, publish them, then point the link there:
+
+```bash
+pnpm oc deploy --env production --source-url https://git.company.com/openchat
+```
+
+`oc deploy` reminds you when the checkout differs from the release. See [licensing](licensing.md#the-source-offer).
+
 ## 5. Put the chat widget on your website
 
 1. In the dashboard, open **Workspaces**. Under **Workspace to manage**, choose yours.

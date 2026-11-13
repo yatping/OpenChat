@@ -128,6 +128,7 @@ CI runs secret scanning. `.dev.vars.example` contains placeholders only, and `.d
 - Message content is plain text, rendered escaped on every client. There is no HTML message type. Links are detected on display and get `rel="noopener noreferrer"`.
 - Email templates escape interpolated values.
 - `/.well-known/security.txt` names the operator, once one is set. See [Disclosure](#disclosure).
+- The discovery document publishes the deployed release, because the AGPL source offer needs it. That tells an attacker which release to probe. The trade-off is in [licensing](../operations/licensing.md#the-source-offer).
 
 ## Disclosure
 

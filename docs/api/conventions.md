@@ -42,11 +42,12 @@ Installations upgrade on their own schedule, and the official app must cope with
   "api": { "versions": ["v1"], "minor": 4 },
   "realtime": { "protocolVersions": [1] },
   "relay": { "id": "managed", "url": "https://relay.example.org", "bundleIds": ["org.example.app"], "publicKeys": [{ "id": "k1", "alg": "Ed25519", "key": "..." }] },
-  "auth": { "signup": "invite_only" }
+  "auth": { "signup": "invite_only" },
+  "software": { "name": "OpenChat", "version": "0.3.0", "license": "AGPL-3.0-or-later", "source": "https://github.com/yatping/OpenChat/tree/v0.3.0" }
 }
 ```
 
-The app reads this before showing a login form, and uses it to decide compatibility. It also gates features using `api.minor`.
+The app reads this before showing a login form, and uses it to decide compatibility. It also gates features using `api.minor`. `software` names the release and where its source is, which the AGPL asks an installation to offer its users; see [licensing](../operations/licensing.md#the-source-offer).
 
 ## Requests and responses
 

@@ -2,6 +2,7 @@
  * Release versions, for `oc upgrade`. The version is the root package.json's. A deployment made before
  * versions were recorded is taken to be 0.1.0, the first tagged release.
  */
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -13,6 +14,19 @@ export const UPGRADE_FROM_AT_LEAST = '0.1.0';
 export const UNRECORDED_VERSION = '0.1.0';
 
 export const releaseVersion = (root: string): string => (JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { version: string }).version;
+
+/**
+ * Whether `root` is the tagged release `v<version>` with no changes to tracked files. If it is not, the
+ * project's source at that tag is not the source being deployed. Untracked files, such as .openchat/, are ignored.
+ */
+export function releaseCheckout(root: string, version: string): boolean {
+  try {
+    const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    return git('tag', '--points-at', 'HEAD').split('\n').includes(`v${version}`) && git('status', '--porcelain', '--untracked-files=no') === '';
+  } catch {
+    return false;
+  }
+}
 
 const VERSION = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
 

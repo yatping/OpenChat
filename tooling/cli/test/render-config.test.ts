@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { mergeLimitFlags, mergeSecurityFlags, parseTemplate, renderConfig } from '../src/render-config';
+import { mergeLimitFlags, mergeSecurityFlags, mergeSourceFlag, parseTemplate, renderConfig } from '../src/render-config';
 
 const source = readFileSync(new URL('../../../services/api/wrangler.template.jsonc', import.meta.url), 'utf8');
 const state = { name: 'acme-prod', d1DatabaseId: '00000000-0000-0000-0000-000000000000' };
@@ -98,5 +98,19 @@ describe('security.txt settings', () => {
     expect(() => mergeSecurityFlags(undefined, 'security@example.com', undefined)).toThrow(/mailto: addresses or https:\/\/ URLs/);
     expect(() => mergeSecurityFlags(undefined, 'mailto:s@example.com', 'http://example.com')).toThrow(/https:\/\/ URL/);
     expect(() => mergeSecurityFlags(undefined, undefined, 'https://example.com/p')).toThrow(/needs --security-contact/);
+  });
+});
+
+describe('the source offer', () => {
+  it('renders the release and the source URL as Worker variables', () => {
+    expect(renderConfig(source, state, '.').vars ?? {}).not.toHaveProperty('OPENCHAT_VERSION');
+    expect(renderConfig(source, { ...state, sourceUrl: 'https://git.example.com/ours' }, '.', '0.3.0').vars).toMatchObject({ OPENCHAT_VERSION: '0.3.0', SOURCE_URL: 'https://git.example.com/ours' });
+  });
+
+  it('remembers --source-url, removes it with none, and refuses what is not https', () => {
+    expect(mergeSourceFlag(undefined, 'https://git.example.com/ours')).toBe('https://git.example.com/ours');
+    expect(mergeSourceFlag('https://git.example.com/ours', undefined)).toBe('https://git.example.com/ours');
+    expect(mergeSourceFlag('https://git.example.com/ours', 'none')).toBeUndefined();
+    expect(() => mergeSourceFlag(undefined, 'git@example.com:ours.git')).toThrow(/https:\/\/ URL/);
   });
 });

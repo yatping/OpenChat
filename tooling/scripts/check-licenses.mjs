@@ -1,46 +1,89 @@
-// Permissive packages must not depend on AGPL ones. See ADR-0011.
-import { readdirSync, readFileSync, existsSync } from 'node:fs';
+// Licence checks, after pnpm build. See ADR-0011 and docs/operations/licensing.md.
+//   1. Each workspace package has the licence ADR-0011 gives it, and the licence texts are present.
+//   2. A permissive package depends on no AGPL package, directly or through another workspace package.
+//   3. What each component ships from third parties is allowed by its licence: the widget and dashboard
+//      bundles as Vite lists them, the Workers as esbuild bundled them, and the app's production dependencies.
+import { execFileSync } from 'node:child_process';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { AGPL, APACHE, CONFIG_PACKAGES, EXCEPTIONS, licenseOf, packageOfPath, PERMISSIVE_PACKAGES, thirdPartyProblems, workspaceClosure } from './licenses.mjs';
 
-const AGPL = 'AGPL-3.0-or-later';
-const APACHE = 'Apache-2.0';
-const expected = {
-  '@openchat/widget': APACHE,
-  '@openchat/mobile': APACHE,
-  '@openchat/api-client': APACHE,
-  '@openchat/api-contracts': APACHE,
-  '@openchat/notification-protocol': APACHE,
-  '@openchat/shared': APACHE,
-};
+const problems = [];
+const readJson = (file) => JSON.parse(readFileSync(file, 'utf8'));
+
+for (const text of ['LICENSES/AGPL-3.0-or-later.txt', 'LICENSES/Apache-2.0.txt', 'LICENSE']) {
+  if (!existsSync(text)) problems.push(`${text} is missing`);
+}
 
 const packages = new Map();
 for (const group of ['apps', 'services', 'packages', 'tooling']) {
   for (const name of readdirSync(group)) {
     const file = join(group, name, 'package.json');
-    if (existsSync(file)) {
-      const json = JSON.parse(readFileSync(file, 'utf8'));
-      packages.set(json.name, json);
-    }
+    if (existsSync(file)) packages.set(readJson(file).name, readJson(file));
   }
 }
 
-const problems = [];
 for (const [name, json] of packages) {
-  const want = expected[name] ?? AGPL;
+  const want = PERMISSIVE_PACKAGES.has(name) ? APACHE : AGPL;
   if (json.license !== want) problems.push(`${name}: license is ${json.license}, expected ${want}`);
-  if (json.license === APACHE) {
-    // devDependencies are included: a build-time AGPL dependency in a permissive package is still
-    // a boundary violation worth a human decision. Only shared tooling config is exempt.
-    const deps = { ...json.dependencies, ...json.peerDependencies, ...json.devDependencies };
-    for (const dep of Object.keys(deps)) {
-      if (dep === '@openchat/tsconfig' || dep === '@openchat/eslint-config') continue;
-      if (packages.get(dep)?.license === AGPL) problems.push(`${name} (${APACHE}) depends on ${dep} (${AGPL})`);
+  // devDependencies count: a permissive package's bundle can include them.
+  if (want === APACHE) {
+    for (const dep of workspaceClosure(name, packages)) {
+      if (packages.get(dep).license === AGPL) problems.push(`${name} (${APACHE}) depends on ${dep} (${AGPL}), directly or through another package`);
     }
   }
+}
+for (const name of PERMISSIVE_PACKAGES) if (!packages.has(name)) problems.push(`${name} is listed as permissive but does not exist`);
+for (const name of CONFIG_PACKAGES) if (!packages.has(name)) problems.push(`${name} is listed as shared config but does not exist`);
+
+/** From Vite's build.license output. */
+function viteBundle(file) {
+  if (!existsSync(file)) {
+    problems.push(`${file} not found. Run pnpm build first.`);
+    return [];
+  }
+  return readJson(file).map((e) => ({ name: e.name, version: e.version, license: e.identifier ?? 'Unknown' }));
+}
+
+/** From esbuild's metafile, written by wrangler deploy --dry-run --metafile. Paths are relative to the Worker. */
+function workerBundle(serviceDir) {
+  const file = join(serviceDir, 'dist/bundle-meta.json');
+  if (!existsSync(file)) {
+    problems.push(`${file} not found. Run pnpm build first.`);
+    return [];
+  }
+  const found = new Map();
+  for (const input of Object.keys(readJson(file).inputs)) {
+    const pkg = packageOfPath(input);
+    if (!pkg || found.has(pkg.dir)) continue;
+    const json = readJson(join(serviceDir, pkg.dir, 'package.json'));
+    found.set(pkg.dir, { name: json.name ?? pkg.name, version: json.version, license: licenseOf(json) });
+  }
+  return [...found.values()];
+}
+
+/** The app's production dependencies, as pnpm lists them. More than ships, since it includes Expo's build tools. */
+function appDependencies() {
+  const listed = JSON.parse(execFileSync('pnpm', ['--filter', '@openchat/mobile', 'licenses', 'list', '--prod', '--json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] }));
+  return Object.entries(listed).flatMap(([license, list]) => list.flatMap((p) => p.versions.map((version) => ({ name: p.name, version, license }))));
+}
+
+const components = [
+  ['@openchat/widget', APACHE, [...viteBundle('apps/widget/dist/.vite/license-widget.json'), ...viteBundle('apps/widget/dist/.vite/license-chat.json')]],
+  ['@openchat/dashboard', AGPL, viteBundle('apps/dashboard/dist/.vite/license.json')],
+  ['@openchat/api', AGPL, workerBundle('services/api')],
+  ['@openchat/notification-relay', AGPL, workerBundle('services/notification-relay')],
+  ['@openchat/mobile', APACHE, appDependencies()],
+];
+let shipped = 0;
+for (const [component, license, entries] of components) {
+  shipped += entries.length;
+  problems.push(...thirdPartyProblems(component, license, entries));
 }
 
 if (problems.length > 0) {
   console.error(problems.join('\n'));
+  console.error('\nSee docs/operations/licensing.md. A third-party exception needs a reason, in tooling/scripts/licenses.mjs.');
   process.exit(1);
 }
-console.log(`Licences OK across ${packages.size} packages.`);
+console.log(`Licences OK: ${packages.size} workspace packages, ${shipped} third-party packages across ${components.length} components, ${Object.keys(EXCEPTIONS).length} exception(s).`);
