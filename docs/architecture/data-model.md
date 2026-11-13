@@ -203,7 +203,7 @@ A migration and a Worker deploy are not atomic, and rollback restores code but n
 
 **Self-hosted upgrades.** Customers may skip versions, so migrations always run in order and contract steps are never squashed into the expand release. The compatibility window is documented per release.
 
-**Safety.** The deploy CLI records `wrangler d1 time-travel info` output before applying migrations, and prints the restore command. Restores are destructive and also discard messages written since that point, so they are a last resort. Prefer forward fixes.
+**Safety.** The deploy CLI records `wrangler d1 time-travel info` output before applying migrations, and prints the restore command. Restores discard messages written since that point, so they are a last resort. Prefer forward fixes. `oc backup` and `oc restore` are in [backup and restore](../operations/backup-and-restore.md).
 
 **Failure behaviour.** Cloudflare's documentation does not state whether a failed migration file rolls back, so S4 tests this. Until confirmed, migrations are single-purpose and small.
 

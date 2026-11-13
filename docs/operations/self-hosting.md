@@ -280,6 +280,8 @@ pnpm oc relay deploy --env production     # path 2 only
 
 To check on it at any time, `pnpm oc health --env production` reads the [health checks](monitoring.md), which also says what to alert on.
 
+D1 keeps 30 days of history by itself. For longer, run `pnpm oc backup --env production` on a schedule, and keep the files encrypted, away from Cloudflare. See [backup and restore](backup-and-restore.md).
+
 For path 2, rebuild your app only when the release notes say the app changed. For path 1, the official app updates through the App Store.
 
 ## When something goes wrong

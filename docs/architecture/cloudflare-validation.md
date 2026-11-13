@@ -45,6 +45,9 @@ Spike results are in [Phase 0 spike results](#phase-0-spike-results).
 | Foreign keys | Enforced by default; `PRAGMA defer_foreign_keys` available, ends with the transaction | Documented |
 | Migrations | Tracked in `d1_migrations`; nested layouts through `migrations_pattern`. A failing file left nothing behind and was not recorded as applied, though the docs do not promise this | Documented, and **Tested** once in S4 |
 | Time Travel | 30 days Paid, 7 days Free. Restore is destructive but reversible | Documented |
+| `wrangler d1 export` | Writes each table's rows after its `CREATE TABLE`, alphabetically, so the file does not load when a table refers to one later in the alphabet. A remote import also refused a larger file whose child rows came before their parents, despite `defer_foreign_keys`. `oc backup` exports schema and data apart, and orders rows parent first. Line breaks in values are written as `char(10)`, one statement to a line | Measured 2026-11-13, Wrangler 4.157.0. See [backup and restore](../operations/backup-and-restore.md#why-not-wranglers-export-as-it-is) |
+| Compound `SELECT` | A `UNION ALL` of 31 `SELECT`s failed with `too many terms in compound SELECT`, in local D1. `oc backup` counts tables with scalar subqueries instead, 50 to a query | Measured 2026-11-13 |
+| D1 Time Travel restore | 8 seconds for a small database, through `oc restore`. Undoing with the bookmark from before it worked | Measured 2026-11-13 |
 | `INSERT ... SELECT ... ON CONFLICT DO NOTHING` idempotent write | Works | **Tested** on real D1 in S4 |
 | Composite foreign keys blocking cross-tenant references | Works | Tested on SQLite, including cascades |
 | Index plans for inbox and history queries | No sort, no scan | Tested on SQLite |

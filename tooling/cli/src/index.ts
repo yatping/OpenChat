@@ -19,6 +19,14 @@ function usage(): never {
   pnpm oc rollback --env <name>     puts back the Worker from before the last upgrade
   pnpm oc recover --env <name> --email <address>
   pnpm oc health --env <name>       the operator health checks, with the token oc deploy kept
+  pnpm oc backup --env <name> [--out <directory>]
+                                    exports the database to this computer, and checks the export loads
+  pnpm oc restore --env <name> --confirm <name> (--bookmark <bookmark> | --timestamp <time>)
+                                    Time Travel, in place, within 30 days. Prints how to undo it
+  pnpm oc restore --env <name> --confirm <name> --from <backup.sql>
+                                    into a new database, which the Worker then uses. The old one is kept
+  pnpm oc restore --env <name> --confirm <name> --database <name>
+                                    back to a database kept by an earlier restore
   pnpm oc render --env <name> --service <api|notification-relay>
 
 Your own notification relay, for your own iOS app and APNs key:
@@ -147,6 +155,21 @@ async function main(name: string) {
   if (command === 'rollback') return deployer.rollback(name);
   if (command === 'health') {
     if (!(await deployer.health(name))) process.exitCode = 1;
+    return;
+  }
+  if (command === 'backup') {
+    await deployer.backup(name, { out: userPath(flag('out')) });
+    return;
+  }
+  if (command === 'restore') {
+    const confirm = flag('confirm');
+    const [bookmark, timestamp, from, database] = [flag('bookmark'), flag('timestamp'), userPath(flag('from')), flag('database')];
+    const given = [bookmark, timestamp, from, database].filter((v) => v !== undefined);
+    if (given.length !== 1) usage();
+    if (bookmark) await deployer.restore(name, { confirm, bookmark });
+    else if (timestamp) await deployer.restore(name, { confirm, timestamp });
+    else if (from) await deployer.restore(name, { confirm, from });
+    else await deployer.restore(name, { confirm, database: database! });
     return;
   }
   if (command === 'recover') {
