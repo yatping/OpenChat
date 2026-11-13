@@ -12,7 +12,8 @@ Please include what is affected, how to reproduce it, and what an attacker could
 
 | In scope | Where to report |
 |---|---|
-| The code in this repository: the API Worker, the dashboard, the website widget, the iOS app, the notification relay, the CLI | Here |
+| The code in this repository: the API Worker, the dashboard, the website widget, the CLI, and the server's side of push | Here |
+| The official OpenChat iPhone app | Here |
 | The managed notification relay, `openchat-relay.orangolabs.com`, run by Orango Labs | Here |
 | An OpenChat installation that someone else runs, such as a company's support chat | **Its operator**, at `/.well-known/security.txt` on its address, if it has one. If the cause is in OpenChat's code, report that here too |
 

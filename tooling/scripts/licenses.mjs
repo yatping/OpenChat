@@ -4,7 +4,7 @@ export const AGPL = 'AGPL-3.0-or-later';
 export const APACHE = 'Apache-2.0';
 
 /** Packages under Apache-2.0. Every other workspace package is AGPL-3.0-or-later. */
-export const PERMISSIVE_PACKAGES = new Set(['@openchat/widget', '@openchat/mobile', '@openchat/api-client', '@openchat/api-contracts', '@openchat/notification-protocol', '@openchat/shared']);
+export const PERMISSIVE_PACKAGES = new Set(['@openchat/widget', '@openchat/api-client', '@openchat/api-contracts', '@openchat/notification-protocol', '@openchat/shared']);
 
 /** Shared build configuration, which ships in nothing. */
 export const CONFIG_PACKAGES = new Set(['@openchat/tsconfig', '@openchat/eslint-config']);

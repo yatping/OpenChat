@@ -55,15 +55,7 @@ The Workers' code is not distributed: it runs on Cloudflare for the operator. It
 
 ### The app's notices
 
-The app shows its notices under **Settings**, **About and licences**, with its own licence, a link to its source, and the server's source offer from discovery. The list is [`third-party-licenses.json`](../../apps/mobile/src/about/third-party-licenses.json), written by [`scripts/licenses.mjs`](../../apps/mobile/scripts/licenses.mjs) from three sources:
-
-| Source | Covers |
-|---|---|
-| The Metro bundle's source map, from `expo export` | The JavaScript packages in the app, and nothing that only builds it |
-| `ios/Podfile.lock`, each pod traced to its npm package | Native modules, such as Expo's, and React Native |
-| [`licenses/vendored/`](../../apps/mobile/licenses/vendored), copied from upstream at the versions React Native pins | Libraries React Native compiles in that are in no npm package: folly, boost, glog, fmt, double-conversion, fast_float and SocketRocket. Hermes's licence comes from its pod |
-
-Run `pnpm --filter @openchat/mobile licenses` after `expo prebuild`, on a Mac, whenever the app's dependencies or React Native change, and commit the result. `fastlane ios release` and `device` refuse to build when it is out of date. When React Native is upgraded, check the versions in the script's `VENDORED` table against its podspecs.
+The iPhone app is not in this repository ([ADR-0019](../architecture/decisions/0019-app-and-relay-leave-open-source.md)). It shows its own notices under **Settings**, **About and licences**, with the server's source offer from discovery.
 
 ## The source offer
 

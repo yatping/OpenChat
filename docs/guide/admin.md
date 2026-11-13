@@ -74,4 +74,4 @@ Upgrades, backups, health checks and alerts are run from the computer you deploy
 
 - [Monitoring](../operations/monitoring.md): `pnpm oc health`, and what to alert on.
 - [Backup and restore](../operations/backup-and-restore.md): `pnpm oc backup` and `pnpm oc restore`.
-- [Upgrades](../operations/self-hosting.md#11-keep-it-up-to-date): `pnpm oc upgrade`, and `pnpm oc rollback`.
+- [Upgrades](../operations/self-hosting.md#7-keep-it-up-to-date): `pnpm oc upgrade`, and `pnpm oc rollback`.

@@ -2,12 +2,13 @@
 
 pnpm workspaces and Turborepo, per the spec. Differences from spec §12 are explained below the tree.
 
+The iOS app and the notification relay were in this repository until [ADR-0019](decisions/0019-app-and-relay-leave-open-source.md). They are now in a private repository, which uses the packages they share with the server through a Git submodule of this one.
+
 ```text
 openchat/
 ├── apps/
 │   ├── dashboard/                React + Vite SPA. Built output served by the Installation Worker.
-│   ├── widget/                   Loader (vanilla) + chat UI (Preact). Same.
-│   └── mobile/                   Expo app. Not part of the JS library graph for Workers.
+│   └── widget/                   Loader (vanilla) + chat UI (Preact). Same.
 │
 ├── services/
 │   ├── api/                      Installation Worker: composition root only.
@@ -16,10 +17,6 @@ openchat/
 │   │   ├── src/consumers/        Queue consumers: dispatch to modules
 │   │   ├── src/cron/             Sweeps
 │   │   └── wrangler.template.jsonc
-│   └── notification-relay/       Relay Worker: independent deployable.
-│       ├── src/{routes,consumers,durable-objects,apns}/
-│       ├── migrations/           The relay's own D1 schema
-│       └── wrangler.template.jsonc
 │
 ├── packages/
 │   ├── core/                     Installation domain modules. One directory per module, see below.
@@ -28,7 +25,7 @@ openchat/
 │   ├── database/                 Drizzle schema, migrations, scoped repositories
 │   ├── auth/                     Password hashing, tokens, RBAC policy. Pure functions.
 │   ├── api-contracts/            Zod schemas, route definitions, WebSocket frames, generated OpenAPI
-│   ├── api-client/               Typed client for the dashboard and mobile
+│   ├── api-client/               Typed client for the dashboard, and for the app in the private repository
 │   ├── notification-protocol/    Relay schemas, signature and grant functions. No dependencies on the installation.
 │   ├── shared/                   IDs, errors, logger, time. Runtime-agnostic, small.
 │   └── ui/                       Dashboard design system
@@ -37,10 +34,6 @@ openchat/
 │   ├── cli/                      Deploy and operator CLI
 │   ├── eslint-config/
 │   └── tsconfig/
-│
-├── deployment/
-│   ├── independent/              Public templates and guides for customer-owned relay and app
-│   └── managed/                  Non-secret managed relay configuration. Secrets live in CI.
 │
 ├── docs/                         Architecture, decisions, contracts, guides
 ├── .github/workflows/
@@ -53,7 +46,7 @@ openchat/
 | Spec | Here | Why |
 |---|---|---|
 | `services/realtime`, `services/email-worker` | `packages/realtime`, `packages/email` | Modular monolith ([ADR-0001](decisions/0001-worker-topology.md)) |
-| `infrastructure/migrations` | `packages/database/migrations`, `services/notification-relay/migrations` | Migrations sit beside the schema they belong to, and the two databases stay separate |
+| `infrastructure/migrations` | `packages/database/migrations` | Migrations sit beside the schema they belong to. The relay's are in the private repository, with the relay |
 | `infrastructure/cloudflare` | `wrangler.template.jsonc` in each service | Config stays with its Worker. The CLI renders it per deployment |
 | `infrastructure/scripts` | `tooling/cli` | A tested TypeScript CLI, not loose scripts |
 | (none) | `packages/core` | A home for domain logic that routes and consumers share |
@@ -84,10 +77,7 @@ services/api ──> packages/core ──> database, auth, realtime(types), emai
                                    v
                                  shared
 
-services/notification-relay ──> notification-protocol ──> shared
-
 apps/dashboard ──> api-client, ui, api-contracts, shared
-apps/mobile    ──> api-client, api-contracts, notification-protocol (types), shared
 apps/widget    ──> api-contracts (types only), shared (selected functions)
 ```
 
@@ -95,12 +85,12 @@ Enforced with `eslint-plugin-boundaries` or an equivalent rule in CI:
 
 | Rule | Reason |
 |---|---|
-| `services/notification-relay` imports only `notification-protocol` and `shared` | The relay must stay independent. It cannot gain access to conversation types by accident. |
+| `services/notification-relay`, in the private repository, imports only `notification-protocol` and `shared` | The relay must stay independent. It cannot gain access to conversation types by accident. The rule stays in `@openchat/eslint-config`, which that repository uses |
 | Nothing imports `packages/database/internal` except `packages/database` | Tenant isolation |
 | `apps/*` never import `packages/core`, `database`, `realtime`, or `email` | Server code must not reach clients |
 | Modules import each other only through `index.ts` | Keeps boundaries real |
 | `routes/` does not import `packages/database` | Handlers call modules |
-| `packages/shared` and `notification-protocol` use only Web-standard APIs | They run in Workers, browsers, and React Native |
+| `packages/shared` and `notification-protocol` use only Web-standard APIs | They run in Workers, browsers, and React Native, including in the private repository's app |
 | `apps/widget` imports contract types only, with `import type` | Zod must not enter the widget bundle. Enforced by a bundle size budget |
 | `packages/core` does not import `hono` or Cloudflare queue or Durable Object classes directly | Domain code talks to ports and stays testable |
 
@@ -121,8 +111,8 @@ The proposed split in [ADR-0011](decisions/0011-license-boundaries.md) follows p
 
 | Licence | Packages |
 |---|---|
-| AGPL-3.0 | `services/*`, `apps/dashboard`, `packages/core`, `realtime`, `email`, `database`, `auth`, `ui`, `tooling/cli` |
-| Permissive (proposed Apache-2.0) | `apps/widget`, `apps/mobile`, `api-client`, `api-contracts`, `notification-protocol`, `shared` |
+| AGPL-3.0 | `services/api`, `apps/dashboard`, `packages/core`, `realtime`, `email`, `database`, `auth`, `ui`, `tooling/cli` |
+| Permissive (proposed Apache-2.0) | `apps/widget`, `api-client`, `api-contracts`, `notification-protocol`, `shared` |
 
 ## Task graph
 

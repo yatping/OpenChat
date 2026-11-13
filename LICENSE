@@ -1,16 +1,19 @@
 OpenChat is distributed under more than one licence. Each package states its
 licence in the "license" field of its package.json.
 
-  AGPL-3.0-or-later   Server components: services/*, apps/dashboard,
+  AGPL-3.0-or-later   Server components: services/api, apps/dashboard,
                       packages/core, realtime, email, database, auth, ui,
                       tooling/*
                       Full text: LICENSES/AGPL-3.0-or-later.txt
 
-  Apache-2.0          Client components: apps/widget, apps/mobile,
+  Apache-2.0          Client components: apps/widget,
                       packages/api-client, api-contracts,
                       notification-protocol, shared
                       Full text: LICENSES/Apache-2.0.txt
 
 The reasons are recorded in docs/architecture/decisions/0011-license-boundaries.md.
+The iPhone app and the notification relay are no longer part of this repository.
+Copies of them from earlier commits keep the licences stated there. See
+docs/architecture/decisions/0019-app-and-relay-leave-open-source.md.
 Contributions are accepted under the same licence as the package they change,
 using the Developer Certificate of Origin. See CONTRIBUTING.md.

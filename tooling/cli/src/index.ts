@@ -3,8 +3,6 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createDeployer } from './deploy';
-import { createVariantWriter } from './app-variant';
-import { createRelayDeployer } from './relay';
 import { renderConfig, type DeploymentState } from './render-config';
 import { releaseVersion } from './releases';
 import { ABUSE_LIMITS } from '@openchat/shared';
@@ -30,27 +28,13 @@ function usage(): never {
                                     into a new database, which the Worker then uses. The old one is kept
   pnpm oc restore --env <name> --confirm <name> --database <name>
                                     back to a database kept by an earlier restore
-  pnpm oc render --env <name> --service <api|notification-relay>
-
-Your own notification relay, for your own iOS app and APNs key:
-  pnpm oc relay deploy --env <name> [--relay-id <id>] [--environment <production|sandbox>] [--location <hint>]
-                       [--security-contact <mailto:...|https://...>[,...] | none] [--security-policy <https://...>]
-  pnpm oc relay set-apns --env <name> --team-id <id> --key-id <id> --key-file <AuthKey.p8> --bundle-id <id>
-  pnpm oc relay allow --env <name> --installation <inst_...> [--remove]
-  pnpm oc relay block --env <name> --installation <inst_...> [--unblock]
-  pnpm oc relay erase --env <name> --installation <inst_...>
-  pnpm oc relay stats --env <name>
-  pnpm oc relay check --env <name>
-
-A white-label build of the iOS app, in apps/mobile/variants/<id>. Nothing in it is secret:
-  pnpm oc app variant --id <id> --name <app name> --bundle-id <id>
-                      (--relay-env <name> | --relay-url <https://...> --relay-id <id> | --no-push)
-                      [--color <#rrggbb>] [--icon <1024px.png>] [--splash <png>]
+  pnpm oc render --env <name>
 
 RESEND_API_KEY and TURNSTILE_SECRET_KEY are read from the environment, so that they stay out of shell history.
 TURNSTILE_SECRET_KEY needs --turnstile-site-key. Websites can then require Turnstile for new visitors.
 
-Push, on deploy. All three together, and remembered for later deploys. The signing key is generated once:
+Push to the iPhone app, on deploy, through a notification relay such as the managed one. All three together, and
+remembered for later deploys. The signing key is generated once:
   --relay-url <https://...> --relay-id <id> --relay-bundle-ids <a,b>
   --no-relay   takes it out again. Disconnect in the dashboard first, so that the relay erases its records.
 
@@ -72,68 +56,9 @@ if (command === 'preflight') {
   const ready = createDeployer(root).preflight({ analytics: rest.includes('--analytics'), emailFrom: flag('email-from'), publicUrl: flag('public-url'), cloudflareEmail: rest.includes('--cloudflare-email') });
   process.exit(ready ? 0 : 1);
 }
-if (command === 'app') {
-  const [id, appName, bundleId] = [flag('id'), flag('name'), flag('bundle-id')];
-  if (rest[0] !== 'variant' || !id || !appName || !bundleId) usage();
-  try {
-    createVariantWriter(root).create({
-      id,
-      appName,
-      bundleId,
-      relayEnv: flag('relay-env'),
-      relayUrl: flag('relay-url'),
-      relayId: flag('relay-id'),
-      noPush: rest.includes('--no-push'),
-      color: flag('color'),
-      icon: userPath(flag('icon')),
-      splash: userPath(flag('splash')),
-    });
-  } catch (error) {
-    console.error((error as Error).message);
-    process.exit(1);
-  }
-  process.exit(0);
-}
 if (!env) usage();
 
-async function relay(name: string) {
-  const relays = createRelayDeployer(root);
-  const sub = rest[0];
-  if (sub === 'deploy') return relays.deploy({ name, relayId: flag('relay-id'), location: flag('location'), environment: flag('environment'), securityContact: flag('security-contact'), securityPolicy: flag('security-policy') });
-  if (sub === 'set-apns') {
-    const [teamId, keyId, keyFile, bundleId] = [flag('team-id'), flag('key-id'), flag('key-file'), flag('bundle-id')];
-    if (!teamId || !keyId || !keyFile || !bundleId) usage();
-    return relays.setApns(name, { teamId, keyId, keyFile: userPath(keyFile)!, bundleId });
-  }
-  if (sub === 'allow') {
-    const installation = flag('installation');
-    if (!installation) usage();
-    return relays.allow(name, installation, rest.includes('--remove'));
-  }
-  if (sub === 'block') {
-    const installation = flag('installation');
-    if (!installation) usage();
-    return relays.block(name, installation, rest.includes('--unblock'));
-  }
-  if (sub === 'erase') {
-    const installation = flag('installation');
-    if (!installation) usage();
-    await relays.erase(name, installation);
-    return;
-  }
-  if (sub === 'stats') {
-    await relays.stats(name);
-    return;
-  }
-  if (sub === 'check') {
-    if (!(await relays.check(name))) process.exitCode = 1;
-    return;
-  }
-  usage();
-}
-
 async function main(name: string) {
-  if (command === 'relay') return relay(name);
   const deployer = createDeployer(root);
   if (command === 'deploy') {
     await deployer.deploy({
@@ -186,12 +111,11 @@ async function main(name: string) {
     return;
   }
   if (command !== 'render') usage();
-  const service = flag('service') ?? 'api';
   const dir = join(root, '.openchat', name);
   const state = JSON.parse(readFileSync(join(dir, 'state.json'), 'utf8')) as DeploymentState;
-  const serviceDir = join(root, 'services', service);
-  const out = join(dir, `${service}.wrangler.jsonc`);
-  const rendered = renderConfig(readFileSync(join(serviceDir, 'wrangler.template.jsonc'), 'utf8'), state, relative(dirname(out), serviceDir), service === 'api' ? releaseVersion(root) : undefined);
+  const serviceDir = join(root, 'services', 'api');
+  const out = join(dir, 'api.wrangler.jsonc');
+  const rendered = renderConfig(readFileSync(join(serviceDir, 'wrangler.template.jsonc'), 'utf8'), state, relative(dirname(out), serviceDir), releaseVersion(root));
   mkdirSync(dir, { recursive: true });
   writeFileSync(out, `${JSON.stringify(rendered, null, 2)}\n`);
   console.log(`Rendered ${relative(root, out)}`);

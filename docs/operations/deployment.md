@@ -20,7 +20,7 @@ Run `pnpm oc preflight` to check them. It only reads, and `oc deploy` runs the s
 | Analytics Engine | With `--analytics` | Enable once in the dashboard | Confirm yourself |
 | Custom domain | With `--public-url` | A zone on Cloudflare, attached to the Worker. A domain is recommended, but `workers.dev` also works | Confirm yourself |
 | Email | To deliver new account links and resets | Cloudflare Email Sending (a domain on Cloudflare DNS in this account, onboarded with `wrangler email sending enable <domain>`, and a login with `email_sending:write`). Without it, use `oc recover` | The domain is listed as onboarded |
-| Push | With `--relay-url`, `--relay-id`, and `--relay-bundle-ids`, all three together. The [managed relay](#managed-relay-project-operators) is open to any installation that proves control of its domain | Nothing for the managed relay, or an Apple Developer account for independent mode | Not checked yet |
+| Push | With `--relay-url`, `--relay-id`, and `--relay-bundle-ids`, all three together. The [managed relay](#push-notifications) is open to any installation that proves control of its domain | Nothing for the managed relay, or an Apple Developer account for independent mode | Not checked yet |
 
 A brand-new account has not been tried yet, so this list comes from Cloudflare's documentation and Wrangler's source, and may be incomplete.
 
@@ -145,60 +145,21 @@ A Worker version with a Durable Object migration that the old version lacks may 
 | `ci.yml` | PR | Lint, typecheck, test, build, contract and migration drift, secret scan, bundle budget, [licence checks](licensing.md#what-ci-checks), and the DCO sign-off |
 | `preview.yml` | On demand | Deploy a preview installation with a test account |
 | `release.yml` | Tag | Build artifacts and release notes, with compatibility statement |
-| `managed-relay.yml` (managed only) | Tag, manual approval | Deploy the managed relay. Uses protected environment secrets |
 
-Community forks can run all but the last. Nothing else depends on project-held credentials.
+Community forks can run all of them. None depends on project-held credentials.
 
-## Managed relay (project operators)
+## Push notifications
 
-Orango Labs runs it at `https://openchat-relay.orangolabs.com`, with the relay ID `managed`, on the same Cloudflare account as its other projects. That was the owner's choice on 2026-11-05, in place of a separate account, so everyone with access to that account can reach the APNs key.
+The iPhone app's notifications go through a notification relay, which holds the APNs key. The app and the relay are not open source ([ADR-0019](../architecture/decisions/0019-app-and-relay-leave-open-source.md)). The installation's side is: it registers phones with the relay, encrypts each notification to each phone, and signs every request. The protocol between them is in [the relay protocol](../notification-relay/protocol.md).
 
-- **Open mode, since 2026-11-12, by the owner's decision.** Any installation that proves control of its domain can register, within the [limits](../notification-relay/protocol.md#rate-limits). Legal review of the terms and privacy policy ([Q5](../architecture/open-questions.md)) is still outstanding.
-- **Security contact:** `SECURITY_CONTACT` in its `vars` is the project's advisory page, `https://github.com/yatping/OpenChat/security/advisories/new`, so `/.well-known/security.txt` on the relay points there.
-- **Limits** are Worker variables, listed in [Rate limits](../notification-relay/protocol.md#rate-limits). Set them in `vars` in the managed relay's configuration, and give one installation more with `RELAY_LIMIT_OVERRIDES`. Before opening the relay, also set a Cloudflare billing alert.
-- **Production APNs only**, because the key is production only. A relay serves one environment.
-- **Configuration** is in the operator's `.openchat/managed-relay/`, which Git ignores. Worker secrets cannot be read back, so `RELAY_TOKEN_KEY` and the operator token are kept with the signing keys. Losing `RELAY_TOKEN_KEY` means every device has to register again.
-- **To admit an installation:** nothing is needed in open mode. In private mode, add its ID, from its `/.well-known/openchat.json`, to `RELAY_ALLOWED_INSTALLATIONS`, and deploy the relay. Then deploy the installation with `--relay-url https://openchat-relay.orangolabs.com --relay-id managed --relay-bundle-ids com.orangolabs.openchat`.
-- **Monitoring:** `oc relay stats` gives counts: installations, blocked ones, devices, and the last day's notifications, delivered, refused by Apple, failed, and waiting over 10 minutes, with the five busiest installations. Nothing alerts on them yet, and APNs error reasons are not broken down.
-- **To cut off an installation**, in either mode: `oc relay block`. Every request it signs is then refused within 30 seconds, the key cache's lifetime. Its devices are kept, so `--unblock` restores it. Removing an ID from `RELAY_ALLOWED_INSTALLATIONS` alone does not do this, because the list is checked only at first registration. `oc relay allow --remove` does both.
-
-## Independent relay (customers)
-
-For an operator who ships their own iOS app with their own APNs key. The relay runs on your Cloudflare account, beside your installation, with no project-held credentials. It is always in private mode: it serves only the installations you admit.
+To use the official app, point the installation to the managed relay, which Orango Labs runs at `https://openchat-relay.orangolabs.com`:
 
 ```bash
-pnpm oc relay deploy --env production
-pnpm oc relay set-apns --env production \
-  --team-id ABCDE12345 --key-id KEY1234567 \
-  --key-file ./AuthKey_KEY1234567.p8 \
-  --bundle-id com.company.support
-pnpm oc relay allow --env production --installation inst_01JC...
+pnpm oc deploy --env production --relay-url https://openchat-relay.orangolabs.com \
+  --relay-id managed --relay-bundle-ids com.orangolabs.openchat
 ```
 
-| Command | Does |
-|---|---|
-| `relay deploy` | Creates `oc-<env>-relay` (a Worker and a D1 database) and the queues `oc-<env>-relay-delivery` and `-dlq`, applies migrations, deploys, and checks `/health`. Generates `RELAY_TOKEN_KEY`, which encrypts device tokens, and an operator token, each once. Picks rate limit namespace IDs that no other Worker on the account uses. Prints the relay URL and ID. Running it again redeploys, and resumes a run that failed |
-| `relay set-apns` | Reads the `.p8` file, checks that it looks like an APNs key, and sends it to Wrangler as the secret `APNS_PRIVATE_KEY` on stdin. It is never printed, and never written anywhere else. Then asks Apple about the key and prints the answer |
-| `relay allow` | Adds an installation ID, from that installation's `/.well-known/openchat.json`, and redeploys. `--remove` takes one away, and also blocks it, because the list alone is checked only when an installation first registers |
-| `relay block` | Refuses every request an installation signs, within 30 seconds. `--unblock` undoes it. Its devices are kept |
-| `relay erase` | Erases everything the relay holds about an installation, for an erasure request that reached you directly: its key, workspaces, subscriptions, delivery records, and devices left with no subscription. Takes it off the admitted list first. See [erasure](../notification-relay/protocol.md#6-erasure) |
-| `relay stats` | Counts only: installations, devices, and the last day's notifications by outcome, with the busiest installations |
-| `relay check` | Asks Apple about the key again |
-
-Options for `relay deploy`: `--relay-id` (default: the environment name; it cannot change later, because installations hold it), `--environment production|sandbox` (default `production`; a relay serves one), `--location`, and `--security-contact` and `--security-policy`, as for `oc deploy`.
-
-The relay's resource names do not clash with an installation's, so one environment name can hold both. What the CLI knows is in `.openchat/<env>/relay.json`, which Git ignores. The operator token is in `.openchat/<env>/relay-operator-token`, readable only by you. Worker secrets cannot be read back, and redeploys keep them.
-
-Then build your app per [the iOS guide](../ios-build/expo-and-white-label.md), and point the installation to the relay, with the URL and ID that `relay deploy` printed:
-
-```bash
-pnpm oc deploy --env production --relay-url https://oc-production-relay.<subdomain>.workers.dev \
-  --relay-id production --relay-bundle-ids com.company.support
-```
-
-Both Workers have `global_fetch_strictly_public`, so they reach each other on `workers.dev`. Without it, a Worker's `fetch` to another Worker on the same account fails with error 1042.
-
-The second acceptance journey in spec §20 is then tested in CI as far as is practical, using the mock transport, and manually against APNs for each release.
+The relay is in open mode: any installation that proves control of its domain can register, within the [limits](../notification-relay/protocol.md#rate-limits). Its [terms](../legal/relay-terms.md) and privacy policy are drafts awaiting legal review. `--no-relay` takes it out again; disconnect in the dashboard first, so that the relay erases its records.
 
 ## Operations
 

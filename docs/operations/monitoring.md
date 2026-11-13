@@ -99,6 +99,6 @@ Log lines never hold message content, tokens or personal data ([security](../arc
 ## Not covered
 
 - **Queue depth and age** come from Cloudflare's dashboard or GraphQL API, not from a check.
-- **The relay's own health** beyond `/health` is the relay operator's concern. Orango Labs watches the managed relay. A self-hosted relay has `pnpm oc relay check` and `pnpm oc relay stats`.
+- **The relay's own health** beyond `/health` is the relay operator's concern. Orango Labs watches the managed relay.
 - **Email delivery** is not checked. A bounce or a provider outage shows up as failed jobs.
 - **Metrics dashboards.** Analytics Engine records counts, if enabled with `--analytics`, but OpenChat has no ready-made dashboard over them.

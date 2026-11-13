@@ -33,7 +33,7 @@ A chat button for your website, a team inbox on the web and on iPhone, and follo
 
 - **Website widget.** About 2 KB to load, in eleven languages, with optional consent mode and Cloudflare Turnstile.
 - **Team inbox.** Live replies, internal notes, files, statuses, priorities, assignment and tags, across several workspaces.
-- **iPhone app**, with notifications end-to-end encrypted to each phone, so the relay that carries them cannot read them.
+- **The OpenChat iPhone app**, with notifications end-to-end encrypted to each phone, so the relay that carries them cannot read them. The app and the relay are not open source, but your installation works with them.
 - **Follow-up emails**, only with the visitor's consent, with an unsubscribe link.
 - **For operators:** one-command deploy and upgrade with rollback, backups, health checks, retention, data export and erasure, and an audit log.
 
@@ -52,4 +52,4 @@ A chat button for your website, a team inbox on the web and on iPhone, and follo
 
 ## Licence
 
-The server, dashboard and CLI are under AGPL-3.0-or-later. The widget, the iPhone app and the client libraries are under Apache-2.0. See [LICENSE](LICENSE) and [licensing](docs/operations/licensing.md). The original brief is in [REQUIREMENTS.md](REQUIREMENTS.md).
+The server, dashboard and CLI are under AGPL-3.0-or-later. The widget and the client libraries are under Apache-2.0. The iPhone app and the notification relay are not open source ([ADR-0019](docs/architecture/decisions/0019-app-and-relay-leave-open-source.md)); this repository has the server's side of push. See [LICENSE](LICENSE) and [licensing](docs/operations/licensing.md). The original brief is in [REQUIREMENTS.md](REQUIREMENTS.md).

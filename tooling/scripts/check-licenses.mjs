@@ -61,20 +61,10 @@ function workerBundle(serviceDir) {
   return [...found.values()];
 }
 
-/**
- * What is built into the app, from the list its licences screen shows. apps/mobile/scripts/licenses.mjs writes
- * it on a Mac, from the bundle and the pods, and the release build refuses to run if it is out of date.
- */
-function appPackages() {
-  return readJson('apps/mobile/src/about/third-party-licenses.json').map((e) => ({ name: e.name, version: e.version, license: e.license }));
-}
-
 const components = [
   ['@openchat/widget', APACHE, [...viteBundle('apps/widget/dist/.vite/license-widget.json'), ...viteBundle('apps/widget/dist/.vite/license-chat.json')]],
   ['@openchat/dashboard', AGPL, viteBundle('apps/dashboard/dist/.vite/license.json')],
   ['@openchat/api', AGPL, workerBundle('services/api')],
-  ['@openchat/notification-relay', AGPL, workerBundle('services/notification-relay')],
-  ['@openchat/mobile', APACHE, appPackages()],
 ];
 let shipped = 0;
 for (const [component, license, entries] of components) {

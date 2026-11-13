@@ -1,4 +1,4 @@
-/** How the CLI runs Wrangler. Shared by `oc deploy` and `oc relay`. */
+/** How the CLI runs Wrangler. Used by `oc deploy`, and by the private repository's `ocp relay`. */
 import { execFileSync } from 'node:child_process';
 
 export type RunWrangler = (args: string[], options?: { input?: string; ci?: boolean }) => string;
