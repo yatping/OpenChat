@@ -6,6 +6,7 @@ import { ApiError, type Conversation, type Me, type Member, type Message } from 
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api, errorMessage } from '../app-context';
+import { Icon, Initials } from '../icons';
 import { createRealtime, type Realtime, type RealtimeStatus, type ServerFrame } from '@openchat/api-client/realtime';
 import {
   applyPatch,
@@ -184,7 +185,7 @@ function useInboxSocket(workspaceId: string, selectedRef: { current: string | nu
 function ConnectionNotice({ status }: { status: RealtimeStatus }) {
   if (status === 'connected' || status === 'connecting') return null;
   return (
-    <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200" role="status">
+    <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200" role="status">
       {status === 'polling' ? 'Live updates are unavailable, so this page refreshes every 30 seconds. Sending still works.' : 'Reconnecting. Sending still works.'}
     </p>
   );
@@ -203,8 +204,8 @@ function ConversationList(props: { workspaceId: string; memberId: string; select
   });
   const rows = list.data?.pages.flatMap((page) => page.data) ?? [];
   return (
-    <section aria-label="Conversations" className={`min-w-0 space-y-3 md:block md:w-80 md:shrink-0 ${props.hidden ? 'hidden' : ''}`}>
-      <div className="flex gap-2">
+    <section aria-label="Conversations" className={`min-w-0 flex-1 flex-col md:flex md:w-80 md:flex-none md:border-r md:border-slate-200 md:dark:border-slate-800 ${props.hidden ? 'hidden' : 'flex'}`}>
+      <div className="flex gap-2 border-b border-slate-200 p-3 dark:border-slate-800">
         <select className="field" aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value as Conversation['status'])}>
           {STATUSES.map((option) => <option key={option} value={option}>{option}</option>)}
         </select>
@@ -214,33 +215,41 @@ function ConversationList(props: { workspaceId: string; memberId: string; select
           <option value="none">Unassigned</option>
         </select>
       </div>
-      {list.error ? <p className="error" role="alert">{errorMessage(list.error)}</p> : null}
-      {list.isPending && <p className="text-sm" role="status">Loading…</p>}
-      {list.data && rows.length === 0 && <p className="text-sm text-slate-600 dark:text-slate-400">No conversations here.</p>}
-      <ul className="space-y-1">
+      {list.error ? <p className="error m-3" role="alert">{errorMessage(list.error)}</p> : null}
+      {list.isPending && <p className="p-4 text-sm" role="status">Loading…</p>}
+      {list.data && rows.length === 0 && (
+        <div className="flex flex-col items-center gap-2 px-4 py-10 text-center text-sm text-slate-600 dark:text-slate-400">
+          <Icon name="chat" className="size-8 text-slate-300 dark:text-slate-700" />
+          No conversations here.
+        </div>
+      )}
+      <ul className="flex-1 space-y-0.5 overflow-y-auto p-2">
         {rows.map((row) => {
           const unread = unreadCount(row);
           return (
             <li key={row.id}>
               <button
-                className={`flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800 ${selected === row.id ? 'bg-slate-200 dark:bg-slate-800' : ''}`}
+                className={`flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${selected === row.id ? 'bg-brand-50 dark:bg-slate-800' : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'}`}
                 aria-current={selected === row.id ? 'true' : undefined}
                 onClick={() => onSelect(row.id)}
               >
-                <span className={`size-2 shrink-0 rounded-full ${visitorsOnline.has(row.id) ? 'bg-green-600' : 'bg-transparent'}`} aria-hidden="true" />
+                <span className="relative" aria-hidden="true">
+                  <span className="avatar"><Initials name={row.contactName ?? row.contactEmail} /></span>
+                  {visitorsOnline.has(row.id) && <span className="absolute -right-0.5 -bottom-0.5 size-3 rounded-full border-2 border-white bg-green-500 dark:border-slate-900" />}
+                </span>
                 <span className="min-w-0 flex-1">
                   <span className={`block truncate ${unread > 0 ? 'font-semibold' : ''}`}>{label(row)}</span>
                   {row.subject && <span className="block truncate text-xs text-slate-600 dark:text-slate-400">{row.subject}</span>}
                   {row.tags.length > 0 && <span className="block truncate text-xs text-slate-600 dark:text-slate-400">{row.tags.map((tag) => tag.name).join(', ')}</span>}
                 </span>
-                {row.priority === 'urgent' || row.priority === 'high' ? <span className="text-xs font-medium text-red-700 dark:text-red-400">{row.priority}</span> : null}
-                {unread > 0 && <span className="rounded-full bg-blue-700 px-2 text-xs text-white">{unread}<span className="sr-only"> unread</span></span>}
+                {row.priority === 'urgent' || row.priority === 'high' ? <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-950 dark:text-red-300">{row.priority}</span> : null}
+                {unread > 0 && <span className="min-w-5 rounded-full bg-brand-600 px-1.5 text-center text-xs leading-5 font-semibold text-white">{unread}<span className="sr-only"> unread</span></span>}
               </button>
             </li>
           );
         })}
       </ul>
-      {list.hasNextPage && <button className="button-quiet w-full" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>Load more</button>}
+      {list.hasNextPage && <button className="button-quiet m-2" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>Load more</button>}
     </section>
   );
 }
@@ -303,8 +312,8 @@ function MessageBubble({ message }: { message: Message }) {
   const sender = message.sender.type === 'visitor' ? 'Visitor' : message.sender.type === 'system' ? 'System' : `${message.sender.displayName ?? 'Agent'}${message.sender.removed ? ' (Removed)' : ''}`;
   return (
     <li className={`flex ${fromTeam ? 'justify-end' : 'justify-start'}`} data-seq={message.seq}>
-      <div className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${note ? 'border border-amber-400 bg-amber-50 text-amber-950 dark:bg-amber-950 dark:text-amber-100' : fromTeam ? 'bg-blue-700 text-white' : 'bg-slate-200 dark:bg-slate-800'}`}>
-        <div className="mb-1 text-xs opacity-80">
+      <div className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm shadow-sm ${note ? 'border border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100' : fromTeam ? 'rounded-br-md bg-brand-600 text-white' : 'rounded-bl-md bg-white text-slate-900 dark:bg-slate-800 dark:text-slate-100'}`}>
+        <div className="mb-1 text-xs opacity-85">
           {note ? `Internal note from ${sender}. The visitor cannot see this.` : sender} · <time dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time>
         </div>
         {message.content && <div className="break-words whitespace-pre-wrap">{message.content}</div>}
@@ -363,18 +372,18 @@ function Composer(props: { workspaceId: string; conversationId: string; drafts: 
   const note = mode === 'internal_note';
   return (
     <form
-      className={`space-y-2 rounded-lg border p-3 ${note ? 'border-amber-400 bg-amber-50 dark:bg-amber-950' : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'}`}
+      className={`space-y-2 border-t p-3 ${note ? 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950' : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'}`}
       onSubmit={(event) => {
         event.preventDefault();
         submit();
       }}
     >
-      <div className="flex gap-2" role="group" aria-label="Kind of message">
-        <button type="button" className={note ? 'button-quiet' : 'button'} aria-pressed={!note} onClick={() => setMode('text')}>Reply</button>
-        <button type="button" className={note ? 'button' : 'button-quiet'} aria-pressed={note} onClick={() => setMode('internal_note')}>Internal note</button>
+      <div className="tabs" role="group" aria-label="Kind of message">
+        <button type="button" className="tab" aria-pressed={!note} onClick={() => setMode('text')}>Reply</button>
+        <button type="button" className="tab" aria-pressed={note} onClick={() => setMode('internal_note')}>Internal note</button>
       </div>
       <textarea
-        className="field"
+        className="field resize-none"
         rows={3}
         maxLength={16000}
         aria-label={note ? 'Internal note' : 'Reply'}
@@ -408,9 +417,15 @@ function Composer(props: { workspaceId: string; conversationId: string; drafts: 
           {uploading > 0 && <li className="px-2 py-1" role="status">Uploading…</li>}
         </ul>
       )}
-      <div className="flex gap-2">
-        <button className="button" disabled={send.isPending || uploading > 0 || (!draft.trim() && files.length === 0)}>{note ? 'Add note' : 'Send reply'}</button>
-        <button type="button" className="button-quiet" onClick={() => picker.current?.click()}>Attach a file</button>
+      <div className="flex flex-row-reverse items-center gap-2">
+        <button className="button" disabled={send.isPending || uploading > 0 || (!draft.trim() && files.length === 0)}>
+          <Icon name="send" className="size-4" />
+          {note ? 'Add note' : 'Send reply'}
+        </button>
+        <button type="button" className="button-quiet mr-auto border-transparent bg-transparent dark:bg-transparent" onClick={() => picker.current?.click()}>
+          <Icon name="attach" className="size-4" />
+          Attach a file
+        </button>
         <input
           ref={picker}
           type="file"
@@ -628,14 +643,24 @@ function Thread(props: { workspaceId: string; conversationId: string; members: M
   const data = conversation.data;
   const conflict = update.error instanceof ApiError && update.error.status === 409;
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-6 lg:flex-row">
-    <section aria-label="Conversation" className="flex min-w-0 flex-1 flex-col gap-3">
-      <button className="button-quiet self-start md:hidden" onClick={props.onBack}>Back to the list</button>
+    <div className="flex min-w-0 flex-1 flex-col lg:flex-row">
+    <section aria-label="Conversation" className="flex min-w-0 flex-1 flex-col">
+      <button className="button-quiet m-3 mb-0 self-start md:hidden" onClick={props.onBack}>
+        <Icon name="back" className="size-4" />
+        Back to the list
+      </button>
       {data && (
-        <header className="space-y-2">
-          <h2 className="font-medium">
-            {label(data)} <span className="text-xs font-normal text-slate-600 dark:text-slate-400">{props.visitorOnline ? 'Online now' : ''}</span>
-          </h2>
+        <header className="space-y-3 border-b border-slate-200 p-4 dark:border-slate-800">
+          <div className="flex items-center gap-3">
+            <span className="avatar size-10 text-sm" aria-hidden="true"><Initials name={data.contactName ?? data.contactEmail} /></span>
+            <h2 className="min-w-0 font-semibold">
+              <span className="block truncate">{label(data)}</span>
+              <span className="flex items-center gap-1.5 text-xs font-normal text-slate-600 dark:text-slate-400">
+                <span className={`size-2 rounded-full ${props.visitorOnline ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600'}`} aria-hidden="true" />
+                {props.visitorOnline ? 'Online now' : 'Offline'}
+              </span>
+            </h2>
+          </div>
           <div className="flex flex-wrap gap-2">
             <select className="field w-auto" aria-label="Conversation status" value={data.status} disabled={update.isPending} onChange={(e) => update.mutate({ status: e.target.value as Conversation['status'] })}>
               {STATUSES.map((option) => <option key={option} value={option}>{option}</option>)}
@@ -651,27 +676,27 @@ function Thread(props: { workspaceId: string; conversationId: string; members: M
           {update.error ? <p className="error" role="alert">{conflict ? 'This conversation just changed. Check it and try again.' : errorMessage(update.error)}</p> : null}
         </header>
       )}
-      {conversation.error ? <p className="error" role="alert">{errorMessage(conversation.error)}</p> : null}
-      {messages.error ? <p className="error" role="alert">{errorMessage(messages.error)}</p> : null}
+      {conversation.error ? <p className="error m-3" role="alert">{errorMessage(conversation.error)}</p> : null}
+      {messages.error ? <p className="error m-3" role="alert">{errorMessage(messages.error)}</p> : null}
       <div
         ref={scroller}
-        className="card max-h-[60vh] min-h-64 flex-1 overflow-y-auto"
+        className="max-h-[60vh] min-h-64 flex-1 overflow-y-auto bg-slate-50 p-4 dark:bg-slate-950"
         onScroll={(event) => {
           const element = event.currentTarget;
           atBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 48;
         }}
       >
-        {rows.length > 0 && (rows[0]?.seq ?? 1) > 1 && !noMoreHistory && <button className="button-quiet mb-3" disabled={older.isPending} onClick={() => older.mutate()}>Load earlier messages</button>}
+        {rows.length > 0 && (rows[0]?.seq ?? 1) > 1 && !noMoreHistory && <button className="button-quiet mx-auto mb-3 flex" disabled={older.isPending} onClick={() => older.mutate()}>Load earlier messages</button>}
         {/* Polite, so a screen reader reads a new message once it finishes what it is saying, as the widget does. */}
-        <ol className="space-y-2" aria-label="Messages" aria-live="polite">
+        <ol className="space-y-3" aria-label="Messages" aria-live="polite">
           {rows.map((message) => <MessageBubble key={message.id} message={message} />)}
         </ol>
       </div>
-      <p className="min-h-5 text-xs text-slate-600 dark:text-slate-400" aria-live="polite">{typists.length > 0 ? `${typists.join(', ')} ${typists.length > 1 ? 'are' : 'is'} typing…` : ''}</p>
+      <p className="min-h-6 bg-slate-50 px-4 py-1 text-xs text-slate-600 dark:bg-slate-950 dark:text-slate-400" aria-live="polite">{typists.length > 0 ? `${typists.join(', ')} ${typists.length > 1 ? 'are' : 'is'} typing…` : ''}</p>
       <Composer key={conversationId} workspaceId={workspaceId} conversationId={conversationId} drafts={drafts} realtime={realtime} />
     </section>
     {data && (
-      <aside className="space-y-4 lg:w-64 lg:shrink-0">
+      <aside className="space-y-4 border-t border-slate-200 bg-slate-50/60 p-4 lg:w-72 lg:shrink-0 lg:border-t-0 lg:border-l dark:border-slate-800 dark:bg-slate-900/40">
         <ContactCard key={data.contactId} workspaceId={workspaceId} contactId={data.contactId} onErased={props.onBack} />
         <TagPicker workspaceId={workspaceId} conversation={data} />
       </aside>
@@ -689,10 +714,10 @@ export function InboxPanel({ membership, members }: { membership: Membership; me
   const { status, typing, visitorsOnline, membersOnline, realtime } = useInboxSocket(workspaceId, selectedRef);
   const online = members.filter((m) => m.id !== membership.memberId && membersOnline.has(m.id));
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <ConnectionNotice status={status} />
       {online.length > 0 && <p className="text-xs text-slate-600 dark:text-slate-400">Also online: {online.map((m) => m.name).join(', ')}</p>}
-      <div className="flex gap-6">
+      <div className="flex min-h-[min(720px,calc(100dvh-11rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-900/5 dark:border-slate-800 dark:bg-slate-900">
         <ConversationList workspaceId={workspaceId} memberId={membership.memberId} selected={selected} onSelect={setSelected} visitorsOnline={visitorsOnline} hidden={selected !== null} />
         {selected ? (
           <Thread
@@ -707,7 +732,10 @@ export function InboxPanel({ membership, members }: { membership: Membership; me
             onBack={() => setSelected(null)}
           />
         ) : (
-          <p className="hidden flex-1 text-sm text-slate-600 md:block dark:text-slate-400">Choose a conversation.</p>
+          <div className="hidden flex-1 flex-col items-center justify-center gap-3 bg-slate-50 p-8 text-center text-sm text-slate-600 md:flex dark:bg-slate-950 dark:text-slate-400">
+            <img className="size-16 opacity-90" src="/brand/mark-128.png" width={64} height={64} alt="" />
+            Choose a conversation.
+          </div>
         )}
       </div>
     </div>

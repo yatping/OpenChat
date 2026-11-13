@@ -39,7 +39,7 @@ const WIDGET_LANGUAGES = [
 ] as const;
 
 /** What a colour input must show when nothing has been chosen. Saved only if someone chooses it. */
-const DEFAULT_WIDGET_COLOR = '#2563eb';
+const DEFAULT_WIDGET_COLOR = '#0a57f5';
 
 function WidgetSettingsForm({ website, workspaceId }: { website: Website; workspaceId: string }) {
   const client = useQueryClient();

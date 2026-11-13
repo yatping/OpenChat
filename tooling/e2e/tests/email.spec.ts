@@ -4,7 +4,7 @@ import { signIn } from './helpers';
 
 test('a supervisor can keep an address from being emailed', async ({ page }) => {
   await signIn(page, OWNER);
-  await page.getByRole('navigation', { name: 'Sections' }).getByRole('button', { name: 'email' }).click();
+  await page.getByRole('navigation', { name: 'Sections' }).getByRole('button', { name: 'Email', exact: true }).click();
   const address = `blocked-${Date.now()}@example.com`;
   const list = page.getByRole('region', { name: 'Addresses not to email' });
   await list.getByLabel('Email address').fill(address);
@@ -17,7 +17,7 @@ test('a supervisor can keep an address from being emailed', async ({ page }) => 
 
 test('a supervisor can add, turn off, and delete a follow-up rule', async ({ page }) => {
   await signIn(page, OWNER);
-  await page.getByRole('navigation', { name: 'Sections' }).getByRole('button', { name: 'email' }).click();
+  await page.getByRole('navigation', { name: 'Sections' }).getByRole('button', { name: 'Email', exact: true }).click();
   const panel = page.getByRole('region', { name: 'Follow-up emails' });
   const name = `Rule ${Date.now()}`;
   await panel.getByLabel('Rule name').fill(name);

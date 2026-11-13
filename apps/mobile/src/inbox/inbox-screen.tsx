@@ -5,7 +5,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useLayoutEffect, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Body, Problem, useTheme } from '../ui/kit';
+import { Avatar, Body, Problem, useTheme } from '../ui/kit';
 import { listKey } from './cache';
 import { useWorkspace, type Routes } from './connected-app';
 import { conversationLabel, shortTime } from './format';
@@ -24,8 +24,8 @@ const ASSIGNEES = [
 function Pill({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
   const theme = useTheme();
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected }} onPress={onPress} style={[styles.pill, { backgroundColor: selected ? theme.primary : theme.surface }]}>
-      <Text style={{ color: selected ? theme.onPrimary : theme.text, fontWeight: '600' }}>{label}</Text>
+    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected }} onPress={onPress} style={[styles.pill, { backgroundColor: selected ? theme.primary : theme.soft }]}>
+      <Text style={{ color: selected ? theme.onPrimary : theme.primary, fontWeight: '600' }}>{label}</Text>
     </Pressable>
   );
 }
@@ -92,10 +92,10 @@ export function InboxScreen() {
               accessibilityRole="button"
               accessibilityLabel={`${name}${unread > 0 ? `, ${unread} unread` : ''}${online ? ', online now' : ''}`}
               onPress={() => navigation.navigate('Conversation', { conversationId: item.id })}
-              style={({ pressed }) => [styles.row, { borderBottomColor: theme.border, backgroundColor: pressed ? theme.surface : theme.background }]}
+              style={({ pressed }) => [styles.row, { borderBottomColor: theme.border, backgroundColor: pressed ? theme.soft : theme.background }]}
             >
-              <View style={[styles.dot, { backgroundColor: online ? '#16a34a' : 'transparent' }]} />
-              <View style={{ flex: 1 }}>
+              <Avatar name={item.contactName ?? item.contactEmail} online={online} />
+              <View style={{ flex: 1, gap: 2 }}>
                 <Text numberOfLines={1} style={{ fontSize: 16, color: theme.text, fontWeight: unread > 0 ? '700' : '400' }}>{name}</Text>
                 {item.tags.length > 0 && <Text numberOfLines={1} style={{ fontSize: 13, color: theme.muted }}>{item.tags.map((tag) => tag.name).join(', ')}</Text>}
               </View>
@@ -113,7 +113,6 @@ const styles = StyleSheet.create({
   filters: { flexGrow: 0 },
   filterRow: { paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
   pill: { paddingHorizontal: 14, minHeight: 36, borderRadius: 18, justifyContent: 'center' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, minHeight: 60, borderBottomWidth: StyleSheet.hairlineWidth },
-  dot: { width: 8, height: 8, borderRadius: 4 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, minHeight: 72, borderBottomWidth: StyleSheet.hairlineWidth },
   badge: { minWidth: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
 });

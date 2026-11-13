@@ -82,7 +82,7 @@ export function createVariantWriter(root: string, log: (line: string) => void = 
       const appName = options.appName.trim();
       if (appName.length === 0 || appName.length > 30 || !/[A-Za-z0-9]/.test(appName)) throw new Error('--name is 1 to 30 characters, with at least one letter or number');
       if (!BUNDLE_ID.test(options.bundleId)) throw new Error('--bundle-id looks like com.company.support');
-      const color = options.color ?? '#2563eb';
+      const color = options.color ?? '#eef3ff';
       if (!COLOR.test(color)) throw new Error('--color is a colour such as #0f766e');
       const relay = relayFor(options);
       if (options.icon) checkImage(options.icon, '--icon', true);

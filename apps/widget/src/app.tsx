@@ -188,7 +188,9 @@ function Composer({ controller, canAttach, maxChars }: { controller: Controller;
           />
         </>
       )}
-      <button class="oc-send" disabled={!text.trim()}>{S.send}</button>
+      <button class="oc-send" aria-label={S.send} disabled={!text.trim()}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z" /></svg>
+      </button>
     </form>
   );
 }
@@ -272,9 +274,12 @@ export function App({
       }}
     >
       <header class="oc-head">
+        <span class="oc-face" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 3C6.9 3 3 6.5 3 10.9c0 2.3 1.1 4.4 2.9 5.9L5 21l4.6-2.3c.8.2 1.6.3 2.4.3 5.1 0 9-3.5 9-8.1S17.1 3 12 3z" /></svg>
+        </span>
         <div>
           <h2>{S.title}</h2>
-          <p role="status">{presence}</p>
+          <p role="status" class={presence === S.online ? 'on' : undefined}>{presence}</p>
         </div>
         <button
           type="button"

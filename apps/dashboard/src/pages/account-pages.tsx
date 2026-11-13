@@ -7,13 +7,18 @@ const go = (path: string) => window.location.assign(path);
 function Frame({ title, children }: { title: string; children: ReactNode }) {
   return (
     // The footer is outside main, so that it is the page's contentinfo landmark.
-    <div className="mx-auto mt-16 max-w-sm px-4">
-      <main>
-        <h1 className="mb-1 text-xl font-semibold">OpenChat</h1>
-        <h2 className="mb-6 text-sm text-slate-600 dark:text-slate-400">{title}</h2>
-        <div className="card space-y-4">{children}</div>
-      </main>
-      <SoftwareFooter />
+    <div className="min-h-dvh bg-linear-to-b from-brand-50 via-slate-50 to-slate-50 px-4 pt-16 pb-6 dark:from-slate-900 dark:via-slate-950 dark:to-slate-950">
+      <div className="mx-auto max-w-sm">
+        <main>
+          <div className="mb-6 flex flex-col items-center text-center">
+            <img className="mb-4 size-20" src="/brand/mark-256.png" width={80} height={80} alt="" />
+            <h1 className="text-2xl font-semibold tracking-tight">OpenChat</h1>
+            <h2 className="mt-1 text-sm text-slate-600 dark:text-slate-400">{title}</h2>
+          </div>
+          <div className="card space-y-4 p-6 shadow-lg shadow-brand-900/5">{children}</div>
+        </main>
+        <SoftwareFooter />
+      </div>
     </div>
   );
 }
@@ -73,7 +78,7 @@ export function SignInPage() {
         {error && <p className="error" role="alert">{error}</p>}
         <button className="button w-full" disabled={busy}>Sign in</button>
       </form>
-      <a className="block text-sm text-blue-700 underline dark:text-blue-400" href="/forgot-password">Forgot your password?</a>
+      <a className="block text-sm link" href="/forgot-password">Forgot your password?</a>
     </Frame>
   );
 }
@@ -99,7 +104,7 @@ export function ForgotPasswordPage() {
           <button className="button w-full" disabled={busy}>Send reset link</button>
         </form>
       )}
-      <a className="block text-sm text-blue-700 underline dark:text-blue-400" href="/">Back to sign in</a>
+      <a className="block text-sm link" href="/">Back to sign in</a>
     </Frame>
   );
 }
@@ -112,7 +117,7 @@ export function ResetPasswordPage({ token }: { token: string | null }) {
     return (
       <Frame title="Reset your password">
         <p className="error" role="alert">This link is incomplete. Request a new one.</p>
-        <a className="block text-sm text-blue-700 underline dark:text-blue-400" href="/forgot-password">Request a new link</a>
+        <a className="block text-sm link" href="/forgot-password">Request a new link</a>
       </Frame>
     );
   }

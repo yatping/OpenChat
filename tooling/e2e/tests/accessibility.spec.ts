@@ -39,7 +39,7 @@ for (const scheme of ['light', 'dark'] as const) {
     });
 
     // Each waits for something only the loaded screen has. The dashboard keeps a socket open, so the network is never idle.
-    const sections = { websites: (p: Page) => p.getByRole('heading', { name: 'Shop' }), members: (p: Page) => p.getByRole('listitem').filter({ hasText: OWNER.email }), email: (p: Page) => p.getByRole('region', { name: 'Follow-up emails' }) };
+    const sections = { Websites: (p: Page) => p.getByRole('heading', { name: 'Shop' }), Members: (p: Page) => p.getByRole('listitem').filter({ hasText: OWNER.email }), Email: (p: Page) => p.getByRole('region', { name: 'Follow-up emails' }) };
     for (const [section, loaded] of Object.entries(sections)) {
       test(`the ${section} section`, async ({ page }) => {
         await signIn(page, OWNER);
@@ -88,7 +88,7 @@ test('every dashboard screen fits 320 pixels without scrolling sideways', async 
   const fits = async (screen: string) => expect(await page.evaluate(() => document.documentElement.scrollWidth), screen).toBeLessThanOrEqual(320);
   await expect(page.getByRole('main')).toBeVisible();
   await fits('inbox');
-  for (const section of ['websites', 'members', 'email']) {
+  for (const section of ['Websites', 'Members', 'Email']) {
     await page.getByRole('navigation', { name: 'Sections' }).getByRole('button', { name: section, exact: true }).click();
     await page.waitForTimeout(500);
     await fits(section);
