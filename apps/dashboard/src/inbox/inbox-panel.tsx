@@ -7,6 +7,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClie
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api, errorMessage } from '../app-context';
 import { Icon, Initials } from '../icons';
+import { intlLocale, t, type MessageKey } from '../i18n';
 import { createRealtime, type Realtime, type RealtimeStatus, type ServerFrame } from '@openchat/api-client/realtime';
 import {
   applyPatch,
@@ -29,6 +30,8 @@ type Membership = Me['memberships'][number];
 
 const STATUSES: Conversation['status'][] = ['open', 'pending', 'resolved', 'archived'];
 const PRIORITIES: Conversation['priority'][] = ['low', 'normal', 'high', 'urgent'];
+const STATUS_LABEL: Record<Conversation['status'], MessageKey> = { open: 'statusOpen', pending: 'statusPending', resolved: 'statusResolved', archived: 'statusArchived' };
+const PRIORITY_LABEL: Record<Conversation['priority'], MessageKey> = { low: 'priorityLow', normal: 'priorityNormal', high: 'priorityHigh', urgent: 'priorityUrgent' };
 const POLL_MS = 30_000;
 /** Larger than any position, to ask for the newest page. */
 const NEWEST = 2_147_483_647;
@@ -36,7 +39,7 @@ const NEWEST = 2_147_483_647;
 const listKey = (workspaceId: string) => ['conversations', workspaceId];
 const threadKey = (workspaceId: string, id: string) => ['messages', workspaceId, id];
 const detailKey = (workspaceId: string, id: string) => ['conversation', workspaceId, id];
-const label = (conversation: Pick<Conversation, 'id' | 'contactName' | 'contactEmail'>) => conversation.contactName ?? conversation.contactEmail ?? `Visitor ${conversation.id.slice(-6)}`;
+const label = (conversation: Pick<Conversation, 'id' | 'contactName' | 'contactEmail'>) => conversation.contactName ?? conversation.contactEmail ?? t('visitorNumber', { id: conversation.id.slice(-6) });
 
 function eachList(client: QueryClient, workspaceId: string, change: (data: ConversationPages, filter: InboxFilter) => ConversationPages) {
   for (const query of client.getQueryCache().findAll({ queryKey: listKey(workspaceId) })) {
@@ -186,7 +189,7 @@ function ConnectionNotice({ status }: { status: RealtimeStatus }) {
   if (status === 'connected' || status === 'connecting') return null;
   return (
     <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200" role="status">
-      {status === 'polling' ? 'Live updates are unavailable, so this page refreshes every 30 seconds. Sending still works.' : 'Reconnecting. Sending still works.'}
+      {t(status === 'polling' ? 'liveUnavailable' : 'reconnecting')}
     </p>
   );
 }
@@ -204,23 +207,23 @@ function ConversationList(props: { workspaceId: string; memberId: string; select
   });
   const rows = list.data?.pages.flatMap((page) => page.data) ?? [];
   return (
-    <section aria-label="Conversations" className={`min-w-0 flex-1 flex-col md:flex md:w-80 md:flex-none md:border-r md:border-slate-200 md:dark:border-slate-800 ${props.hidden ? 'hidden' : 'flex'}`}>
+    <section aria-label={t('conversations')} className={`min-w-0 flex-1 flex-col md:flex md:w-80 md:flex-none md:border-r md:border-slate-200 md:dark:border-slate-800 ${props.hidden ? 'hidden' : 'flex'}`}>
       <div className="flex gap-2 border-b border-slate-200 p-3 dark:border-slate-800">
-        <select className="field" aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value as Conversation['status'])}>
-          {STATUSES.map((option) => <option key={option} value={option}>{option}</option>)}
+        <select className="field" aria-label={t('status')} value={status} onChange={(e) => setStatus(e.target.value as Conversation['status'])}>
+          {STATUSES.map((option) => <option key={option} value={option}>{t(STATUS_LABEL[option])}</option>)}
         </select>
-        <select className="field" aria-label="Assigned to" value={assignee} onChange={(e) => setAssignee(e.target.value as typeof assignee)}>
-          <option value="all">Everyone</option>
-          <option value="me">Me</option>
-          <option value="none">Unassigned</option>
+        <select className="field" aria-label={t('assignedTo')} value={assignee} onChange={(e) => setAssignee(e.target.value as typeof assignee)}>
+          <option value="all">{t('everyone')}</option>
+          <option value="me">{t('me')}</option>
+          <option value="none">{t('unassigned')}</option>
         </select>
       </div>
       {list.error ? <p className="error m-3" role="alert">{errorMessage(list.error)}</p> : null}
-      {list.isPending && <p className="p-4 text-sm" role="status">Loading…</p>}
+      {list.isPending && <p className="p-4 text-sm" role="status">{t('loading')}</p>}
       {list.data && rows.length === 0 && (
         <div className="flex flex-col items-center gap-2 px-4 py-10 text-center text-sm text-slate-600 dark:text-slate-400">
           <Icon name="chat" className="size-8 text-slate-300 dark:text-slate-700" />
-          No conversations here.
+          {t('noConversations')}
         </div>
       )}
       <ul className="flex-1 space-y-0.5 overflow-y-auto p-2">
@@ -242,14 +245,14 @@ function ConversationList(props: { workspaceId: string; memberId: string; select
                   {row.subject && <span className="block truncate text-xs text-slate-600 dark:text-slate-400">{row.subject}</span>}
                   {row.tags.length > 0 && <span className="block truncate text-xs text-slate-600 dark:text-slate-400">{row.tags.map((tag) => tag.name).join(', ')}</span>}
                 </span>
-                {row.priority === 'urgent' || row.priority === 'high' ? <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-950 dark:text-red-300">{row.priority}</span> : null}
-                {unread > 0 && <span className="min-w-5 rounded-full bg-brand-600 px-1.5 text-center text-xs leading-5 font-semibold text-white">{unread}<span className="sr-only"> unread</span></span>}
+                {row.priority === 'urgent' || row.priority === 'high' ? <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-950 dark:text-red-300">{t(PRIORITY_LABEL[row.priority])}</span> : null}
+                {unread > 0 && <span className="min-w-5 rounded-full bg-brand-600 px-1.5 text-center text-xs leading-5 font-semibold text-white">{unread}<span className="sr-only"> {t('unread')}</span></span>}
               </button>
             </li>
           );
         })}
       </ul>
-      {list.hasNextPage && <button className="button-quiet m-2" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>Load more</button>}
+      {list.hasNextPage && <button className="button-quiet m-2" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>{t('loadMore')}</button>}
     </section>
   );
 }
@@ -299,9 +302,9 @@ function AttachmentView({ file }: { file: Message['attachments'][number] }) {
           api.downloadAttachment(file.url).then((blob) => saveBlob(blob, file.filename)).catch(() => setFailed(true));
         }}
       >
-        Download {file.filename} ({formatSize(file.size)})
+        {t('download', { name: file.filename, size: formatSize(file.size) })}
       </button>
-      {failed && <span role="alert"> That did not download. Try again.</span>}
+      {failed && <span role="alert"> {t('downloadFailed')}</span>}
     </div>
   );
 }
@@ -309,12 +312,13 @@ function AttachmentView({ file }: { file: Message['attachments'][number] }) {
 function MessageBubble({ message }: { message: Message }) {
   const note = message.visibility === 'internal';
   const fromTeam = message.sender.type === 'member';
-  const sender = message.sender.type === 'visitor' ? 'Visitor' : message.sender.type === 'system' ? 'System' : `${message.sender.displayName ?? 'Agent'}${message.sender.removed ? ' (Removed)' : ''}`;
+  const shown = message.sender.displayName ?? t('agent');
+  const sender = message.sender.type === 'visitor' ? t('visitor') : message.sender.type === 'system' ? t('system') : message.sender.removed ? t('removedPerson', { name: shown }) : shown;
   return (
     <li className={`flex ${fromTeam ? 'justify-end' : 'justify-start'}`} data-seq={message.seq}>
       <div className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm shadow-sm ${note ? 'border border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100' : fromTeam ? 'rounded-br-md bg-brand-600 text-white' : 'rounded-bl-md bg-white text-slate-900 dark:bg-slate-800 dark:text-slate-100'}`}>
         <div className="mb-1 text-xs opacity-85">
-          {note ? `Internal note from ${sender}. The visitor cannot see this.` : sender} · <time dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time>
+          {note ? t('internalNoteFrom', { name: sender }) : sender} · <time dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleTimeString(intlLocale(), { hour: '2-digit', minute: '2-digit' })}</time>
         </div>
         {message.content && <div className="break-words whitespace-pre-wrap">{message.content}</div>}
         {message.attachments.map((file) => <AttachmentView key={file.id} file={file} />)}
@@ -378,16 +382,16 @@ function Composer(props: { workspaceId: string; conversationId: string; drafts: 
         submit();
       }}
     >
-      <div className="tabs" role="group" aria-label="Kind of message">
-        <button type="button" className="tab" aria-pressed={!note} onClick={() => setMode('text')}>Reply</button>
-        <button type="button" className="tab" aria-pressed={note} onClick={() => setMode('internal_note')}>Internal note</button>
+      <div className="tabs" role="group" aria-label={t('kindOfMessage')}>
+        <button type="button" className="tab" aria-pressed={!note} onClick={() => setMode('text')}>{t('reply')}</button>
+        <button type="button" className="tab" aria-pressed={note} onClick={() => setMode('internal_note')}>{t('internalNote')}</button>
       </div>
       <textarea
         className="field resize-none"
         rows={3}
         maxLength={16000}
-        aria-label={note ? 'Internal note' : 'Reply'}
-        placeholder={note ? 'Only your team can see this.' : 'Write a reply. Enter sends, and Shift+Enter starts a new line.'}
+        aria-label={t(note ? 'internalNote' : 'reply')}
+        placeholder={t(note ? 'notePlaceholder' : 'replyPlaceholder')}
         value={draft}
         onChange={(event) => {
           setDraft(event.target.value);
@@ -404,34 +408,34 @@ function Composer(props: { workspaceId: string; conversationId: string; drafts: 
           }
         }}
       />
-      {send.error ? <p className="error" role="alert">Not sent. {errorMessage(send.error)} Your words are still here.</p> : null}
-      {uploadError ? <p className="error" role="alert">That file was not added. {errorMessage(uploadError)}</p> : null}
+      {send.error ? <p className="error" role="alert">{t('notSent', { error: errorMessage(send.error) })}</p> : null}
+      {uploadError ? <p className="error" role="alert">{t('fileNotAdded', { error: errorMessage(uploadError) })}</p> : null}
       {(files.length > 0 || uploading > 0) && (
-        <ul className="flex flex-wrap gap-2 text-xs" aria-label="Files to send">
+        <ul className="flex flex-wrap gap-2 text-xs" aria-label={t('filesToSend')}>
           {files.map((file) => (
             <li key={file.id} className="flex items-center gap-1 rounded bg-slate-100 px-2 py-1 dark:bg-slate-800">
               <span className="break-all">{file.filename}</span>
-              <button type="button" aria-label={`Remove ${file.filename}`} onClick={() => setFiles((known) => known.filter((other) => other.id !== file.id))}>×</button>
+              <button type="button" aria-label={t('removeFile', { name: file.filename })} onClick={() => setFiles((known) => known.filter((other) => other.id !== file.id))}>×</button>
             </li>
           ))}
-          {uploading > 0 && <li className="px-2 py-1" role="status">Uploading…</li>}
+          {uploading > 0 && <li className="px-2 py-1" role="status">{t('uploading')}</li>}
         </ul>
       )}
       <div className="flex flex-row-reverse items-center gap-2">
         <button className="button" disabled={send.isPending || uploading > 0 || (!draft.trim() && files.length === 0)}>
           <Icon name="send" className="size-4" />
-          {note ? 'Add note' : 'Send reply'}
+          {t(note ? 'addNote' : 'sendReply')}
         </button>
         <button type="button" className="button-quiet mr-auto border-transparent bg-transparent dark:bg-transparent" onClick={() => picker.current?.click()}>
           <Icon name="attach" className="size-4" />
-          Attach a file
+          {t('attachFile')}
         </button>
         <input
           ref={picker}
           type="file"
           multiple
           hidden
-          aria-label="File to attach"
+          aria-label={t('fileToAttach')}
           onChange={(event) => {
             upload([...(event.target.files ?? [])]);
             event.target.value = '';
@@ -457,31 +461,31 @@ function ContactCard({ workspaceId, contactId, onErased }: { workspaceId: string
     },
   });
   const data = contact.data;
-  const field = (name: 'name' | 'email' | 'phone', title: string, type: string) => (
+  const field = (name: 'name' | 'email' | 'phone', title: MessageKey, type: string) => (
     <label className="block text-xs font-medium">
-      {title}
+      {t(title)}
       <input className="field mt-1 font-normal" type={type} value={edits[name] ?? data?.[name] ?? ''} maxLength={name === 'phone' ? 40 : name === 'name' ? 100 : 254} onChange={(e) => setEdits({ ...edits, [name]: e.target.value })} />
     </label>
   );
   return (
     <form
       className="card space-y-2"
-      aria-label="Contact"
+      aria-label={t('contact')}
       onSubmit={(event) => {
         event.preventDefault();
         save.mutate();
       }}
     >
-      <h3 className="text-sm font-medium">Contact</h3>
+      <h3 className="text-sm font-medium">{t('contact')}</h3>
       {contact.error ? <p className="error" role="alert">{errorMessage(contact.error)}</p> : null}
-      {field('name', 'Name', 'text')}
-      {field('email', 'Email', 'email')}
-      {data?.email && <p className="text-xs text-slate-600 dark:text-slate-400">Not verified. Anyone can type any address.</p>}
-      {field('phone', 'Phone', 'tel')}
+      {field('name', 'name', 'text')}
+      {field('email', 'email', 'email')}
+      {data?.email && <p className="text-xs text-slate-600 dark:text-slate-400">{t('emailNotVerified')}</p>}
+      {field('phone', 'phone', 'tel')}
       {save.error ? <p className="error" role="alert">{errorMessage(save.error)}</p> : null}
-      {Object.keys(edits).length > 0 && <button className="button-quiet" disabled={save.isPending}>Save contact</button>}
-      {data && <p className="text-xs text-slate-600 dark:text-slate-400">First seen {new Date(data.firstSeenAt).toLocaleDateString()}</p>}
-      {data && <ContactRights workspaceId={workspaceId} contactId={contactId} label={data.name ?? data.email ?? 'this visitor'} onErased={onErased} />}
+      {Object.keys(edits).length > 0 && <button className="button-quiet" disabled={save.isPending}>{t('saveContact')}</button>}
+      {data && <p className="text-xs text-slate-600 dark:text-slate-400">{t('firstSeen', { date: new Date(data.firstSeenAt).toLocaleDateString(intlLocale()) })}</p>}
+      {data && <ContactRights workspaceId={workspaceId} contactId={contactId} label={data.name ?? data.email ?? t('thisVisitor')} onErased={onErased} />}
     </form>
   );
 }
@@ -512,21 +516,21 @@ function ContactRights({ workspaceId, contactId, label, onErased }: { workspaceI
   });
   if (me.data?.isInstallationAdmin !== true) return null;
   return (
-    <div className="space-y-2 border-t border-slate-200 pt-2 dark:border-slate-700" aria-label="Personal data">
+    <div className="space-y-2 border-t border-slate-200 pt-2 dark:border-slate-700" aria-label={t('personalData')}>
       <label className="flex items-center gap-2 text-xs">
         <input type="checkbox" checked={notes} onChange={(e) => setNotes(e.target.checked)} />
-        Export with notes
+        {t('exportWithNotes')}
       </label>
-      <button type="button" className="button-quiet" disabled={exported.isPending} onClick={() => exported.mutate()}>Export data</button>
+      <button type="button" className="button-quiet" disabled={exported.isPending} onClick={() => exported.mutate()}>{t('exportData')}</button>
       <button
         type="button"
         className="button-quiet text-red-700 dark:text-red-400"
         disabled={erased.isPending}
         onClick={() => {
-          if (window.confirm(`Erase ${label}? This deletes them, their conversations, messages, and files, and cannot be undone.`)) erased.mutate();
+          if (window.confirm(t('eraseConfirm', { name: label }))) erased.mutate();
         }}
       >
-        Erase contact
+        {t('eraseContact')}
       </button>
       {exported.error ? <p className="error" role="alert">{errorMessage(exported.error)}</p> : null}
       {erased.error ? <p className="error" role="alert">{errorMessage(erased.error)}</p> : null}
@@ -556,13 +560,13 @@ function TagPicker({ workspaceId, conversation }: { workspaceId: string; convers
   const failure = add.error ?? set.error;
   const listId = `tags-${conversation.id}`;
   return (
-    <section className="card space-y-2" aria-label="Tags">
-      <h3 className="text-sm font-medium">Tags</h3>
+    <section className="card space-y-2" aria-label={t('tags')}>
+      <h3 className="text-sm font-medium">{t('tags')}</h3>
       <ul className="flex flex-wrap gap-1">
         {conversation.tags.map((tag) => (
           <li key={tag.id} className="flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-xs dark:bg-slate-800">
             {tag.name}
-            <button type="button" className="cursor-pointer font-bold" aria-label={`Remove tag ${tag.name}`} disabled={set.isPending} onClick={() => set.mutate(conversation.tags.filter((t) => t.id !== tag.id))}>×</button>
+            <button type="button" className="cursor-pointer font-bold" aria-label={t('removeTag', { name: tag.name })} disabled={set.isPending} onClick={() => set.mutate(conversation.tags.filter((t) => t.id !== tag.id))}>×</button>
           </li>
         ))}
       </ul>
@@ -573,9 +577,9 @@ function TagPicker({ workspaceId, conversation }: { workspaceId: string; convers
           if (name.trim()) add.mutate();
         }}
       >
-        <input className="field" aria-label="Add a tag" list={listId} maxLength={50} placeholder="Add a tag" value={name} onChange={(e) => setName(e.target.value)} />
+        <input className="field" aria-label={t('addTag')} list={listId} maxLength={50} placeholder={t('addTag')} value={name} onChange={(e) => setName(e.target.value)} />
         <datalist id={listId}>{available.data?.data.map((tag) => <option key={tag.id} value={tag.name} />)}</datalist>
-        <button className="button-quiet" disabled={add.isPending || set.isPending || !name.trim()}>Add</button>
+        <button className="button-quiet" disabled={add.isPending || set.isPending || !name.trim()}>{t('add')}</button>
       </form>
       {failure ? <p className="error" role="alert">{errorMessage(failure)}</p> : null}
     </section>
@@ -638,16 +642,16 @@ function Thread(props: { workspaceId: string; conversationId: string; members: M
     return () => document.removeEventListener('visibilitychange', markRead);
   }, [markRead, last]);
 
-  const memberName = (id: string) => members.find((m) => m.id === id)?.name ?? 'A teammate';
-  const typists = typing.filter((t) => t.conversationId === conversationId).map((t) => (t.actorType === 'visitor' ? 'The visitor' : memberName(t.actorId)));
+  const memberName = (id: string) => members.find((m) => m.id === id)?.name ?? t('teammate');
+  const typists = typing.filter((entry) => entry.conversationId === conversationId).map((entry) => (entry.actorType === 'visitor' ? t('theVisitor') : memberName(entry.actorId)));
   const data = conversation.data;
   const conflict = update.error instanceof ApiError && update.error.status === 409;
   return (
     <div className="flex min-w-0 flex-1 flex-col lg:flex-row">
-    <section aria-label="Conversation" className="flex min-w-0 flex-1 flex-col">
+    <section aria-label={t('conversation')} className="flex min-w-0 flex-1 flex-col">
       <button className="button-quiet m-3 mb-0 self-start md:hidden" onClick={props.onBack}>
         <Icon name="back" className="size-4" />
-        Back to the list
+        {t('backToList')}
       </button>
       {data && (
         <header className="space-y-3 border-b border-slate-200 p-4 dark:border-slate-800">
@@ -657,23 +661,23 @@ function Thread(props: { workspaceId: string; conversationId: string; members: M
               <span className="block truncate">{label(data)}</span>
               <span className="flex items-center gap-1.5 text-xs font-normal text-slate-600 dark:text-slate-400">
                 <span className={`size-2 rounded-full ${props.visitorOnline ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600'}`} aria-hidden="true" />
-                {props.visitorOnline ? 'Online now' : 'Offline'}
+                {t(props.visitorOnline ? 'onlineNow' : 'offline')}
               </span>
             </h2>
           </div>
           <div className="flex flex-wrap gap-2">
-            <select className="field w-auto" aria-label="Conversation status" value={data.status} disabled={update.isPending} onChange={(e) => update.mutate({ status: e.target.value as Conversation['status'] })}>
-              {STATUSES.map((option) => <option key={option} value={option}>{option}</option>)}
+            <select className="field w-auto" aria-label={t('conversationStatus')} value={data.status} disabled={update.isPending} onChange={(e) => update.mutate({ status: e.target.value as Conversation['status'] })}>
+              {STATUSES.map((option) => <option key={option} value={option}>{t(STATUS_LABEL[option])}</option>)}
             </select>
-            <select className="field w-auto" aria-label="Priority" value={data.priority} disabled={update.isPending} onChange={(e) => update.mutate({ priority: e.target.value as Conversation['priority'] })}>
-              {PRIORITIES.map((option) => <option key={option} value={option}>{option}</option>)}
+            <select className="field w-auto" aria-label={t('priority')} value={data.priority} disabled={update.isPending} onChange={(e) => update.mutate({ priority: e.target.value as Conversation['priority'] })}>
+              {PRIORITIES.map((option) => <option key={option} value={option}>{t(PRIORITY_LABEL[option])}</option>)}
             </select>
-            <select className="field w-auto" aria-label="Assignee" value={data.assignedMemberId ?? ''} disabled={update.isPending} onChange={(e) => update.mutate({ assignedMemberId: e.target.value || null })}>
-              <option value="">Unassigned</option>
+            <select className="field w-auto" aria-label={t('assignee')} value={data.assignedMemberId ?? ''} disabled={update.isPending} onChange={(e) => update.mutate({ assignedMemberId: e.target.value || null })}>
+              <option value="">{t('unassigned')}</option>
               {members.filter((m) => m.status === 'active' || m.id === data.assignedMemberId).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
           </div>
-          {update.error ? <p className="error" role="alert">{conflict ? 'This conversation just changed. Check it and try again.' : errorMessage(update.error)}</p> : null}
+          {update.error ? <p className="error" role="alert">{conflict ? t('changeConflict') : errorMessage(update.error)}</p> : null}
         </header>
       )}
       {conversation.error ? <p className="error m-3" role="alert">{errorMessage(conversation.error)}</p> : null}
@@ -686,13 +690,13 @@ function Thread(props: { workspaceId: string; conversationId: string; members: M
           atBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 48;
         }}
       >
-        {rows.length > 0 && (rows[0]?.seq ?? 1) > 1 && !noMoreHistory && <button className="button-quiet mx-auto mb-3 flex" disabled={older.isPending} onClick={() => older.mutate()}>Load earlier messages</button>}
+        {rows.length > 0 && (rows[0]?.seq ?? 1) > 1 && !noMoreHistory && <button className="button-quiet mx-auto mb-3 flex" disabled={older.isPending} onClick={() => older.mutate()}>{t('loadEarlier')}</button>}
         {/* Polite, so a screen reader reads a new message once it finishes what it is saying, as the widget does. */}
-        <ol className="space-y-3" aria-label="Messages" aria-live="polite">
+        <ol className="space-y-3" aria-label={t('messages')} aria-live="polite">
           {rows.map((message) => <MessageBubble key={message.id} message={message} />)}
         </ol>
       </div>
-      <p className="min-h-6 bg-slate-50 px-4 py-1 text-xs text-slate-600 dark:bg-slate-950 dark:text-slate-400" aria-live="polite">{typists.length > 0 ? `${typists.join(', ')} ${typists.length > 1 ? 'are' : 'is'} typing…` : ''}</p>
+      <p className="min-h-6 bg-slate-50 px-4 py-1 text-xs text-slate-600 dark:bg-slate-950 dark:text-slate-400" aria-live="polite">{typists.length > 0 ? t(typists.length > 1 ? 'typingMany' : 'typingOne', { names: typists.join(', ') }) : ''}</p>
       <Composer key={conversationId} workspaceId={workspaceId} conversationId={conversationId} drafts={drafts} realtime={realtime} />
     </section>
     {data && (
@@ -716,7 +720,7 @@ export function InboxPanel({ membership, members }: { membership: Membership; me
   return (
     <div className="space-y-3">
       <ConnectionNotice status={status} />
-      {online.length > 0 && <p className="text-xs text-slate-600 dark:text-slate-400">Also online: {online.map((m) => m.name).join(', ')}</p>}
+      {online.length > 0 && <p className="text-xs text-slate-600 dark:text-slate-400">{t('alsoOnline', { names: online.map((m) => m.name).join(', ') })}</p>}
       <div className="flex min-h-[min(720px,calc(100dvh-11rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-900/5 dark:border-slate-800 dark:bg-slate-900">
         <ConversationList workspaceId={workspaceId} memberId={membership.memberId} selected={selected} onSelect={setSelected} visitorsOnline={visitorsOnline} hidden={selected !== null} />
         {selected ? (
@@ -734,7 +738,7 @@ export function InboxPanel({ membership, members }: { membership: Membership; me
         ) : (
           <div className="hidden flex-1 flex-col items-center justify-center gap-3 bg-slate-50 p-8 text-center text-sm text-slate-600 md:flex dark:bg-slate-950 dark:text-slate-400">
             <img className="size-16 opacity-90" src="/brand/mark-128.png" width={64} height={64} alt="" />
-            Choose a conversation.
+            {t('chooseConversation')}
           </div>
         )}
       </div>

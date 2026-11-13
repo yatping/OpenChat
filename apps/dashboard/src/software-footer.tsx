@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from './app-context';
+import { t } from './i18n';
 
 /** Shown until discovery answers, and if it cannot. */
 const PROJECT = 'https://github.com/yatping/OpenChat';
@@ -14,12 +15,12 @@ export function SoftwareFooter() {
   const software = discovery.data?.software;
   return (
     <footer className="mt-4 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600 dark:text-slate-400">
-      <span>OpenChat{software?.version ? ` ${software.version}` : ''}, free software under the AGPL</span>
+      <span>{software?.version ? t('freeSoftwareVersion', { version: software.version }) : t('freeSoftware')}</span>
       <a className="underline" href={software?.source ?? PROJECT} rel="noreferrer">
-        Source code
+        {t('sourceCode')}
       </a>
       <a className="underline" href="/third-party-licenses.txt">
-        Third-party licences
+        {t('thirdPartyLicences')}
       </a>
     </footer>
   );

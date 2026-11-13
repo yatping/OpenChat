@@ -42,5 +42,5 @@ Done on 2026-11-12, in Chromium, with the keyboard and by reading the markup.
 - **No screen-reader user has reviewed either surface.** The announcements above were checked in the markup, not listened to in VoiceOver or NVDA.
 - **The widget's focus outline uses the customer's colour.** A pale colour on the white panel can fall below the 3:1 contrast that WCAG 1.4.11 asks of a focus indicator. axe does not check focus indicators.
 - **Loading earlier messages** adds them to the live region, so a screen reader may read them out. That is how `role="log"` behaves, and it is the same in both surfaces.
-- **The dashboard is in English only.** The widget speaks [eleven languages](widget.md#languages), not yet reviewed by native speakers.
+- **Translations are not yet reviewed by native speakers.** The [widget](widget.md#languages) and the [dashboard](dashboard.md#languages) speak eleven languages, and the dashboard's server messages stay in English.
 - **The iOS app** was not part of this pass. It has had no VoiceOver review.
