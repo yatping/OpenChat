@@ -16,7 +16,7 @@
     "@openchat/shared": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/vitest-plugin": "^1.5.1",
+    "@cloudflare/vitest-plugin": "^1.7.0",
     "@openchat/tsconfig": "workspace:*",
     "typescript": "~6.0.3",
     "vitest": "^5.1.0"

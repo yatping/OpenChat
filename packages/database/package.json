@@ -19,12 +19,12 @@
     "drizzle-orm": "^0.45.4"
   },
   "devDependencies": {
-    "@cloudflare/vitest-plugin": "^1.5.1",
-    "@cloudflare/workers-types": "^5.20261103.1",
+    "@cloudflare/vitest-plugin": "^1.7.0",
+    "@cloudflare/workers-types": "^5.20261110.1",
     "@openchat/tsconfig": "workspace:*",
     "drizzle-kit": "^0.31.11",
     "typescript": "~6.0.3",
     "vitest": "^5.1.0",
-    "wrangler": "^4.157.0"
+    "wrangler": "^4.160.0"
   }
 }
