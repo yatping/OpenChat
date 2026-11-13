@@ -36,6 +36,7 @@ const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2
 const CASES: Record<string, Case> = {
   getHealth: { kind: 'public', reason: 'Status only' },
   getDiscovery: { kind: 'public', reason: 'Describes the installation. No workspace data' },
+  getSecurityTxt: { kind: 'public', reason: "The operator's contact for security reports. No workspace data" },
   getDatabaseHealth: { kind: 'operator' },
   getQueueHealth: { kind: 'operator' },
   getRealtimeHealth: { kind: 'operator' },

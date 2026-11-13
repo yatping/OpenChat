@@ -26,6 +26,7 @@ packages/api-contracts  (Zod schemas and route definitions, plus WebSocket frame
 | Widget API | `/api/v1/widget/...` | Visitor token |
 | Realtime | `/api/v1/realtime/connect` takes a ticket. Tickets come from `/api/v1/workspaces/{workspaceId}/realtime/tickets` or `/api/v1/widget/conversations/{conversationId}/realtime/tickets`, so that each audience keeps its own authentication and CORS | Ticket |
 | Discovery | `/.well-known/openchat.json` | None |
+| Security contact | `/.well-known/security.txt`, plain text, once the operator sets a contact. Otherwise 404. See [security](../architecture/security.md#disclosure) | None |
 | Health | `/health` (public, status only), `/health/*` (operator token) | |
 
 The major version goes in the path. Additive changes require no version change, so **clients must ignore unknown fields and unknown enum values**, since an old app can talk to a new installation and vice versa.

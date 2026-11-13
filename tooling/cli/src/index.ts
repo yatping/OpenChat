@@ -15,6 +15,7 @@ function usage(): never {
   pnpm oc preflight [--analytics] [--public-url <https origin>] [--cloudflare-email] [--email-from <address>]
   pnpm oc deploy --env <name> --owner-email <address> [--owner-name <name>] [--workspace <name>]
                  [--public-url <https origin>] [--location <hint>] [--analytics] [--cloudflare-email] [--email-from <address>]
+                 [--security-contact <mailto:...|https://...>[,...] | none] [--security-policy <https://...>]
   pnpm oc upgrade --env <name>      after checking out a newer release
   pnpm oc rollback --env <name>     puts back the Worker from before the last upgrade
   pnpm oc recover --env <name> --email <address>
@@ -31,6 +32,7 @@ function usage(): never {
 
 Your own notification relay, for your own iOS app and APNs key:
   pnpm oc relay deploy --env <name> [--relay-id <id>] [--environment <production|sandbox>] [--location <hint>]
+                       [--security-contact <mailto:...|https://...>[,...] | none] [--security-policy <https://...>]
   pnpm oc relay set-apns --env <name> --team-id <id> --key-id <id> --key-file <AuthKey.p8> --bundle-id <id>
   pnpm oc relay allow --env <name> --installation <inst_...> [--remove]
   pnpm oc relay block --env <name> --installation <inst_...> [--unblock]
@@ -95,7 +97,7 @@ if (!env) usage();
 async function relay(name: string) {
   const relays = createRelayDeployer(root);
   const sub = rest[0];
-  if (sub === 'deploy') return relays.deploy({ name, relayId: flag('relay-id'), location: flag('location'), environment: flag('environment') });
+  if (sub === 'deploy') return relays.deploy({ name, relayId: flag('relay-id'), location: flag('location'), environment: flag('environment'), securityContact: flag('security-contact'), securityPolicy: flag('security-policy') });
   if (sub === 'set-apns') {
     const [teamId, keyId, keyFile, bundleId] = [flag('team-id'), flag('key-id'), flag('key-file'), flag('bundle-id')];
     if (!teamId || !keyId || !keyFile || !bundleId) usage();
@@ -147,6 +149,8 @@ async function main(name: string) {
       relayId: flag('relay-id'),
       relayBundleIds: flag('relay-bundle-ids'),
       noRelay: rest.includes('--no-relay'),
+      securityContact: flag('security-contact'),
+      securityPolicy: flag('security-policy'),
       cloudflareEmail: rest.includes('--cloudflare-email'),
     });
     return;

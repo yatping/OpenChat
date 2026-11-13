@@ -1,8 +1,8 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
-import { getDiscoveryRoute, getHealthRoute, API_MINOR_VERSION, REALTIME_PROTOCOL_VERSION } from '@openchat/api-contracts';
+import { getDiscoveryRoute, getHealthRoute, getSecurityTxtRoute, API_MINOR_VERSION, REALTIME_PROTOCOL_VERSION } from '@openchat/api-contracts';
 import openapi from '@openchat/api-contracts/openapi.json';
 import { getInstallation, openDatabase } from '@openchat/database';
-import { AppError, createLogger, newId, toProblem } from '@openchat/shared';
+import { AppError, createLogger, newId, securityTxt, toProblem } from '@openchat/shared';
 import type { AppEnv } from './context';
 import { registerAuthRoutes } from './routes/auth';
 import { registerConversationRoutes } from './routes/conversations';
@@ -111,6 +111,13 @@ export function createApp() {
   registerRealtimeRoutes(app);
 
   app.get('/api/v1/openapi.json', (c) => c.json(openapi));
+
+  // RFC 9116. Only when the operator has set a contact, with oc deploy --security-contact.
+  app.openapi(getSecurityTxtRoute, (c) => {
+    const body = securityTxt({ contact: c.env.SECURITY_CONTACT, policy: c.env.SECURITY_POLICY, canonical: `${new URL(c.req.url).origin}/.well-known/security.txt`, now: new Date(), subject: 'installation' });
+    if (!body) return c.text('Not found', 404);
+    return c.text(body, 200, { 'cache-control': 'public, max-age=3600', 'x-content-type-options': 'nosniff' });
+  });
 
   return app;
 }

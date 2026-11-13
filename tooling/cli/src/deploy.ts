@@ -10,7 +10,7 @@ import { generateOpaqueToken, generateSerializedKey, hashOpaqueToken } from '@op
 import { createBackups, databaseName, type RestoreRecord } from './backup';
 import { assertEmail, assertPublicUrl, bootstrapSql, recoverySql, resetLink } from './bootstrap';
 import { formatChecks, hasFailure, isMissingWorkersDev, runPreflight, WORKERS_DEV_HELP } from './preflight';
-import { renderConfig, type DeploymentState, mergeLimitFlags } from './render-config';
+import { renderConfig, type DeploymentState, mergeLimitFlags, mergeSecurityFlags } from './render-config';
 import { compareVersions, releaseVersion, UNRECORDED_VERSION, UPGRADE_FROM_AT_LEAST } from './releases';
 import { createResource, describeFailure, type RunWrangler, sleep, UUID, wranglerIn } from './wrangler';
 
@@ -59,6 +59,9 @@ export interface DeployOptions {
   relayUrl?: string | undefined;
   relayId?: string | undefined;
   relayBundleIds?: string | undefined;
+  /** For /.well-known/security.txt. Remembered for later deploys; `none` removes it. */
+  securityContact?: string | undefined;
+  securityPolicy?: string | undefined;
   /** Takes the relay out of the deployment. Disconnect in the dashboard first, so that the relay erases its records. */
   noRelay?: boolean;
 }
@@ -354,6 +357,8 @@ export function createDeployer(root: string, deps: DeployerDeps = {}) {
       const state = load(options.name);
       refuseOlder(state);
       if (options.limitFlag) state.limits = mergeLimitFlags(state.limits, options.limitFlag);
+      state.security = mergeSecurityFlags(state.security, options.securityContact, options.securityPolicy);
+      if (!state.security) delete state.security;
       if (!state.initialized && !options.ownerEmail) throw new Error('A first deploy needs --owner-email');
       if (options.analytics) state.analyticsEngine = true;
       if (options.noRelay) {
@@ -389,6 +394,7 @@ export function createDeployer(root: string, deps: DeployerDeps = {}) {
       if (ownerLink) {
         log(`\nSet the owner's password within one hour. This link is shown only once:\n${ownerLink}`);
       }
+      if (!state.security) log(`\nNo security contact is set, so /.well-known/security.txt answers 404. To publish one: --security-contact mailto:security@example.com`);
       if (!process.env.RESEND_API_KEY && !state.cloudflareEmailFrom) {
         log('\nNo email provider was set in this run. Without one, resets and new account links are not delivered.');
         log(`Use --cloudflare-email, or RESEND_API_KEY, with --email-from, then deploy again. Until then: pnpm oc recover --env ${options.name} --email <address>`);

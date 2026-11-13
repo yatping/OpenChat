@@ -10,3 +10,4 @@ a website chat widget, a team inbox, an iOS app, and email follow-ups. Each comp
 - Architecture and decisions: [docs/README.md](docs/README.md)
 - Foundation status: [Phase 0 plan](docs/plan/phase-0.md)
 - Conventions for contributors and AI agents: [AGENTS.md](AGENTS.md)
+- Found a vulnerability? Report it privately: [SECURITY.md](SECURITY.md)
