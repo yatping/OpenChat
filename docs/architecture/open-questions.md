@@ -4,7 +4,7 @@ Decisions for the project owner. Each has a recommended default so work is not b
 
 ## Needed before Milestone 3 (managed relay)
 
-**Owner's answers, 2026-11-05:** Q5: Orango Labs Ltd runs the managed relay, free with quotas, and terms and a privacy policy need legal review before public launch. Q7: generic text, as recommended. Q8: decide at App Store submission, which does not block Milestone 3.
+**Owner's answers, 2026-11-05:** Q5: Orango Labs Ltd runs the managed relay, free with quotas, and terms and a privacy policy need legal review before public launch. Q7: generic text, as recommended. Q8: decide at App Store submission, which does not block Milestone 3. **2026-11-13:** the owner hosts it, as `oc-openchat-demo` on their Cloudflare account, without a nightly reset for now. See [App Store submission](../ios-build/app-store-submission.md#demo-installation).
 
 | # | Question | Why it matters | Recommendation |
 |---|---|---|---|
