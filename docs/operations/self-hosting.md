@@ -139,15 +139,9 @@ You now have working customer chat. For path 1, go on to step 6. For path 2, ski
 The official app, and the project's relay that sends its notifications, need nothing from you but your installation ID. Two things to know first:
 
 - **The official app is not on the App Store yet.** Until it is, your team uses the dashboard in a browser, and gets no push notifications.
-- **The project's relay admits installations one at a time for now**, until its terms and privacy policy are published.
+- **The project's relay is open to every installation.** You do not ask for access: your backend registers itself the first time a phone turns on notifications, by proving it controls its address. There are [limits](../notification-relay/protocol.md#rate-limits) on how many installations can register, per network address and per day. If registration is paused, it is tried again later.
 
-To ask for access, find your installation ID, which starts with `inst_`:
-
-```bash
-curl -s https://oc-production.<subdomain>.workers.dev/.well-known/openchat.json
-```
-
-Then [open an issue](https://github.com/yatping/OpenChat/issues/new) titled "Relay access", with that ID. It is not secret: anyone can read it at that address. Once you are told it is admitted, point your backend at the project's relay:
+Point your backend at the project's relay:
 
 ```bash
 pnpm oc deploy --env production \
